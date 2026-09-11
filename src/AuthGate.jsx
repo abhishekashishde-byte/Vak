@@ -11,15 +11,22 @@ export default function AuthGate() {
     if (!authConfigured || !supabase) return
 
     let active = true
-    supabase.auth.getSession().then(({ data }) => {
+
+    const acceptSession = async (nextSession) => {
       if (!active) return
-      setSession(data.session || null)
-      setReady(true)
-    })
+      if (nextSession?.user && !nextSession.user.email_confirmed_at) {
+        await supabase.auth.signOut()
+        if (active) setSession(null)
+      } else if (active) {
+        setSession(nextSession || null)
+      }
+      if (active) setReady(true)
+    }
+
+    supabase.auth.getSession().then(({ data }) => acceptSession(data.session || null))
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession || null)
-      setReady(true)
+      acceptSession(nextSession || null)
     })
 
     return () => {
@@ -29,7 +36,7 @@ export default function AuthGate() {
   }, [])
 
   if (!ready) {
-    return <main style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#09090b',color:'#777780',fontFamily:'Inter,system-ui,sans-serif'}}>Loading Vak…</main>
+    return <main style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#f4f1ea',color:'#777169',fontFamily:'Inter,system-ui,sans-serif'}}>Loading Ana…</main>
   }
 
   if (!session) return <AuthPage />
