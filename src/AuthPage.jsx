@@ -30,7 +30,6 @@ export default function AuthPage() {
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: window.location.origin,
             data: {
               name: name.trim(),
               location: location.trim(),
@@ -40,34 +39,20 @@ export default function AuthPage() {
 
         if (signUpError) throw signUpError
 
-        if (data?.session) {
-          await supabase.auth.signOut()
-          throw new Error('Email confirmation is not enabled in Supabase yet. Please enable it before accepting new users.')
-        }
+        if (data?.session) return
 
-        setSuccess(`Verification email sent to ${email.trim()}. Open the link in that email, then come back here and sign in.`)
+        setSuccess('Account created. You can sign in with your email and password.')
         setMode('login')
         setPassword('')
         return
       }
 
-      const { data, error: loginError } = await supabase.auth.signInWithPassword({
+      const { error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       })
 
-      if (loginError) {
-        const message = String(loginError.message || '')
-        if (/confirm|verified|verification/i.test(message)) {
-          throw new Error('Please verify your email first. Open the verification link Ana sent to your inbox.')
-        }
-        throw loginError
-      }
-
-      if (!data?.user?.email_confirmed_at) {
-        await supabase.auth.signOut()
-        throw new Error('Please verify your email first. Open the verification link Ana sent to your inbox.')
-      }
+      if (loginError) throw loginError
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -83,7 +68,7 @@ export default function AuthPage() {
       </div>
 
       <h1 style={s.title}>{mode === 'login' ? 'Welcome back.' : 'Create your Ana account.'}</h1>
-      <p style={s.subtitle}>{mode === 'login' ? 'Sign in with your verified email address.' : 'A verification link will be sent to your email before you can sign in.'}</p>
+      <p style={s.subtitle}>{mode === 'login' ? 'Sign in with your email and password.' : 'Create your account and start using Ana.'}</p>
 
       <div style={s.tabs}>
         <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess('') }} style={{...s.tab, ...(mode === 'login' ? s.tabActive : {})}}>Sign in</button>
@@ -107,7 +92,7 @@ export default function AuthPage() {
         </button>
       </form>
 
-      <p style={s.note}>{mode === 'signup' ? 'You will not be able to sign in until your email is verified.' : 'Only verified Ana accounts can sign in.'}</p>
+      <p style={s.note}>{mode === 'signup' ? 'Your account will be ready immediately after signup.' : 'Use the email and password you registered with.'}</p>
     </section>
   </main>
 }
