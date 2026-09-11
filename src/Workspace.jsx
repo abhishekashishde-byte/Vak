@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Languages, Mic } from 'lucide-react'
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
+import './live.css'
 
 export default function Workspace() {
   const [mode, setMode] = useState('translate')
