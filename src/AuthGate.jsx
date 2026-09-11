@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import App from './App.jsx'
+import Workspace from './Workspace.jsx'
 import AuthPage from './AuthPage.jsx'
 import { authConfigured, supabase } from './lib/supabase'
 
@@ -11,22 +11,15 @@ export default function AuthGate() {
     if (!authConfigured || !supabase) return
 
     let active = true
-
-    const acceptSession = async (nextSession) => {
+    supabase.auth.getSession().then(({ data }) => {
       if (!active) return
-      if (nextSession?.user && !nextSession.user.email_confirmed_at) {
-        await supabase.auth.signOut()
-        if (active) setSession(null)
-      } else if (active) {
-        setSession(nextSession || null)
-      }
-      if (active) setReady(true)
-    }
-
-    supabase.auth.getSession().then(({ data }) => acceptSession(data.session || null))
+      setSession(data.session || null)
+      setReady(true)
+    })
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      acceptSession(nextSession || null)
+      setSession(nextSession || null)
+      setReady(true)
     })
 
     return () => {
@@ -40,5 +33,5 @@ export default function AuthGate() {
   }
 
   if (!session) return <AuthPage />
-  return <App />
+  return <Workspace />
 }
