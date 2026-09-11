@@ -1,8 +1,5 @@
 import { useState } from 'react'
-import { Turnstile } from '@marsidev/react-turnstile'
 import { authConfigured, supabase } from './lib/supabase'
-
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
@@ -10,7 +7,6 @@ export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [location, setLocation] = useState('')
-  const [captchaToken, setCaptchaToken] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -29,15 +25,12 @@ export default function AuthPage() {
     try {
       if (mode === 'signup') {
         if (!name.trim() || !location.trim()) throw new Error('Please enter your name and location.')
-        if (!TURNSTILE_SITE_KEY) throw new Error('CAPTCHA is not configured yet.')
-        if (!captchaToken) throw new Error('Please complete the CAPTCHA.')
 
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            captchaToken,
             data: {
               name: name.trim(),
               location: location.trim(),
@@ -47,7 +40,6 @@ export default function AuthPage() {
 
         if (signUpError) throw signUpError
 
-        // With email confirmation enabled, Supabase returns no active session.
         if (data?.session) {
           await supabase.auth.signOut()
           throw new Error('Email confirmation is not enabled in Supabase yet. Please enable it before accepting new users.')
@@ -56,7 +48,6 @@ export default function AuthPage() {
         setSuccess(`Verification email sent to ${email.trim()}. Open the link in that email, then come back here and sign in.`)
         setMode('login')
         setPassword('')
-        setCaptchaToken('')
         return
       }
 
@@ -108,12 +99,6 @@ export default function AuthPage() {
         <Field label="Email" value={email} onChange={setEmail} type="email" autoComplete="email" placeholder="you@example.com" />
         <Field label="Password" value={password} onChange={setPassword} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Minimum 8 characters" minLength={8} />
 
-        {mode === 'signup' && (
-          TURNSTILE_SITE_KEY
-            ? <div style={s.captcha}><Turnstile siteKey={TURNSTILE_SITE_KEY} onSuccess={setCaptchaToken} onExpire={() => setCaptchaToken('')} options={{ theme: 'light' }}/></div>
-            : <div style={s.setupNote}>CAPTCHA setup is still pending.</div>
-        )}
-
         {error && <div style={s.error}>{error}</div>}
         {success && <div style={s.success}>{success}</div>}
 
@@ -142,7 +127,6 @@ const s = {
   title:{margin:0,textAlign:'center',fontSize:'clamp(30px,7vw,44px)',lineHeight:1,letterSpacing:'-.05em',fontWeight:650},subtitle:{margin:'13px auto 24px',maxWidth:360,textAlign:'center',color:'#7a7369',fontSize:13,lineHeight:1.55},
   tabs:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,padding:4,borderRadius:12,background:'rgba(79,69,55,.08)',marginBottom:20},tab:{border:0,borderRadius:9,padding:'10px 12px',background:'transparent',color:'#7c7469',cursor:'pointer',fontWeight:600},tabActive:{background:'#fffdfa',color:'#171717',boxShadow:'0 2px 9px rgba(57,48,37,.08)'},
   form:{display:'flex',flexDirection:'column',gap:14},field:{display:'flex',flexDirection:'column',gap:6},label:{fontSize:11,fontWeight:650,color:'#6f675d'},input:{width:'100%',height:48,border:'1px solid rgba(43,39,33,.15)',borderRadius:11,background:'rgba(255,253,250,.82)',padding:'0 13px',color:'#171717',outline:'none',fontSize:15},
-  captcha:{display:'flex',justifyContent:'center',paddingTop:3},setupNote:{border:'1px dashed rgba(43,39,33,.18)',borderRadius:10,padding:'11px 12px',textAlign:'center',fontSize:12,color:'#8a8176',background:'rgba(255,255,255,.35)'},
   primary:{width:'100%',minHeight:50,border:0,borderRadius:12,background:'#171717',color:'#fffdfa',fontWeight:700,cursor:'pointer',marginTop:2},disabled:{opacity:.6,cursor:'wait'},
   error:{padding:'10px 12px',borderRadius:10,border:'1px solid #dfbfc1',background:'#fff2f3',color:'#9a3f46',fontSize:12,lineHeight:1.45},success:{padding:'11px 12px',borderRadius:10,border:'1px solid #c9d9c3',background:'#f3faef',color:'#43663b',fontSize:12,lineHeight:1.45},note:{margin:'18px 0 0',textAlign:'center',color:'#938b80',fontSize:11}
 }
