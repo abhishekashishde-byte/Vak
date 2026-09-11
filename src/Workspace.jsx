@@ -5,7 +5,7 @@ import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMe.jsx'
 import './live.css'
 import './talk.css'
-import './owner-question.css'
+import './ana-identity.css'
 
 export default function Workspace() {
   const [mode, setMode] = useState('translate')
