@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Languages, Mic, Pause, Send, Sparkles, Square, Volume2, X } from 'lucide-react'
+import { ArrowRight, Check, Languages, Mic, Pause, Send, Sparkles, UserRound, Volume2 } from 'lucide-react'
 
 const LANGS = [
   { name: 'English', code: 'en-US' },
@@ -43,6 +43,7 @@ export default function TalkForMe() {
   const [history, setHistory] = useState([])
   const [pending, setPending] = useState(null)
   const [decision, setDecision] = useState('')
+  const [ownerListening, setOwnerListening] = useState(false)
   const [error, setError] = useState('')
 
   const recognitionRef = useRef(null)
@@ -136,6 +137,7 @@ export default function TalkForMe() {
     try { recognitionRef.current?.stop() } catch {}
     recognitionRef.current = null
     setInterim('')
+    setOwnerListening(false)
   }
 
   const conversationForPrompt = () => history.map((turn, i) =>
@@ -178,6 +180,16 @@ export default function TalkForMe() {
     window.speechSynthesis.speak(utterance)
   }
 
+  const askOwner = (heard, meaning, question) => {
+    stopRecognition()
+    needsUserRef.current = true
+    processingRef.current = false
+    setPending({ heard, meaning, question })
+    setSessionState('needs-user')
+    setDecision('')
+    try { navigator.vibrate?.([120, 70, 120]) } catch {}
+  }
+
   const handleOtherSpeech = async rawText => {
     const text = String(rawText || '').trim()
     if (!text || processingRef.current) return
@@ -195,14 +207,7 @@ export default function TalkForMe() {
       if (!parsed) throw new Error('Ana could not work out the next reply.')
       const meaning = String(parsed.meaning || '').trim()
       if (parsed.action === 'ask_user' || !parsed.spokenReply) {
-        needsUserRef.current = true
-        processingRef.current = false
-        setPending({
-          heard: text,
-          meaning,
-          question: String(parsed.askUser || 'I need one detail from you before I answer.').trim(),
-        })
-        setSessionState('needs-user')
+        askOwner(text, meaning, String(parsed.askUser || 'I need one detail from you before I answer.').trim())
         return
       }
       speakAndResume(String(parsed.spokenReply).trim(), String(parsed.homeSummary || '').trim(), text, meaning)
@@ -262,6 +267,41 @@ export default function TalkForMe() {
     try { recognition.start() } catch {}
   }
 
+  const listenForOwner = () => {
+    if (!pending || ownerListening || !supported) return
+    stopRecognition()
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = LANGS.find(x => x.name === homeLanguage)?.code || 'en-US'
+    setOwnerListening(true)
+    setDecision('')
+
+    recognition.onresult = event => {
+      let live = ''
+      let finalText = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const text = event.results[i][0]?.transcript?.trim() || ''
+        if (event.results[i].isFinal) finalText += `${text} `
+        else live += `${text} `
+      }
+      setDecision((finalText || live).trim())
+    }
+    recognition.onerror = event => {
+      if (event.error !== 'no-speech' && event.error !== 'aborted') setError(`Owner microphone error: ${event.error}`)
+      setOwnerListening(false)
+    }
+    recognition.onend = () => {
+      recognitionRef.current = null
+      setOwnerListening(false)
+    }
+    recognitionRef.current = recognition
+    try { recognition.start() } catch {
+      setOwnerListening(false)
+    }
+  }
+
   const startConversation = async () => {
     setError('')
     setStage('conversation')
@@ -280,6 +320,7 @@ export default function TalkForMe() {
   }
 
   const resumeConversation = () => {
+    if (pending) return
     activeRef.current = true
     processingRef.current = false
     needsUserRef.current = false
@@ -289,6 +330,7 @@ export default function TalkForMe() {
   const answerAna = async () => {
     const answer = decision.trim()
     if (!answer || !pending) return
+    stopRecognition()
     setDecision('')
     setSessionState('thinking')
     processingRef.current = true
@@ -299,14 +341,12 @@ export default function TalkForMe() {
       const instructions = `You are Ana speaking for the user. Use the user's answer exactly as context; do not invent additional facts. If one essential material detail is still missing, leave spokenReply empty and ask one concise question in askUser. Otherwise produce a concise natural spoken reply. Return valid JSON only.`
       const parsed = parseJson(await askAna(prompt, instructions))
       if (!parsed?.spokenReply) {
-        processingRef.current = false
-        needsUserRef.current = true
-        setPending(prev => ({ ...prev, question: String(parsed?.askUser || 'I still need one detail from you.').trim() }))
-        setSessionState('needs-user')
+        askOwner(pending.heard, pending.meaning, String(parsed?.askUser || 'I still need one detail from you.').trim())
         return
       }
       const current = pending
       setPending(null)
+      setKnownFacts(prev => [...prev, `Owner answered during conversation: ${answer}`])
       speakAndResume(String(parsed.spokenReply).trim(), String(parsed.homeSummary || '').trim(), current.heard, current.meaning)
     } catch (err) {
       processingRef.current = false
@@ -390,7 +430,8 @@ export default function TalkForMe() {
       <button className="ghost" onClick={endConversation}>End</button>
     </div>
 
-    <div className="voice-card">
+    <div className={`voice-card${pending ? ' owner-pending' : ''}`}>
+      {pending && <div className="owner-alert"><UserRound size={16}/><div><strong>Question for you</strong><span>Ana has stopped listening to the other person. Only you should answer now.</span></div></div>}
       <div className="voice-language"><Languages size={14}/><span>{homeLanguage}</span><span>↔</span><span>{otherLanguage}</span></div>
 
       <div className="orb-zone">
@@ -398,15 +439,21 @@ export default function TalkForMe() {
           <div className="orb-layer one"/><div className="orb-layer two"/><div className="orb-core">A</div>
         </div>
         <div className="voice-state-copy">
-          <strong>{sessionState === 'listening' ? 'Listening' : sessionState === 'thinking' ? 'Understanding' : sessionState === 'speaking' ? 'Ana is speaking' : sessionState === 'needs-user' ? 'Ana needs you' : 'Paused'}</strong>
-          <span>{sessionState === 'listening' ? (interim || 'The other person can speak now') : sessionState === 'thinking' ? 'Working out what to say next…' : sessionState === 'speaking' ? latestAna : sessionState === 'needs-user' ? 'The conversation is paused for your decision.' : 'Tap resume when you are ready.'}</span>
+          <strong>{sessionState === 'listening' ? 'Listening to them' : sessionState === 'thinking' ? 'Understanding' : sessionState === 'speaking' ? 'Ana is speaking' : sessionState === 'needs-user' ? 'Waiting for you' : 'Paused'}</strong>
+          <span>{sessionState === 'listening' ? (interim || 'The other person can speak now') : sessionState === 'thinking' ? 'Working out what to say next…' : sessionState === 'speaking' ? latestAna : sessionState === 'needs-user' ? 'Speaker microphone is paused. Answer Ana below to continue.' : 'Tap resume when you are ready.'}</span>
         </div>
       </div>
 
-      {pending && <div className="decision-card">
-        <div className="decision-head"><Sparkles size={16}/><div><span>Ana needs one thing from you</span><strong>{pending.question}</strong></div></div>
-        <div className="decision-context"><span>They said</span><p>{pending.meaning || pending.heard}</p></div>
-        <div className="decision-input"><input autoFocus value={decision} onChange={e => setDecision(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') answerAna() }} placeholder="Tell Ana your decision…"/><button onClick={answerAna} disabled={!decision.trim()}><Send size={17}/></button></div>
+      {pending && <div className="decision-card owner-decision">
+        <div className="decision-head"><UserRound size={18}/><div><span>Owner input required</span><strong>{pending.question}</strong></div></div>
+        <div className="decision-context"><span>Why Ana paused</span><p>{pending.meaning || pending.heard}</p></div>
+        <div className="owner-answer-label"><span>Your answer — not the other speaker's</span></div>
+        <div className="decision-input">
+          <button className={`owner-mic${ownerListening ? ' active' : ''}`} onClick={listenForOwner} disabled={ownerListening} title="Answer Ana by voice"><Mic size={17}/></button>
+          <input autoFocus value={decision} onChange={e => setDecision(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') answerAna() }} placeholder={ownerListening ? 'Listening to you…' : 'Type or speak your answer to Ana…'}/>
+          <button className="owner-send" onClick={answerAna} disabled={!decision.trim()}><Send size={17}/></button>
+        </div>
+        <div className="owner-hold-note">Ana will not resume the conversation until you reply.</div>
       </div>}
 
       {error && <div className="error voice-error">{error}</div>}
@@ -417,7 +464,7 @@ export default function TalkForMe() {
       </div>}
 
       <div className="voice-controls">
-        {activeRef.current ? <button className="pause-btn" onClick={pauseConversation}><Pause size={17}/> Pause</button> : <button className="resume-btn" onClick={resumeConversation}><Mic size={17}/> Resume</button>}
+        {pending ? <button className="waiting-owner" disabled><UserRound size={17}/> Waiting for your answer</button> : activeRef.current ? <button className="pause-btn" onClick={pauseConversation}><Pause size={17}/> Pause</button> : <button className="resume-btn" onClick={resumeConversation}><Mic size={17}/> Resume</button>}
         <button className="text-button" onClick={startOver}>Start over</button>
       </div>
     </div>
