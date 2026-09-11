@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Languages } from 'lucide-react'
 import { authConfigured, supabase } from './lib/supabase'
 
 function GoogleIcon() {
@@ -16,62 +15,33 @@ export default function AuthPage() {
   const [error, setError] = useState('')
 
   const signInWithGoogle = async () => {
-    if (!authConfigured || !supabase) {
-      setError('Google sign-in is not configured yet.')
-      return
-    }
-
-    setLoading(true)
-    setError('')
+    if (!authConfigured || !supabase) { setError('Google sign-in is not configured yet.'); return }
+    setLoading(true); setError('')
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
+      options: { redirectTo: window.location.origin, queryParams: { access_type: 'offline', prompt: 'consent' } },
     })
-
-    if (authError) {
-      setError(authError.message)
-      setLoading(false)
-    }
+    if (authError) { setError(authError.message); setLoading(false) }
   }
 
   return <main style={s.page}>
     <section style={s.card}>
-      <div style={s.logo}><div style={s.mark}>V</div><span>Vak</span></div>
-      <div style={s.iconWrap}><Languages size={28}/></div>
-      <h1 style={s.title}>Speak beyond language.</h1>
-      <p style={s.subtitle}>Sign in to translate naturally, refine every word, and keep your language preferences with you.</p>
-
-      <button style={{...s.googleButton, ...(loading ? s.disabled : {})}} onClick={signInWithGoogle} disabled={loading}>
-        <GoogleIcon />
-        <span>{loading ? 'Connecting…' : 'Continue with Google'}</span>
-      </button>
-
+      <div style={s.logo}><img src="/ana-logo.svg" alt="Ana" style={s.logoMark}/><div><strong style={s.wordmark}>Ana</strong><div style={s.tagline}>Your voice, in any language</div></div></div>
+      <h1 style={s.title}>Speak naturally.<br/>Be understood.</h1>
+      <p style={s.subtitle}>Sign in to translate with context, tone and terminology that feels like you.</p>
+      <button style={{...s.googleButton, ...(loading ? s.disabled : {})}} onClick={signInWithGoogle} disabled={loading}><GoogleIcon/><span>{loading ? 'Connecting…' : 'Continue with Google'}</span></button>
       {error && <div style={s.error}>{error}</div>}
       <p style={s.note}>Your translation workspace is private to your account.</p>
     </section>
   </main>
 }
 
+const texture = 'linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)), repeating-radial-gradient(circle at 17% 22%,rgba(71,63,49,.045) 0 1px,transparent 1px 3px), repeating-linear-gradient(112deg,rgba(76,66,50,.03) 0 1px,transparent 1px 4px)'
 const s = {
-  page: {
-    minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: '24px',
-    background: 'radial-gradient(circle at 50% -10%, #202025 0, #0d0d10 38%, #09090b 66%)',
-    color: '#f5f5f5',
-  },
-  card: { width: '100%', maxWidth: 420, textAlign: 'center' },
-  logo: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 56, fontWeight: 700, fontSize: 18 },
-  mark: { width: 38, height: 38, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'linear-gradient(145deg,#fff,#a5a5aa)', color: '#0b0b0d', fontFamily: 'Georgia, serif', fontWeight: 800 },
-  iconWrap: { width: 58, height: 58, display: 'grid', placeItems: 'center', margin: '0 auto 20px', border: '1px solid #2f2f35', borderRadius: 18, background: '#151517', color: '#b7b7c0' },
-  title: { margin: 0, fontSize: 'clamp(34px,8vw,48px)', lineHeight: 1.02, letterSpacing: '-.055em', fontWeight: 650 },
-  subtitle: { margin: '16px auto 30px', maxWidth: 360, color: '#8f8f99', fontSize: 14, lineHeight: 1.55 },
-  googleButton: { width: '100%', minHeight: 50, border: '1px solid #d7d7db', borderRadius: 12, background: '#f4f4f5', color: '#151517', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11, fontWeight: 650, cursor: 'pointer' },
-  disabled: { opacity: .65, cursor: 'wait' },
-  error: { marginTop: 14, padding: '10px 12px', borderRadius: 10, border: '1px solid #552d32', background: '#211315', color: '#f0a9b1', fontSize: 12 },
-  note: { marginTop: 20, color: '#5f5f68', fontSize: 11 },
+  page:{minHeight:'100dvh',display:'grid',placeItems:'center',padding:'28px 22px',backgroundColor:'#f4f1ea',backgroundImage:texture,color:'#171717'},
+  card:{width:'100%',maxWidth:430,textAlign:'center',padding:'44px 32px',border:'1px solid rgba(43,39,33,.12)',borderRadius:24,background:'rgba(255,255,255,.48)',backdropFilter:'blur(10px)',boxShadow:'0 24px 70px rgba(70,58,42,.08)'},
+  logo:{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:52,textAlign:'left'},logoMark:{width:48,height:48,objectFit:'contain'},wordmark:{fontSize:24,lineHeight:1},tagline:{fontSize:10,color:'#777169',marginTop:5},
+  title:{margin:0,fontSize:'clamp(38px,8vw,54px)',lineHeight:.98,letterSpacing:'-.055em',fontWeight:650},subtitle:{margin:'17px auto 30px',maxWidth:350,color:'#7a7369',fontSize:14,lineHeight:1.55},
+  googleButton:{width:'100%',minHeight:52,border:'1px solid rgba(43,39,33,.16)',borderRadius:12,background:'#fffdfa',color:'#171717',display:'flex',alignItems:'center',justifyContent:'center',gap:11,fontWeight:650,cursor:'pointer',boxShadow:'0 8px 20px rgba(57,48,37,.05)'},disabled:{opacity:.65,cursor:'wait'},
+  error:{marginTop:14,padding:'10px 12px',borderRadius:10,border:'1px solid #dfbfc1',background:'#fff2f3',color:'#9a3f46',fontSize:12},note:{marginTop:20,color:'#938b80',fontSize:11}
 }
