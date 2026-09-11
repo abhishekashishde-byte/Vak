@@ -3,6 +3,7 @@
 Standalone AI translation app extracted from Saarthi's translation experience.
 
 ## v1
+- Google authentication with Supabase
 - Auto-detect source language
 - German, English, Hindi, French, Spanish and Italian targets
 - German Sie / du control
@@ -12,8 +13,13 @@ Standalone AI translation app extracted from Saarthi's translation experience.
 - Save preferred terminology in a browser-local personal glossary
 - Copy translated output
 
-## Vercel setup
-Add `OPENAI_API_KEY` to the Production/Preview environment variables.
+## Vercel environment variables
+- `OPENAI_API_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+## Google OAuth
+Enable Google in Supabase Authentication > Providers and add the Vak production URL to the allowed redirect URLs.
 
 Build command: `npm run build`
 Output directory: `dist`
