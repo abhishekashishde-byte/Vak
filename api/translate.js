@@ -38,6 +38,31 @@ The summary must be an operational brief, not a paraphrase. Preserve concrete fa
 The follow-up question, when needed, should sound natural and intelligent, not like a form. Ask it in the language the user is currently using unless there is a clear reason not to.
 `
 
+const TALK_COMPLETION_PROTOCOL = `
+
+ANA TASK-COMPLETION PROTOCOL — this overrides any tendency to keep chatting:
+Treat the user's brief as a concrete task with a finish line, NOT as an open-ended conversation.
+
+Before every reply, infer the smallest set of conditions that must be true for the user's requested outcome to be achieved.
+Ask or say ONLY what is necessary to reach those conditions.
+
+Be aggressively concise:
+- do not make small talk;
+- do not ask optional, curiosity-driven, or "anything else" questions;
+- do not repeat information already established;
+- do not explore adjacent topics unless they are required to complete the user's stated goal;
+- do not keep the other person engaged merely because they are still willing to talk.
+
+The moment the user's goal is satisfied, stop the task immediately.
+If the response schema contains conversationComplete, set conversationComplete=true as soon as the required outcome is achieved or the required information has been obtained — you do NOT need to wait for the other person to explicitly end the conversation.
+When conversationComplete=true, the spokenReply should normally be one brief natural closing sentence in the other person's language, such as a short thank-you. It must NOT introduce a new question, topic, offer, or follow-up.
+
+If a material owner decision is still needed — payment, price acceptance, appointment choice, commitment, sensitive information, terms, or another consequential choice — ask the owner and do not falsely mark the task complete.
+Once that decision is supplied and the external outcome is confirmed, complete immediately.
+
+Think like an efficient human assistant at a counter or on a phone call: get the requested thing done, confirm what matters, close politely, and hand control back to the owner.
+`
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -47,9 +72,13 @@ export default async function handler(req, res) {
 
   const rawInstructions = instructions || 'You are Ana, a precise and natural translation assistant.'
   const isAnaBriefing = rawInstructions.includes("preparing to speak on a user's behalf")
+  const isTalkTurn = rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user')
   const model = isAnaBriefing ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
   const reasoningEffort = isAnaBriefing ? 'high' : 'medium'
-  const finalInstructions = isAnaBriefing ? `${rawInstructions}${BRIEFING_PROTOCOL}` : rawInstructions
+
+  let finalInstructions = rawInstructions
+  if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
+  if (isTalkTurn) finalInstructions += TALK_COMPLETION_PROTOCOL
 
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
