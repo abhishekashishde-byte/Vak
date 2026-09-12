@@ -1,19 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Clipboard, Download, FileImage, FileText, Languages, LayoutTemplate, LoaderCircle, ScanText, Upload, X } from 'lucide-react'
-import { buildTranslatedPdf, downloadBytes, extractPdfLayout, layoutToPlainText } from './lib/pdfLayout.js'
+import { useMemo, useRef, useState } from 'react'
+import { CheckCircle2, Download, FileText, LoaderCircle, Upload, X } from 'lucide-react'
+import { buildTranslatedPdf, downloadBytes, extractPdfLayout } from './lib/pdfLayout.js'
 
 const TARGETS = ['German', 'English', 'Hindi', 'French', 'Spanish', 'Italian']
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const MAX_PDF_BYTES = 20 * 1024 * 1024
-
-function readAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Could not read this file.'))
-    reader.readAsDataURL(file)
-  })
-}
 
 function parseJson(text = '') {
   const cleaned = String(text).replace(/```json|```/g, '').trim()
@@ -35,11 +25,6 @@ async function callAna(text, instructions) {
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Ana could not process this document.')
   return String(data.content || '').trim()
-}
-
-async function translateDocument(text, target) {
-  const instructions = `You are Ana. Translate the parsed document into ${target}. Preserve headings, paragraphs, bullets, numbering, tables, labels, dates, numbers, names and line breaks. Translate naturally and idiomatically, not word-for-word. Do not add explanations or commentary. Return only the translated document.`
-  return callAna(text, instructions)
 }
 
 function chunkBlocks(blocks, maxChars = 9500, maxBlocks = 20) {
@@ -71,12 +56,12 @@ async function translateLayout(layout, target, onProgress) {
     const instructions = `You are Ana translating positioned PDF text blocks into ${target}. Translate ONLY each object's text value. Keep every id exactly unchanged. Preserve numbers, names, dates, references, legal clause numbering and meaning. Do not merge, split, reorder or omit blocks. Return ONLY a valid JSON array in this exact shape: [{"id":"same-id","text":"translated text"}]. No Markdown fences and no commentary.`
     const raw = await callAna(JSON.stringify(payload), instructions)
     const parsed = parseJson(raw)
-    if (!Array.isArray(parsed)) throw new Error(`Ana returned an invalid structured translation for part ${index + 1}.`)
+    if (!Array.isArray(parsed)) throw new Error('Ana could not keep the document structure intact. Please try again.')
 
     const byId = new Map(parsed.filter(item => item?.id).map(item => [String(item.id), String(item.text || '')]))
     for (const block of chunk) {
       const value = byId.get(block.id)
-      if (!value) throw new Error(`A translated block was missing on page ${block.pageIndex + 1}. Please try again.`)
+      if (!value) throw new Error('A section of the document was missing after translation. Please try again.')
       translated.push({ id: block.id, text: value })
     }
   }
@@ -87,223 +72,150 @@ async function translateLayout(layout, target, onProgress) {
 export default function ScanMode() {
   const inputRef = useRef(null)
   const [file, setFile] = useState(null)
-  const [fileKind, setFileKind] = useState('')
-  const [preview, setPreview] = useState('')
-  const [layout, setLayout] = useState(null)
-  const [parsed, setParsed] = useState('')
-  const [translated, setTranslated] = useState('')
-  const [translatedBlocks, setTranslatedBlocks] = useState([])
   const [target, setTarget] = useState('German')
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [copied, setCopied] = useState('')
-  const [progress, setProgress] = useState('')
+  const [resultBytes, setResultBytes] = useState(null)
+  const [resultName, setResultName] = useState('')
+  const [progress, setProgress] = useState(0)
 
-  const busy = ['parsing', 'translating', 'exporting'].includes(status)
+  const busy = ['preparing', 'translating', 'building'].includes(status)
   const filename = useMemo(() => file?.name || '', [file])
-  const isPdf = fileKind === 'pdf'
-  const canExport = isPdf && layout && translatedBlocks.length > 0 && target !== 'Hindi'
-
-  useEffect(() => () => {
-    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
-  }, [preview])
-
-  const resetResults = () => {
-    setLayout(null)
-    setParsed('')
-    setTranslated('')
-    setTranslatedBlocks([])
-    setNotice('')
-    setProgress('')
-  }
-
-  const chooseFile = async selected => {
-    if (!selected) return
-    setError('')
-    resetResults()
-    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
-
-    const pdf = selected.type === 'application/pdf' || selected.name.toLowerCase().endsWith('.pdf')
-    const image = selected.type?.startsWith('image/')
-
-    if (!pdf && !image) {
-      setError('Upload a PDF or document image (JPG, PNG or WEBP).')
-      return
-    }
-    if (pdf && selected.size > MAX_PDF_BYTES) {
-      setError('Please use a PDF smaller than 20 MB for this first layout-preserving version.')
-      return
-    }
-    if (image && selected.size > MAX_IMAGE_BYTES) {
-      setError('Please use an image smaller than 4 MB for now.')
-      return
-    }
-
-    try {
-      setFile(selected)
-      setFileKind(pdf ? 'pdf' : 'image')
-      setPreview(pdf ? URL.createObjectURL(selected) : await readAsDataUrl(selected))
-      setStatus('idle')
-    } catch (err) {
-      setError(err.message || 'Could not load this document.')
-    }
-  }
-
-  const parse = async () => {
-    if (!file || busy) return
-    setStatus('parsing')
-    setError('')
-    resetResults()
-
-    try {
-      if (isPdf) {
-        const found = await extractPdfLayout(file)
-        setLayout(found)
-        setParsed(layoutToPlainText(found))
-        if (found.emptyPages.length) {
-          setNotice(`${found.emptyPages.length} page${found.emptyPages.length === 1 ? '' : 's'} had no embedded text. Ana preserved the readable PDF pages; scanned-page OCR fallback still needs to be added for those pages.`)
-        } else {
-          setNotice('Original PDF canvas retained. Ana found positioned text blocks instead of flattening the document.')
-        }
-      } else {
-        const response = await fetch('/api/ocr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageDataUrl: preview }),
-        })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.error || 'Document parsing failed.')
-        setParsed(String(data.parsed || '').trim())
-        setNotice('Image OCR currently preserves logical structure. Exact position-preserving reconstruction is being built for scanned pages next.')
-      }
-      setStatus('parsed')
-    } catch (err) {
-      setStatus('idle')
-      if (err?.code === 'SCANNED_PDF') {
-        setError('This PDF appears to be image-only. The new layout engine detected that correctly; scanned-PDF layout OCR is the next fallback we need to connect.')
-      } else {
-        setError(err.message || 'Document parsing failed.')
-      }
-    }
-  }
-
-  const translate = async () => {
-    if (!parsed || busy) return
-    setStatus('translating')
-    setError('')
-    setProgress('')
-
-    try {
-      if (layout) {
-        const blocks = await translateLayout(layout, target, (current, total) => setProgress(`Translating section ${current} of ${total}`))
-        setTranslatedBlocks(blocks)
-        setTranslated(layoutToPlainText(layout, blocks))
-      } else {
-        setTranslated(await translateDocument(parsed, target))
-      }
-      setStatus('done')
-      setProgress('')
-    } catch (err) {
-      setStatus('parsed')
-      setProgress('')
-      setError(err.message || 'Translation failed.')
-    }
-  }
-
-  const exportPdf = async () => {
-    if (!canExport || busy) return
-    setStatus('exporting')
-    setError('')
-    try {
-      const bytes = await buildTranslatedPdf(file, layout, translatedBlocks, target)
-      const base = filename.replace(/\.pdf$/i, '') || 'document'
-      downloadBytes(bytes, `${base}-${target.toLowerCase()}-ana.pdf`)
-      setStatus('done')
-    } catch (err) {
-      setStatus('done')
-      setError(err.message || 'Could not create the translated PDF.')
-    }
-  }
 
   const reset = () => {
-    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
     setFile(null)
-    setFileKind('')
-    setPreview('')
-    resetResults()
-    setError('')
     setStatus('idle')
+    setError('')
+    setResultBytes(null)
+    setResultName('')
+    setProgress(0)
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  const copy = async (text, type) => {
-    if (!text) return
-    await navigator.clipboard.writeText(text)
-    setCopied(type)
-    setTimeout(() => setCopied(''), 1200)
+  const processPdf = async (selected, language = target) => {
+    setFile(selected)
+    setError('')
+    setResultBytes(null)
+    setResultName('')
+    setProgress(8)
+    setStatus('preparing')
+
+    try {
+      const layout = await extractPdfLayout(selected)
+      if (layout.emptyPages.length) {
+        throw new Error('This PDF contains scanned/image-only pages. Automatic OCR for those pages is not connected yet.')
+      }
+
+      setStatus('translating')
+      setProgress(18)
+      const blocks = await translateLayout(layout, language, (current, total) => {
+        const ratio = total ? current / total : 0
+        setProgress(Math.round(18 + ratio * 62))
+      })
+
+      setStatus('building')
+      setProgress(86)
+      const bytes = await buildTranslatedPdf(selected, layout, blocks)
+      const base = selected.name.replace(/\.pdf$/i, '') || 'document'
+      const outputName = `${base}-${language.toLowerCase()}-ana.pdf`
+
+      setResultBytes(bytes)
+      setResultName(outputName)
+      setProgress(100)
+      setStatus('done')
+      downloadBytes(bytes, outputName)
+    } catch (err) {
+      setStatus('error')
+      setProgress(0)
+      if (err?.code === 'SCANNED_PDF') {
+        setError('This PDF is image-only. Ana needs the OCR fallback before it can rebuild this type of document.')
+      } else {
+        setError(err.message || 'Ana could not create the translated PDF.')
+      }
+    }
   }
 
-  return <section className="scan-page">
-    <header className="scan-hero">
-      <div className="eyebrow"><LayoutTemplate size={14}/> Ana Documents</div>
-      <h1>Translate the document. Keep the layout.</h1>
-      <p>Ana reads text together with its position on the page, translates it block by block, and can place it back onto the original PDF canvas.</p>
+  const chooseFile = selected => {
+    if (!selected) return
+    const pdf = selected.type === 'application/pdf' || selected.name.toLowerCase().endsWith('.pdf')
+    if (!pdf) {
+      setError('Please upload a PDF. Image and scanned-document reconstruction will be added through the OCR fallback.')
+      return
+    }
+    if (selected.size > MAX_PDF_BYTES) {
+      setError('Please use a PDF smaller than 20 MB for now.')
+      return
+    }
+    processPdf(selected)
+  }
+
+  const changeTarget = language => {
+    setTarget(language)
+    if (file && !busy) processPdf(file, language)
+  }
+
+  const downloadAgain = () => {
+    if (resultBytes && resultName) downloadBytes(resultBytes, resultName)
+  }
+
+  const statusText = status === 'preparing'
+    ? 'Preparing your document…'
+    : status === 'translating'
+      ? `Translating to ${target}…`
+      : status === 'building'
+        ? 'Creating your translated PDF…'
+        : ''
+
+  return <section className="scan-page scan-direct">
+    <header className="scan-hero scan-direct-hero">
+      <div className="eyebrow">Ana Documents</div>
+      <h1>Give Ana a PDF. Get it back translated.</h1>
+      <p>Formatting stays on the original document canvas. The reading, layout detection and reconstruction happen automatically.</p>
     </header>
 
-    {!preview ? <button className="scan-drop" onClick={() => inputRef.current?.click()}>
-      <span className="scan-drop-icon"><Upload size={24}/></span>
-      <strong>Upload a PDF or document photo</strong>
-      <span>PDF up to 20 MB · JPG, PNG, WEBP up to 4 MB</span>
-    </button> : <section className="scan-layout">
-      <article className="scan-source-card">
-        <div className="scan-card-head">
-          <div><span className="scan-kicker">ORIGINAL DOCUMENT</span><strong>{isPdf ? <FileText size={15}/> : <FileImage size={15}/>} {filename}</strong></div>
-          <button className="scan-icon-btn" onClick={reset} title="Remove document"><X size={17}/></button>
-        </div>
-        <div className={`scan-preview ${isPdf ? 'pdf' : ''}`}>
-          {isPdf ? <iframe src={`${preview}#toolbar=0&navpanes=0`} title="Original PDF"/> : <img src={preview} alt="Uploaded document"/>}
-        </div>
-        <button className="scan-primary" disabled={busy} onClick={parse}>
-          {status === 'parsing' ? <><LoaderCircle className="spin" size={17}/> Reading document…</> : isPdf ? <><LayoutTemplate size={17}/> Read PDF layout</> : <><ScanText size={17}/> Parse document</>}
-        </button>
-        {layout && <div className="scan-layout-stats">
-          <span>{layout.pageCount} page{layout.pageCount === 1 ? '' : 's'}</span>
-          <span>{layout.blocks.length} positioned blocks</span>
-          <span>Canvas retained</span>
-        </div>}
-      </article>
+    <div className="scan-language-row">
+      <span>Translate to</span>
+      <select value={target} disabled={busy} onChange={e => changeTarget(e.target.value)}>
+        {TARGETS.map(lang => <option key={lang}>{lang}</option>)}
+      </select>
+    </div>
 
-      <div className="scan-results">
-        <article className={`scan-text-card ${parsed ? 'ready' : ''}`}>
-          <div className="scan-card-head">
-            <div><span className="scan-kicker">DOCUMENT MAP</span><strong>{layout ? 'Positioned content' : 'Parsed content'}</strong></div>
-            <button className="scan-copy" disabled={!parsed} onClick={() => copy(parsed, 'parsed')}>{copied === 'parsed' ? <Check size={15}/> : <Clipboard size={15}/>} {copied === 'parsed' ? 'Copied' : 'Copy'}</button>
-          </div>
-          {layout ? <div className="scan-block-list">{layout.blocks.slice(0, 40).map(block => <div className="scan-block" key={block.id}><span>{block.type}</span><p>{block.text}</p><small>Page {block.pageIndex + 1}</small></div>)}{layout.blocks.length > 40 && <div className="scan-more">+ {layout.blocks.length - 40} more positioned blocks</div>}</div> : <div className="scan-document">{parsed || <span className="scan-empty">Ana will reconstruct the readable text and document structure here.</span>}</div>}
-        </article>
+    {status === 'idle' && <button className="scan-direct-drop" onClick={() => inputRef.current?.click()}>
+      <span className="scan-direct-icon"><Upload size={25}/></span>
+      <strong>Choose PDF</strong>
+      <span>Up to 20 MB</span>
+    </button>}
 
-        <article className={`scan-text-card translated ${translated ? 'ready' : ''}`}>
-          <div className="scan-card-head scan-translate-head">
-            <div><span className="scan-kicker">ANA TRANSLATION</span><strong><Languages size={15}/> Translate document</strong></div>
-            <div className="scan-head-actions">
-              <select value={target} onChange={e => { setTarget(e.target.value); setTranslated(''); setTranslatedBlocks([]); if (parsed) setStatus('parsed') }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
-              <button className="scan-copy" disabled={!translated} onClick={() => copy(translated, 'translated')}>{copied === 'translated' ? <Check size={15}/> : <Clipboard size={15}/>}</button>
-            </div>
-          </div>
-          <div className="scan-document">{status === 'translating' ? <span className="scan-loading"><LoaderCircle className="spin" size={16}/> {progress || 'Translating positioned blocks…'}</span> : translated || <span className="scan-empty">Ana translates each positioned block without collapsing the document into one text stream.</span>}</div>
-          <div className="scan-translate-action">
-            <button className="scan-secondary" disabled={!parsed || busy} onClick={translate}>Translate to {target}</button>
-            {isPdf && <button className="scan-export" disabled={!canExport || busy} onClick={exportPdf}>{status === 'exporting' ? <><LoaderCircle className="spin" size={15}/> Building PDF…</> : <><Download size={15}/> Export translated PDF</>}</button>}
-          </div>
-          {target === 'Hindi' && translatedBlocks.length > 0 && <div className="scan-inline-note">Hindi translation works, but Hindi PDF export needs the Unicode font layer before we enable it.</div>}
-        </article>
+    {busy && <article className="scan-job-card">
+      <div className="scan-job-file">
+        <span className="scan-file-icon"><FileText size={20}/></span>
+        <div><strong>{filename}</strong><span>{statusText}</span></div>
       </div>
-    </section>}
+      <LoaderCircle className="spin scan-job-spinner" size={22}/>
+      <div className="scan-progress-track"><span style={{ width: `${progress}%` }}/></div>
+      <p>You do not need to do anything else. Ana will download the finished PDF when it is ready.</p>
+    </article>}
 
-    <input ref={inputRef} className="scan-file-input" type="file" accept="application/pdf,image/*" onChange={e => chooseFile(e.target.files?.[0])}/>
-    {notice && <div className="scan-notice">{notice}</div>}
-    {error && <div className="scan-error">{error}</div>}
-    <p className="scan-note">Digital PDFs now use Ana's layout-preserving path. Scanned PDFs/images still use OCR as a fallback; exact bounding-box OCR reconstruction is the next layer.</p>
+    {status === 'done' && <article className="scan-result-card">
+      <CheckCircle2 size={34}/>
+      <div>
+        <span className="scan-result-kicker">READY</span>
+        <h2>Your translated PDF is ready.</h2>
+        <p>{resultName}</p>
+      </div>
+      <button className="scan-download" onClick={downloadAgain}><Download size={18}/> Download PDF</button>
+      <button className="scan-again" onClick={reset}>Translate another PDF</button>
+    </article>}
+
+    {status === 'error' && <article className="scan-result-card scan-failed">
+      <button className="scan-close" onClick={reset} title="Start again"><X size={18}/></button>
+      <h2>This PDF could not be completed.</h2>
+      <p>{error}</p>
+      <button className="scan-download" onClick={() => inputRef.current?.click()}>Choose another PDF</button>
+    </article>}
+
+    {status === 'idle' && error && <div className="scan-error">{error}</div>}
+
+    <input ref={inputRef} className="scan-file-input" type="file" accept="application/pdf,.pdf" onChange={e => chooseFile(e.target.files?.[0])}/>
   </section>
 }
