@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, Check, Clipboard, Languages, LogOut, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 
-const TARGETS = ['German', 'English', 'Hindi', 'French', 'Spanish', 'Italian']
+const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
 const REGISTER_KEY = 'ana-german-register'
 
@@ -67,6 +67,7 @@ export default function App() {
     try {
       let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
       if (target === 'German') instructions += `\nUse flawless Standard German as written in Germany. ${registerRules()}`
+      if (target === 'Hinglish') instructions += `\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.`
       instructions += glossaryInstructions()
       setOutput(await callLuna(text, instructions))
     } catch (err) { setError(err.message || 'Could not translate') }
@@ -81,6 +82,7 @@ export default function App() {
       const prompt = `SOURCE TEXT:\n${input}\n\nCURRENT ${target.toUpperCase()} TRANSLATION:\n${output}\n\nSELECTED TARGET WORD:\n${word}\n\nIdentify the source word or short source phrase represented by the selected target word, then suggest up to 5 natural alternatives that are drop-in replacements for exactly this selected span. Return JSON only: {"sourceTerm":"...","partOfSpeech":"...","meaning":"short plain-English meaning in context","alternatives":[{"term":"...","note":"short nuance"}]}`
       let instructions = `You are a bilingual editor refining a translation into ${target}. Return valid JSON only.`
       if (target === 'German') instructions += ` ${registerRules()}`
+      if (target === 'Hinglish') instructions += ' Hinglish must be natural Hindi written only in Roman/Latin letters, never Devanagari.'
       const parsed = parseJson(await callLuna(prompt, instructions)) || {}
       const alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives.filter(x => x?.term && String(x.term).toLowerCase() !== word.toLowerCase()).slice(0, 5) : []
       setSelected(prev => prev ? { ...prev, sourceTerm: String(parsed.sourceTerm || '').trim(), partOfSpeech: String(parsed.partOfSpeech || '').trim(), meaning: String(parsed.meaning || '').trim(), alternatives } : prev)
