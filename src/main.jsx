@@ -2,11 +2,13 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import AuthGate from './AuthGate.jsx'
 import { installAnaNaturalVoice } from './naturalVoice.js'
+import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
 import './styles.css'
 import './briefVoice.css'
 import './briefVoice.js'
 
+installPersonalLanguageMemory()
 installRealtimeTonePolicy()
 installAnaNaturalVoice()
 
