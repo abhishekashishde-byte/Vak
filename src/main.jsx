@@ -7,6 +7,7 @@ import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
 import './styles.css'
 import './briefVoice.css'
+import './criticalFacts.css'
 import './briefVoice.js'
 
 installPersonalLanguageMemory()
