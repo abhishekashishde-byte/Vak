@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
@@ -131,11 +131,12 @@ export async function extractPdfLayout(file) {
   const data = new Uint8Array(await file.arrayBuffer())
   const loadingTask = pdfjsLib.getDocument({ data })
   const document = await loadingTask.promise
+  const pageCount = document.numPages
   const pages = []
   const blocks = []
   const emptyPages = []
 
-  for (let pageIndex = 0; pageIndex < document.numPages; pageIndex += 1) {
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
     const page = await document.getPage(pageIndex + 1)
     const viewport = page.getViewport({ scale: 1 })
     const textContent = await page.getTextContent()
@@ -177,107 +178,132 @@ export async function extractPdfLayout(file) {
   await document.destroy()
 
   if (!blocks.length) {
-    const error = new Error('This PDF has no embedded text. It appears to be scanned and needs the OCR layout fallback.')
+    const error = new Error('This PDF is image-only and needs OCR before Ana can rebuild it.')
     error.code = 'SCANNED_PDF'
     throw error
   }
 
-  return {
-    pageCount: document.numPages,
-    pages,
-    blocks,
-    emptyPages,
-    embeddedText: true,
-  }
+  return { pageCount, pages, blocks, emptyPages, embeddedText: true }
 }
 
 export function layoutToPlainText(layout, translated = null) {
   const translations = translated instanceof Map ? translated : new Map((translated || []).map(item => [item.id, item.text]))
   return layout.pages.map(page => {
     const pageBlocks = layout.blocks.filter(block => block.pageIndex === page.pageIndex)
-    const lines = pageBlocks.map(block => translations.get(block.id) || block.text)
-    return `Page ${page.pageIndex + 1}\n\n${lines.join('\n\n')}`
-  }).join('\n\n──────────\n\n')
+    return pageBlocks.map(block => translations.get(block.id) || block.text).join('\n\n')
+  }).join('\n\n')
 }
 
-function cleanForStandardFont(text) {
-  return String(text || '')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, '-')
-    .replace(/…/g, '...')
-    .replace(/•/g, '-')
-    .replace(/\u00a0/g, ' ')
+function canvasFont(size, bold = false) {
+  return `${bold ? 700 : 400} ${size}px Arial, "Noto Sans", sans-serif`
 }
 
-function wrapText(text, font, size, maxWidth) {
-  const words = cleanForStandardFont(text).split(/\s+/).filter(Boolean)
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
+  if (!words.length) return []
   const lines = []
   let line = ''
+
   for (const word of words) {
     const candidate = line ? `${line} ${word}` : word
-    if (!line || font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+    if (!line || ctx.measureText(candidate).width <= maxWidth) {
       line = candidate
-    } else {
-      lines.push(line)
-      line = word
+      continue
     }
+    lines.push(line)
+    line = word
   }
   if (line) lines.push(line)
   return lines
 }
 
-function fitText(text, font, preferredSize, width, height) {
-  let size = Math.min(Math.max(preferredSize, 6), 18)
-  while (size >= 5.5) {
-    const lineHeight = size * 1.14
-    const lines = wrapText(text, font, size, Math.max(width, 20))
-    if (lines.length * lineHeight <= Math.max(height, lineHeight)) return { size, lineHeight, lines }
-    size -= 0.4
+function fitCanvasText(ctx, text, preferredSize, width, height, scale, bold) {
+  let size = Math.min(Math.max(preferredSize, 6), 20)
+  while (size >= 5.2) {
+    ctx.font = canvasFont(size * scale, bold)
+    const lineHeight = size * 1.18
+    const lines = wrapCanvasText(ctx, text, Math.max(width * scale, 20))
+    if (lines.length * lineHeight <= Math.max(height, lineHeight)) {
+      return { size, lineHeight, lines }
+    }
+    size -= 0.35
   }
-  const lineHeight = 5.5 * 1.12
-  return { size: 5.5, lineHeight, lines: wrapText(text, font, 5.5, Math.max(width, 20)) }
+  const sizeFinal = 5.2
+  ctx.font = canvasFont(sizeFinal * scale, bold)
+  return {
+    size: sizeFinal,
+    lineHeight: sizeFinal * 1.16,
+    lines: wrapCanvasText(ctx, text, Math.max(width * scale, 20)),
+  }
 }
 
-export async function buildTranslatedPdf(file, layout, translatedBlocks, targetLanguage) {
-  if (targetLanguage === 'Hindi') {
-    throw new Error('PDF export for Hindi needs the Unicode font layer. Translation works now; Hindi PDF export is the next font-support step.')
-  }
+function canvasToPngBytes(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(async blob => {
+      if (!blob) return reject(new Error('Could not render the translated page.'))
+      resolve(new Uint8Array(await blob.arrayBuffer()))
+    }, 'image/png')
+  })
+}
 
+export async function buildTranslatedPdf(file, layout, translatedBlocks) {
   const translations = new Map(translatedBlocks.map(item => [item.id, String(item.text || '')]))
   const pdf = await PDFDocument.load(await file.arrayBuffer())
-  const regular = await pdf.embedFont(StandardFonts.Helvetica)
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const pages = pdf.getPages()
+  const scale = 2
 
-  for (const block of layout.blocks) {
-    const translated = translations.get(block.id)
-    if (!translated) continue
-    const page = pages[block.pageIndex]
-    if (!page) continue
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try { await document.fonts.ready } catch {}
+  }
 
-    const padding = 1.5
-    const x = Math.max(0, block.x - padding)
-    const y = Math.max(0, block.y - padding)
-    const width = Math.min(page.getWidth() - x, block.width + padding * 2)
-    const height = Math.min(page.getHeight() - y, block.height + padding * 2)
-    const font = block.type === 'heading' ? bold : regular
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const page = pages[pageIndex]
+    const pageWidth = page.getWidth()
+    const pageHeight = page.getHeight()
+    const pageBlocks = layout.blocks.filter(block => block.pageIndex === pageIndex && translations.has(block.id))
+    if (!pageBlocks.length) continue
 
-    page.drawRectangle({ x, y, width, height, color: rgb(1, 1, 1), opacity: 0.97 })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(pageWidth * scale)
+    canvas.height = Math.ceil(pageHeight * scale)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Your browser could not create the translated PDF canvas.')
+    ctx.textBaseline = 'top'
 
-    const fitted = fitText(translated, font, block.fontSize * (block.type === 'heading' ? 1 : 0.95), width - 2, height - 2)
-    let cursorY = y + height - fitted.size
-    for (const line of fitted.lines) {
-      if (cursorY < y - 1) break
-      page.drawText(cleanForStandardFont(line), {
-        x: x + 1,
-        y: cursorY,
-        size: fitted.size,
-        font,
-        color: rgb(0.08, 0.08, 0.08),
-      })
-      cursorY -= fitted.lineHeight
+    for (const block of pageBlocks) {
+      const translated = translations.get(block.id)
+      if (!translated) continue
+
+      const padding = Math.max(1.5, block.fontSize * 0.08)
+      const x = Math.max(0, block.x - padding)
+      const y = Math.max(0, block.y - padding)
+      const width = Math.min(pageWidth - x, block.width + padding * 2)
+      const height = Math.min(pageHeight - y, block.height + padding * 2)
+      const canvasX = x * scale
+      const canvasY = (pageHeight - (y + height)) * scale
+      const canvasW = width * scale
+      const canvasH = height * scale
+
+      ctx.fillStyle = 'rgba(255,255,255,0.985)'
+      ctx.fillRect(canvasX, canvasY, canvasW, canvasH)
+
+      const bold = block.type === 'heading'
+      const fitted = fitCanvasText(ctx, translated, block.fontSize * (bold ? 1 : 0.96), width - 2, height - 2, scale, bold)
+      ctx.font = canvasFont(fitted.size * scale, bold)
+      ctx.fillStyle = '#141414'
+      let cursorY = canvasY + scale
+
+      for (const line of fitted.lines) {
+        if (cursorY + fitted.size * scale > canvasY + canvasH + 1) break
+        ctx.fillText(line, canvasX + scale, cursorY)
+        cursorY += fitted.lineHeight * scale
+      }
     }
+
+    const png = await pdf.embedPng(await canvasToPngBytes(canvas))
+    page.drawImage(png, { x: 0, y: 0, width: pageWidth, height: pageHeight })
+    canvas.width = 1
+    canvas.height = 1
   }
 
   return pdf.save()
@@ -292,5 +318,5 @@ export function downloadBytes(bytes, filename, type = 'application/pdf') {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1500)
+  setTimeout(() => URL.revokeObjectURL(url), 3000)
 }
