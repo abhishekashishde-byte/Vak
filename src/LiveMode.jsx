@@ -32,7 +32,6 @@ export default function LiveMode() {
   const orbRef = useRef(null)
   const audioContextRef = useRef(null)
   const meterFrameRef = useRef(null)
-  const resumeTimerRef = useRef(null)
 
   const active = ['connecting', 'listening', 'translating', 'speaking'].includes(sessionState)
   const realtimeSupported = typeof window !== 'undefined' && Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia)
@@ -94,6 +93,7 @@ For every completed speech turn:
 - Never explain, summarize, comment, add advice, introduce yourself, or say phrases such as “they said” or “the translation is”.
 - Never repeat the source sentence before translating it.
 - Do not continue the conversation on your own. After speaking the translation, stop and wait for either person to speak next.
+- If either person starts talking while you are speaking, stop immediately and listen. Never talk over a human speaker.
 - Sound like a natural human interpreter, not a robot. Keep the translation concise and faithful.`
 
   const finishTurn = () => {
@@ -114,6 +114,7 @@ For every completed speech turn:
     switch (event.type) {
       case 'input_audio_buffer.speech_started':
         if (activeRef.current) {
+          if (lastInputRef.current && outputRef.current) finishTurn()
           setInterim('')
           setLatestInput('')
           setLatestOutput('')
@@ -142,10 +143,7 @@ For every completed speech turn:
       }
 
       case 'response.created':
-        if (activeRef.current) {
-          setMicEnabled(false)
-          setSessionState('translating')
-        }
+        if (activeRef.current) setSessionState('translating')
         break
 
       case 'response.output_audio_transcript.delta': {
@@ -169,14 +167,7 @@ For every completed speech turn:
 
       case 'response.done':
         finishTurn()
-        if (activeRef.current) {
-          clearTimeout(resumeTimerRef.current)
-          resumeTimerRef.current = setTimeout(() => {
-            if (!activeRef.current) return
-            setMicEnabled(true)
-            setSessionState('listening')
-          }, 350)
-        }
+        if (activeRef.current) setSessionState('listening')
         break
 
       case 'error':
@@ -272,6 +263,14 @@ For every completed speech turn:
                 languages: [isoFor(languageA), isoFor(languageB)],
                 delay: 'low',
               },
+              turn_detection: {
+                type: 'server_vad',
+                threshold: 0.55,
+                prefix_padding_ms: 250,
+                silence_duration_ms: 350,
+                create_response: true,
+                interrupt_response: true,
+              },
             },
           },
         },
@@ -287,8 +286,6 @@ For every completed speech turn:
 
   function stopSession(clearLatest = true) {
     activeRef.current = false
-    clearTimeout(resumeTimerRef.current)
-    resumeTimerRef.current = null
     try { dataChannelRef.current?.close() } catch {}
     dataChannelRef.current = null
     try { peerRef.current?.close() } catch {}
@@ -343,7 +340,7 @@ For every completed speech turn:
     : sessionState === 'translating'
       ? (latestInput || 'Understanding the finished turn…')
       : sessionState === 'speaking'
-        ? (latestOutput || 'Speaking the translation aloud…')
+        ? (latestOutput || 'Speaking the translation aloud… You can interrupt Ana anytime.')
         : sessionState === 'connecting'
           ? 'Starting realtime audio…'
           : 'Choose the two languages, then start once.'
@@ -392,13 +389,12 @@ For every completed speech turn:
         <button className={`live-mic${active ? ' active' : ''}`} onClick={active ? () => stopSession() : startSession} disabled={sessionState === 'connecting'}>
           {active ? <Square size={19}/> : <Mic size={21}/>}<span>{sessionState === 'connecting' ? 'Connecting…' : active ? 'End conversation' : 'Start conversation'}</span>
         </button>
-        <div className={`live-status${active ? ' on' : ''}`}>{active ? `${languageA} ↔ ${languageB} · automatic direction` : 'Microphone off'}</div>
+        <div className={`live-status${active ? ' on' : ''}`}>{active ? `${languageA} ↔ ${languageB} · automatic direction · interruptible` : 'Microphone off'}</div>
       </div>
     </div>
 
     {turns.length > 0 && <details className="live-history">
       <summary>Conversation transcript · {turns.length} turn{turns.length === 1 ? '' : 's'}</summary>
-      <div>{turns.map(turn => <article key={turn.id}><div><span>Heard</span><p>{turn.original}</p></div><div><span>Ana interpreted</span><p>{turn.translation}</p></div></article>)}</div>
-    </details>}
+      <div>{turns.map(turn => <article key={turn.id}><div><span>Heard</span><p>{turn.original}</p></div><div><span>Ana interpreted</span><p>{turn.translation}</p></div></article>)}</div></details>}
   </section>
 }
