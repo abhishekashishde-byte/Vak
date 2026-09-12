@@ -21,6 +21,14 @@ export default async function handler(req, res) {
           model: 'gpt-realtime-2.1',
           audio: {
             output: { voice: 'marin' },
+            input: {
+              turn_detection: {
+                type: 'semantic_vad',
+                eagerness: 'high',
+                create_response: true,
+                interrupt_response: true,
+              },
+            },
           },
         },
       }),
