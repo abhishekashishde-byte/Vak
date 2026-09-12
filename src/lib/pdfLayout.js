@@ -248,7 +248,7 @@ function canvasToPngBytes(canvas) {
 
 export async function buildTranslatedPdf(file, layout, translatedBlocks) {
   const translations = new Map(translatedBlocks.map(item => [item.id, String(item.text || '')]))
-  const pdf = await PDFDocument.load(await file.arrayBuffer())
+  const pdf = await PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false })
   const pages = pdf.getPages()
   const scale = 2
 
@@ -306,7 +306,13 @@ export async function buildTranslatedPdf(file, layout, translatedBlocks) {
     canvas.height = 1
   }
 
-  return pdf.save()
+  // Do not let pdf-lib regenerate AcroForm appearances on save. Some source PDFs
+  // contain Unicode characters (for example arrows) in form appearances that the
+  // built-in WinAnsi fonts cannot encode, even though Ana's translated layer is rasterized.
+  return pdf.save({
+    updateFieldAppearances: false,
+    useObjectStreams: false,
+  })
 }
 
 export function downloadBytes(bytes, filename, type = 'application/pdf') {
@@ -315,8 +321,11 @@ export function downloadBytes(bytes, filename, type = 'application/pdf') {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
+  anchor.rel = 'noopener'
+  anchor.style.display = 'none'
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 3000)
+  // Keep the blob URL alive longer for mobile browsers that dispatch downloads asynchronously.
+  setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
