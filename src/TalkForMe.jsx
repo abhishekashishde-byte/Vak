@@ -344,6 +344,59 @@ export default function TalkForMe() {
     try { recognition.start() } catch {}
   }
 
+  const speakOpening = async () => {
+    processingRef.current = true
+    setSessionState('thinking')
+    setLatestOther('')
+    setLatestAna('')
+    setError('')
+
+    try {
+      const prompt = `USER BRIEF:\n${contextSummary}\n\nKNOWN FACTS:\n${knownFacts.map(x => `- ${x}`).join('\n') || '(none beyond the brief)'}\n\nOTHER PERSON'S LANGUAGE: ${otherLanguage}\n\nCreate Ana's FIRST spoken line to the other person. Ana must introduce herself before doing anything else. Begin with the natural ${otherLanguage} equivalent of "Hi, I'm Ana." Then immediately say that Ana is helping/speaking for someone and state the user's actual purpose. If a first question is necessary to move the task forward, include that question. Keep the entire opening to one or two short sentences.`
+      const instructions = `You are Ana opening a real-world conversation on the user's behalf. Always identify yourself by name first. Be polite, natural and very concise. Do not explain technology or say you are an AI unless directly asked. Do not add small talk. State the purpose immediately after the introduction. Return ONLY the exact words Ana should speak in ${otherLanguage}.`
+      const opening = String(await askAna(prompt, instructions)).trim()
+      if (!opening) throw new Error('Ana could not prepare the opening.')
+
+      setLatestAna(opening)
+      appendHistory({
+        id: crypto.randomUUID(),
+        other: '[Conversation started]',
+        meaning: '',
+        anaHome: '',
+        anaSpoken: opening,
+      })
+
+      if (!('speechSynthesis' in window)) {
+        processingRef.current = false
+        setError('Spoken playback is not supported in this browser.')
+        startListening()
+        return
+      }
+
+      setSessionState('speaking')
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(opening)
+      utterance.lang = LANGS.find(x => x.name === otherLanguage)?.code || 'de-DE'
+      utterance.rate = 0.96
+      utterance.onend = () => {
+        processingRef.current = false
+        if (!activeRef.current) return
+        setSessionState('listening')
+        setTimeout(() => startListening(), 250)
+      }
+      utterance.onerror = () => {
+        processingRef.current = false
+        setError('Ana could not play the introduction.')
+        if (activeRef.current) setTimeout(() => startListening(), 250)
+      }
+      window.speechSynthesis.speak(utterance)
+    } catch (err) {
+      processingRef.current = false
+      setError(err.message || 'Ana could not start the conversation.')
+      if (activeRef.current) startListening()
+    }
+  }
+
   const listenForOwner = () => {
     if (!pending || ownerListening || !supported) return
     stopRecognition()
@@ -385,7 +438,7 @@ export default function TalkForMe() {
     processingRef.current = false
     needsUserRef.current = false
     await startMeter()
-    startListening()
+    await speakOpening()
   }
 
   const pauseConversation = () => {
