@@ -79,6 +79,7 @@ export default function ScanMode() {
   const [resultBytes, setResultBytes] = useState(null)
   const [resultName, setResultName] = useState('')
   const [progress, setProgress] = useState(0)
+  const [downloaded, setDownloaded] = useState(false)
 
   const busy = ['preparing', 'translating', 'building'].includes(status)
   const filename = useMemo(() => file?.name || '', [file])
@@ -90,6 +91,7 @@ export default function ScanMode() {
     setResultBytes(null)
     setResultName('')
     setProgress(0)
+    setDownloaded(false)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -98,6 +100,7 @@ export default function ScanMode() {
     setError('')
     setResultBytes(null)
     setResultName('')
+    setDownloaded(false)
     setProgress(8)
     setStatus('preparing')
 
@@ -124,7 +127,6 @@ export default function ScanMode() {
       setResultName(outputName)
       setProgress(100)
       setStatus('done')
-      downloadBytes(bytes, outputName)
     } catch (err) {
       setStatus('error')
       setProgress(0)
@@ -155,8 +157,10 @@ export default function ScanMode() {
     if (file && !busy) processPdf(file, language)
   }
 
-  const downloadAgain = () => {
-    if (resultBytes && resultName) downloadBytes(resultBytes, resultName)
+  const downloadResult = () => {
+    if (!resultBytes || !resultName) return
+    downloadBytes(resultBytes, resultName)
+    setDownloaded(true)
   }
 
   const statusText = status === 'preparing'
@@ -194,7 +198,7 @@ export default function ScanMode() {
       </div>
       <LoaderCircle className="spin scan-job-spinner" size={22}/>
       <div className="scan-progress-track"><span style={{ width: `${progress}%` }}/></div>
-      <p>You do not need to do anything else. Ana will download the finished PDF when it is ready.</p>
+      <p>You do not need to do anything else. Ana will prepare the finished PDF for download.</p>
     </article>}
 
     {status === 'done' && <article className="scan-result-card">
@@ -204,7 +208,8 @@ export default function ScanMode() {
         <h2>Your translated PDF is ready.</h2>
         <p>{resultName}</p>
       </div>
-      <button className="scan-download" onClick={downloadAgain}><Download size={18}/> Download PDF</button>
+      <button className="scan-download" onClick={downloadResult}><Download size={18}/> {downloaded ? 'Download again' : 'Download PDF'}</button>
+      {downloaded && <p className="scan-download-hint">If your browser opens the PDF instead of saving it, use the browser download icon.</p>}
       <button className="scan-again" onClick={reset}>Translate another PDF</button>
     </article>}
 
