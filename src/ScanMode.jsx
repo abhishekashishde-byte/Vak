@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { CheckCircle2, Download, FileText, LoaderCircle, Upload, X } from 'lucide-react'
 import { buildTranslatedPdf, downloadBytes, extractPdfLayout } from './lib/pdfLayout.js'
 
-const TARGETS = ['German', 'English', 'Hindi', 'French', 'Spanish', 'Italian']
+const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
 const MAX_PDF_BYTES = 20 * 1024 * 1024
 
 function parseJson(text = '') {
@@ -53,7 +53,8 @@ async function translateLayout(layout, target, onProgress) {
     const chunk = chunks[index]
     onProgress?.(index + 1, chunks.length)
     const payload = chunk.map(block => ({ id: block.id, type: block.type, text: block.text }))
-    const instructions = `You are Ana translating positioned PDF text blocks into ${target}. Translate ONLY each object's text value. Keep every id exactly unchanged. Preserve numbers, names, dates, references, legal clause numbering and meaning. Do not merge, split, reorder or omit blocks. Return ONLY a valid JSON array in this exact shape: [{"id":"same-id","text":"translated text"}]. No Markdown fences and no commentary.`
+    let instructions = `You are Ana translating positioned PDF text blocks into ${target}. Translate ONLY each object's text value. Keep every id exactly unchanged. Preserve numbers, names, dates, references, legal clause numbering and meaning. Do not merge, split, reorder or omit blocks. Return ONLY a valid JSON array in this exact shape: [{"id":"same-id","text":"translated text"}]. No Markdown fences and no commentary.`
+    if (target === 'Hinglish') instructions += ' Hinglish means natural spoken Hindi written entirely in Roman/Latin letters. Never use Devanagari. Keep names, brands, numbers and unavoidable English terms naturally.'
     const raw = await callAna(JSON.stringify(payload), instructions)
     const parsed = parseJson(raw)
     if (!Array.isArray(parsed)) throw new Error('Ana could not keep the document structure intact. Please try again.')
