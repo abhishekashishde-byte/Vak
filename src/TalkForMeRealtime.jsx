@@ -165,6 +165,7 @@ BEHAVIOR:
 - You are not merely translating. You are actively conducting the conversation to achieve the user's goal.
 - When the session begins, YOU must open the conversation proactively. Do not wait for the other person to speak first.
 - Continue autonomously for routine, reversible dialogue and questions you can ask the other person directly.
+- If the other person starts speaking while you are speaking, stop immediately and listen. Never talk over them. Treat their interruption as the new turn and respond to what they actually said.
 - Never invent personal facts, dates, preferences, prices, availability or commitments.
 - Before choosing or confirming an appointment/date/time, agreeing to a price/payment/purchase, accepting terms, sharing sensitive personal information, making a promise/commitment, or making another material choice, call the ask_owner tool and wait for the owner's answer.
 - Do not call ask_owner for information that is already in the brief, or information you can simply ask the other person.
@@ -193,8 +194,6 @@ BEHAVIOR:
       case 'input_audio_buffer.speech_started':
         if (!pending) {
           setInterim('')
-          setLatestAna('')
-          latestAnaRef.current = ''
           setSessionState('listening')
         }
         break
@@ -242,6 +241,7 @@ BEHAVIOR:
         if (event.item?.type === 'function_call' && event.item?.name === 'ask_owner') handleOwnerTool(event.item)
         break
       case 'response.done':
+        latestAnaRef.current = ''
         if (pending) break
         if (openingRef.current) openingRef.current = false
         if (ownerResumeRef.current) ownerResumeRef.current = false
@@ -298,7 +298,7 @@ BEHAVIOR:
       }
 
       const micTrack = stream.getAudioTracks()[0]
-      micTrack.enabled = false
+      micTrack.enabled = true
       pc.addTrack(micTrack, stream)
 
       const dc = pc.createDataChannel('oai-events')
@@ -340,6 +340,12 @@ BEHAVIOR:
                 model: 'gpt-live-transcribe',
                 languages: [isoFor(otherLanguage)],
                 delay: 'low',
+              },
+              turn_detection: {
+                type: 'semantic_vad',
+                eagerness: 'high',
+                create_response: true,
+                interrupt_response: true,
               },
             },
           },
@@ -437,6 +443,7 @@ BEHAVIOR:
         output: JSON.stringify({ answer }),
       },
     })
+    setMicEnabled(true)
     sendRealtime({ type: 'response.create' })
   }
 
@@ -538,7 +545,7 @@ BEHAVIOR:
         </div>
         <div className="voice-state-copy">
           <strong>{sessionState === 'connecting' ? 'Connecting Ana' : sessionState === 'listening' ? 'Listening' : sessionState === 'thinking' ? 'Thinking' : sessionState === 'speaking' ? 'Ana is speaking' : sessionState === 'needs-user' ? 'Waiting for you' : 'Paused'}</strong>
-          <span>{sessionState === 'connecting' ? 'Starting realtime voice…' : sessionState === 'listening' ? (interim || 'The other person can speak naturally') : sessionState === 'thinking' ? 'Ana is working out the next move…' : sessionState === 'speaking' ? (latestAna || 'Speaking…') : sessionState === 'needs-user' ? 'The other-person microphone is paused.' : 'Tap resume when you are ready.'}</span>
+          <span>{sessionState === 'connecting' ? 'Starting realtime voice…' : sessionState === 'listening' ? (interim || 'The other person can speak naturally') : sessionState === 'thinking' ? 'Ana is working out the next move…' : sessionState === 'speaking' ? (latestAna || 'Speaking… You can interrupt Ana anytime.') : sessionState === 'needs-user' ? 'The other-person microphone is paused.' : 'Tap resume when you are ready.'}</span>
         </div>
       </div>
 
