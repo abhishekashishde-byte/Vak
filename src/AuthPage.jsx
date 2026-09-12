@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authConfigured, supabase } from './lib/supabase'
+import AnaMark from './AnaMark.jsx'
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
@@ -63,7 +64,7 @@ export default function AuthPage() {
   return <main style={s.page}>
     <section style={s.card}>
       <div style={s.logo}>
-        <img src="/ana-app-icon.png" alt="Ana" style={s.logoMark}/>
+        <div style={s.logoTile}><AnaMark style={s.logoMark}/></div>
         <div><strong style={s.wordmark}>Ana</strong><div style={s.tagline}>Your voice, in any language</div></div>
       </div>
 
@@ -108,7 +109,9 @@ const texture = 'linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)), r
 const s = {
   page:{minHeight:'100dvh',display:'grid',placeItems:'center',padding:'28px 22px',backgroundColor:'#f4f1ea',backgroundImage:texture,color:'#171717'},
   card:{width:'100%',maxWidth:460,padding:'38px 30px',border:'1px solid rgba(43,39,33,.12)',borderRadius:24,background:'rgba(255,255,255,.52)',backdropFilter:'blur(10px)',boxShadow:'0 24px 70px rgba(70,58,42,.08)'},
-  logo:{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:34,textAlign:'left'},logoMark:{width:46,height:46,objectFit:'contain',display:'block',borderRadius:10},wordmark:{fontSize:24,lineHeight:1},tagline:{fontSize:10,color:'#777169',marginTop:5},
+  logo:{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:34,textAlign:'left'},
+  logoTile:{width:48,height:48,borderRadius:12,background:'#fff',display:'grid',placeItems:'center',boxShadow:'0 4px 14px rgba(40,34,28,.10)',border:'1px solid rgba(43,39,33,.08)',overflow:'hidden',flex:'0 0 auto'},
+  logoMark:{width:40,height:40},wordmark:{fontSize:24,lineHeight:1},tagline:{fontSize:10,color:'#777169',marginTop:5},
   title:{margin:0,textAlign:'center',fontSize:'clamp(30px,7vw,44px)',lineHeight:1,letterSpacing:'-.05em',fontWeight:650},subtitle:{margin:'13px auto 24px',maxWidth:360,textAlign:'center',color:'#7a7369',fontSize:13,lineHeight:1.55},
   tabs:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,padding:4,borderRadius:12,background:'rgba(79,69,55,.08)',marginBottom:20},tab:{border:0,borderRadius:9,padding:'10px 12px',background:'transparent',color:'#7c7469',cursor:'pointer',fontWeight:600},tabActive:{background:'#fffdfa',color:'#171717',boxShadow:'0 2px 9px rgba(57,48,37,.08)'},
   form:{display:'flex',flexDirection:'column',gap:14},field:{display:'flex',flexDirection:'column',gap:6},label:{fontSize:11,fontWeight:650,color:'#6f675d'},input:{width:'100%',height:48,border:'1px solid rgba(43,39,33,.15)',borderRadius:11,background:'rgba(255,253,250,.82)',padding:'0 13px',color:'#171717',outline:'none',fontSize:15},
