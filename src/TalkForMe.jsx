@@ -5,6 +5,7 @@ const LANGS = [
   { name: 'English', code: 'en-US' },
   { name: 'German', code: 'de-DE' },
   { name: 'Hindi', code: 'hi-IN' },
+  { name: 'Hinglish', code: 'en-IN' },
   { name: 'French', code: 'fr-FR' },
   { name: 'Spanish', code: 'es-ES' },
   { name: 'Italian', code: 'it-IT' },
@@ -41,9 +42,12 @@ export default function TalkForMe() {
   const [latestOther, setLatestOther] = useState('')
   const [latestAna, setLatestAna] = useState('')
   const [history, setHistory] = useState([])
+  const historyRef = useRef([])
   const [pending, setPending] = useState(null)
   const [decision, setDecision] = useState('')
   const [ownerListening, setOwnerListening] = useState(false)
+  const [debrief, setDebrief] = useState(null)
+  const [debriefLoading, setDebriefLoading] = useState(false)
   const [error, setError] = useState('')
 
   const recognitionRef = useRef(null)
@@ -75,13 +79,14 @@ export default function TalkForMe() {
     setBriefLoading(true)
     setError('')
     try {
-      const prompt = `CONVERSATION WITH USER:\n${briefingTranscript(next)}\n\nDecide whether Ana has enough information to represent the user in a real conversation. Ask only for information that could materially affect what Ana should say. Infer obvious context instead of interrogating the user. Ask at most ONE concise follow-up question at a time. When enough information is available, mark ready=true.\n\nReturn JSON only:\n{"ready":true|false,"summary":"concise operational brief of what the user wants and all useful constraints/facts already supplied","question":"one follow-up question if needed, otherwise empty","knownFacts":["fact 1","fact 2"],"otherLanguage":"German|English|Hindi|French|Spanish|Italian|"}`
-      const instructions = `You are Ana preparing to speak on a user's behalf. Your job is to understand the goal before the live conversation starts. Do not ask for details that are not actually necessary. Never invent facts. If the user has given enough to start and any remaining choice can safely be asked during the live conversation, set ready=true. Return valid JSON only.`
+      const prompt = `CONVERSATION WITH USER:\n${briefingTranscript(next)}\n\nDecide whether Ana has enough information to represent the user in a real conversation. Ask only for information that could materially affect what Ana should say. Infer obvious context instead of interrogating the user. Ask at most ONE concise follow-up question at a time. When enough information is available, mark ready=true. Detect the language the USER naturally used for the briefing. If it is Hindi written in Roman/Latin letters, return Hinglish.\n\nReturn JSON only:\n{"ready":true|false,"summary":"concise operational brief of what the user wants and all useful constraints/facts already supplied","question":"one follow-up question if needed, otherwise empty","knownFacts":["fact 1","fact 2"],"userLanguage":"English|German|Hindi|Hinglish|French|Spanish|Italian","otherLanguage":"German|English|Hindi|French|Spanish|Italian|"}`
+      const instructions = `You are Ana preparing to speak on a user's behalf. Build the minimum sufficient mental model of the user's actual goal. Do not ask generic checklist questions or details Ana can discover from the other party. Never invent facts. Ask only what is required before starting. Use the user's own language for follow-up questions. If enough information exists to sensibly open and pursue the conversation, set ready=true. Return valid JSON only.`
       const parsed = parseJson(await askAna(prompt, instructions))
       if (!parsed) throw new Error('Ana could not understand that. Please try again.')
       const summary = String(parsed.summary || '').trim()
       setContextSummary(summary || text)
       setKnownFacts(Array.isArray(parsed.knownFacts) ? parsed.knownFacts.filter(Boolean).map(String) : [])
+      if (LANGS.some(x => x.name === parsed.userLanguage)) setHomeLanguage(parsed.userLanguage)
       if (LANGS.some(x => x.name === parsed.otherLanguage)) setOtherLanguage(parsed.otherLanguage)
       if (parsed.ready) {
         setBriefing(prev => [...prev, { role: 'ana', text: 'I have enough context. I’m ready to take it from here.' }])
@@ -140,19 +145,80 @@ export default function TalkForMe() {
     setOwnerListening(false)
   }
 
-  const conversationForPrompt = () => history.map((turn, i) =>
+  const appendHistory = turn => {
+    historyRef.current = [...historyRef.current, turn]
+    setHistory(historyRef.current)
+  }
+
+  const conversationForPrompt = (turns = historyRef.current) => turns.map((turn, i) =>
     `${i + 1}. OTHER: ${turn.other}\nANA: ${turn.anaSpoken}`
   ).join('\n')
 
-  const speakAndResume = (spokenReply, homeSummary, otherText, meaning) => {
+  const debriefText = result => {
+    const steps = Array.isArray(result?.nextSteps) ? result.nextSteps.filter(Boolean) : []
+    const outcome = String(result?.outcome || '').trim()
+    if (!steps.length) return `${outcome} ${homeLanguage === 'Hinglish' ? 'Aapko abhi aur kuch karne ki zarurat nahi hai.' : 'There is nothing else you need to do right now.'}`.trim()
+    const lead = homeLanguage === 'Hinglish' ? 'Ab aapko yeh karna hai:' : 'Here is what you need to do next:'
+    return `${outcome}. ${lead} ${steps.map((step, index) => `${index + 1}. ${step}`).join(' ')}`
+  }
+
+  const speakOwnerDebrief = result => {
+    if (!('speechSynthesis' in window) || !result) return
+    try { window.speechSynthesis.cancel() } catch {}
+    const utterance = new SpeechSynthesisUtterance(debriefText(result))
+    utterance.lang = LANGS.find(x => x.name === homeLanguage)?.code || 'en-US'
+    utterance.rate = 0.96
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const buildOwnerDebrief = async (turns = historyRef.current) => {
+    setDebriefLoading(true)
+    setStage('debrief')
+    setError('')
+    try {
+      const prompt = `USER'S ORIGINAL GOAL:\n${contextSummary}\n\nKNOWN FACTS:\n${knownFacts.map(x => `- ${x}`).join('\n') || '(none)'}\n\nFULL CONVERSATION:\n${conversationForPrompt(turns) || '(no completed exchanges)'}\n\nUSER LANGUAGE: ${homeLanguage}\n\nCreate the handoff back to the user. Explain the actual outcome, what was confirmed, and exactly what the user must do next. Do NOT merely summarize the dialogue. Convert the conversation into actionable instructions. If the user's goal is already fully completed and there is no next action, say so explicitly. Never invent a requirement that was not stated or logically established in the conversation.\n\nReturn JSON only:\n{"status":"completed|action_required|incomplete","outcome":"clear concise result in ${homeLanguage}","nextSteps":["specific action 1","specific action 2"],"important":["price/time/document/rule or other detail worth remembering"]}`
+      let instructions = `You are Ana handing a completed real-world conversation back to the owner. The owner should immediately understand: what happened, what was agreed, and what they personally need to do now. Write all owner-facing content in ${homeLanguage}. Be concrete and operational, not conversational. Return valid JSON only.`
+      if (homeLanguage === 'Hinglish') instructions += ' Use natural spoken Hindi written only in Roman/Latin letters. Do not use Devanagari.'
+      const parsed = parseJson(await askAna(prompt, instructions))
+      if (!parsed) throw new Error('Ana could not prepare the handoff.')
+      const result = {
+        status: ['completed', 'action_required', 'incomplete'].includes(parsed.status) ? parsed.status : 'completed',
+        outcome: String(parsed.outcome || '').trim(),
+        nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.filter(Boolean).map(String) : [],
+        important: Array.isArray(parsed.important) ? parsed.important.filter(Boolean).map(String) : [],
+      }
+      setDebrief(result)
+      setTimeout(() => speakOwnerDebrief(result), 180)
+    } catch (err) {
+      setError(err.message || 'Ana could not prepare the final handoff.')
+      setDebrief({ status: 'incomplete', outcome: 'The conversation ended, but Ana could not generate the final instructions.', nextSteps: [], important: [] })
+    } finally {
+      setDebriefLoading(false)
+    }
+  }
+
+  const finishConversation = async (turns = historyRef.current) => {
+    activeRef.current = false
+    processingRef.current = false
+    needsUserRef.current = false
+    stopRecognition()
+    stopMeter()
+    setSessionState('idle')
+    setPending(null)
+    setDecision('')
+    await buildOwnerDebrief(turns)
+  }
+
+  const speakAndResume = (spokenReply, homeSummary, otherText, meaning, conversationComplete = false) => {
     setLatestAna(spokenReply)
-    setHistory(prev => [...prev, {
+    const turn = {
       id: crypto.randomUUID(),
       other: otherText,
       meaning,
       anaHome: homeSummary,
       anaSpoken: spokenReply,
-    }])
+    }
+    appendHistory(turn)
 
     if (!('speechSynthesis' in window)) {
       setError('Spoken playback is not supported in this browser.')
@@ -168,6 +234,10 @@ export default function TalkForMe() {
     utterance.rate = 0.96
     utterance.onend = () => {
       processingRef.current = false
+      if (conversationComplete) {
+        finishConversation(historyRef.current)
+        return
+      }
       if (!activeRef.current) return
       setSessionState('listening')
       setTimeout(() => startListening(), 250)
@@ -175,7 +245,8 @@ export default function TalkForMe() {
     utterance.onerror = () => {
       processingRef.current = false
       setError('Ana could not play the spoken reply.')
-      if (activeRef.current) setTimeout(() => startListening(), 250)
+      if (conversationComplete) finishConversation(historyRef.current)
+      else if (activeRef.current) setTimeout(() => startListening(), 250)
     }
     window.speechSynthesis.speak(utterance)
   }
@@ -201,8 +272,8 @@ export default function TalkForMe() {
     setError('')
 
     try {
-      const prompt = `USER BRIEF:\n${contextSummary}\n\nKNOWN FACTS:\n${knownFacts.map(x => `- ${x}`).join('\n') || '(none beyond the brief)'}\n\nUSER'S LANGUAGE: ${homeLanguage}\nOTHER PERSON'S LANGUAGE: ${otherLanguage}\n\nCONVERSATION SO FAR:\n${conversationForPrompt() || '(none yet)'}\n\nTHE OTHER PERSON JUST SAID:\n${text}\n\nDecide Ana's next move. Return JSON only:\n{"meaning":"short explanation in ${homeLanguage} of what they said","action":"speak|ask_user","spokenReply":"exact natural reply in ${otherLanguage}, empty if asking user","homeSummary":"short ${homeLanguage} summary of what Ana will say","askUser":"one concise question for the user if their decision/info is required, otherwise empty","reason":"short reason"}`
-      const instructions = `You are Ana speaking on the user's behalf in a live real-world conversation. Work toward the user's brief naturally and confidently. For routine, reversible, non-material dialogue, respond autonomously. Never invent facts. Use action=ask_user whenever a missing fact matters, or before choosing/confirming an appointment/date/time, price/payment/purchase, accepting terms, sharing sensitive personal information, making a promise/commitment, or making any material choice for the user. Do not ask the user when the answer is already in the brief. Keep spoken replies concise and human. Return valid JSON only.`
+      const prompt = `USER BRIEF:\n${contextSummary}\n\nKNOWN FACTS:\n${knownFacts.map(x => `- ${x}`).join('\n') || '(none beyond the brief)'}\n\nUSER'S LANGUAGE: ${homeLanguage}\nOTHER PERSON'S LANGUAGE: ${otherLanguage}\n\nCONVERSATION SO FAR:\n${conversationForPrompt() || '(none yet)'}\n\nTHE OTHER PERSON JUST SAID:\n${text}\n\nDecide Ana's next move. Also decide whether the real-world conversation is now genuinely complete: the user's goal has been resolved, the necessary information has been obtained, or the other person has clearly closed the interaction. Do not mark complete just because someone says thanks if the user's goal is still unresolved.\n\nReturn JSON only:\n{"meaning":"short explanation in ${homeLanguage} of what they said","action":"speak|ask_user","spokenReply":"exact natural reply in ${otherLanguage}, empty if asking user","homeSummary":"short ${homeLanguage} summary of what Ana will say","askUser":"one concise question for the user if their decision/info is required, otherwise empty","conversationComplete":true|false,"reason":"short reason"}`
+      const instructions = `You are Ana speaking on the user's behalf in a live real-world conversation. Work toward the user's brief naturally and confidently. For routine, reversible, non-material dialogue, respond autonomously. Never invent facts. Use action=ask_user whenever a missing fact matters, or before choosing/confirming an appointment/date/time, price/payment/purchase, accepting terms, sharing sensitive personal information, making a promise/commitment, or making any material choice for the user. Do not ask the user when the answer is already in the brief. Keep spoken replies concise and human. When the conversation has actually achieved its purpose or clearly ended, set conversationComplete=true so Ana can hand control back to the owner with an actionable debrief. Return valid JSON only.`
       const parsed = parseJson(await askAna(prompt, instructions))
       if (!parsed) throw new Error('Ana could not work out the next reply.')
       const meaning = String(parsed.meaning || '').trim()
@@ -210,7 +281,13 @@ export default function TalkForMe() {
         askOwner(text, meaning, String(parsed.askUser || 'I need one detail from you before I answer.').trim())
         return
       }
-      speakAndResume(String(parsed.spokenReply).trim(), String(parsed.homeSummary || '').trim(), text, meaning)
+      speakAndResume(
+        String(parsed.spokenReply).trim(),
+        String(parsed.homeSummary || '').trim(),
+        text,
+        meaning,
+        Boolean(parsed.conversationComplete),
+      )
     } catch (err) {
       processingRef.current = false
       setSessionState('idle')
@@ -297,13 +374,12 @@ export default function TalkForMe() {
       setOwnerListening(false)
     }
     recognitionRef.current = recognition
-    try { recognition.start() } catch {
-      setOwnerListening(false)
-    }
+    try { recognition.start() } catch { setOwnerListening(false) }
   }
 
   const startConversation = async () => {
     setError('')
+    setDebrief(null)
     setStage('conversation')
     activeRef.current = true
     processingRef.current = false
@@ -337,8 +413,8 @@ export default function TalkForMe() {
     needsUserRef.current = false
     setError('')
     try {
-      const prompt = `USER BRIEF:\n${contextSummary}\n\nOTHER PERSON SAID:\n${pending.heard}\n\nANA ASKED USER:\n${pending.question}\n\nUSER ANSWERED:\n${answer}\n\nCONVERSATION SO FAR:\n${conversationForPrompt() || '(none yet)'}\n\nReturn JSON only:\n{"spokenReply":"exact natural reply Ana should now say in ${otherLanguage}","homeSummary":"short ${homeLanguage} summary","askUser":"empty unless one truly essential detail is still missing"}`
-      const instructions = `You are Ana speaking for the user. Use the user's answer exactly as context; do not invent additional facts. If one essential material detail is still missing, leave spokenReply empty and ask one concise question in askUser. Otherwise produce a concise natural spoken reply. Return valid JSON only.`
+      const prompt = `USER BRIEF:\n${contextSummary}\n\nOTHER PERSON SAID:\n${pending.heard}\n\nANA ASKED USER:\n${pending.question}\n\nUSER ANSWERED:\n${answer}\n\nCONVERSATION SO FAR:\n${conversationForPrompt() || '(none yet)'}\n\nReturn JSON only:\n{"spokenReply":"exact natural reply Ana should now say in ${otherLanguage}","homeSummary":"short ${homeLanguage} summary","askUser":"empty unless one truly essential detail is still missing","conversationComplete":true|false}`
+      const instructions = `You are Ana speaking for the user. Use the user's answer exactly as context; do not invent additional facts. If one essential material detail is still missing, leave spokenReply empty and ask one concise question in askUser. Otherwise produce a concise natural spoken reply. Set conversationComplete=true only if this reply genuinely completes the user's goal. Return valid JSON only.`
       const parsed = parseJson(await askAna(prompt, instructions))
       if (!parsed?.spokenReply) {
         askOwner(pending.heard, pending.meaning, String(parsed?.askUser || 'I still need one detail from you.').trim())
@@ -347,7 +423,13 @@ export default function TalkForMe() {
       const current = pending
       setPending(null)
       setKnownFacts(prev => [...prev, `Owner answered during conversation: ${answer}`])
-      speakAndResume(String(parsed.spokenReply).trim(), String(parsed.homeSummary || '').trim(), current.heard, current.meaning)
+      speakAndResume(
+        String(parsed.spokenReply).trim(),
+        String(parsed.homeSummary || '').trim(),
+        current.heard,
+        current.meaning,
+        Boolean(parsed.conversationComplete),
+      )
     } catch (err) {
       processingRef.current = false
       needsUserRef.current = true
@@ -356,28 +438,28 @@ export default function TalkForMe() {
     }
   }
 
-  const endConversation = () => {
+  const endConversation = () => finishConversation(historyRef.current)
+
+  const startOver = () => {
     activeRef.current = false
     processingRef.current = false
     needsUserRef.current = false
     stopRecognition()
     try { window.speechSynthesis?.cancel() } catch {}
     stopMeter()
-    setSessionState('idle')
-    setPending(null)
-    setDecision('')
-    setStage('ready')
-  }
-
-  const startOver = () => {
-    endConversation()
     setBriefing([{ role: 'ana', text: 'What do you need me to handle for you?' }])
     setBriefInput('')
     setContextSummary('')
     setKnownFacts([])
+    historyRef.current = []
     setHistory([])
     setLatestOther('')
     setLatestAna('')
+    setPending(null)
+    setDecision('')
+    setDebrief(null)
+    setDebriefLoading(false)
+    setError('')
     setStage('briefing')
   }
 
@@ -417,10 +499,33 @@ export default function TalkForMe() {
       <div className="ready-languages">
         <label><span>I understand</span><select value={homeLanguage} onChange={e => setHomeLanguage(e.target.value)}>{LANGS.map(x => <option key={x.name}>{x.name}</option>)}</select></label>
         <ArrowRight size={16}/>
-        <label><span>They speak</span><select value={otherLanguage} onChange={e => setOtherLanguage(e.target.value)}>{LANGS.map(x => <option key={x.name}>{x.name}</option>)}</select></label>
+        <label><span>They speak</span><select value={otherLanguage} onChange={e => setOtherLanguage(e.target.value)}>{LANGS.filter(x => x.name !== 'Hinglish').map(x => <option key={x.name}>{x.name}</option>)}</select></label>
       </div>
       <button className="magic-start" onClick={startConversation}><Mic size={19}/> Start with Ana</button>
       <button className="text-button" onClick={() => setStage('briefing')}>Add more context</button>
+    </div>
+  </section>
+
+  if (stage === 'debrief') return <section className="talk-wrap ready-stage">
+    <div className="talk-intro">
+      <div className="eyebrow"><Check size={14}/> Back to you</div>
+      <h1>{debriefLoading ? 'Wrapping things up…' : 'Here’s what you need to know.'}</h1>
+      <p>Ana has finished speaking with them and is handing the outcome back to you.</p>
+    </div>
+
+    <div className="ready-card">
+      {debriefLoading && <div className="brief-thinking"><i/><i/><i/></div>}
+      {!debriefLoading && debrief && <>
+        <div className="ready-summary"><span>What happened</span><p>{debrief.outcome || 'Conversation completed.'}</p></div>
+        <div className="ready-summary" style={{ marginTop: 22 }}>
+          <span>What you need to do now</span>
+          <p>{debrief.nextSteps.length ? debrief.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n') : (homeLanguage === 'Hinglish' ? 'Aapko abhi aur kuch karne ki zarurat nahi hai.' : 'Nothing else is required from you right now.')}</p>
+        </div>
+        {debrief.important.length > 0 && <div className="ready-facts">{debrief.important.map((fact, i) => <span key={i}>{fact}</span>)}</div>}
+        <button className="magic-start" onClick={() => speakOwnerDebrief(debrief)}><Volume2 size={18}/> Hear it again</button>
+      </>}
+      {error && <div className="error brief-error">{error}</div>}
+      <button className="text-button" onClick={startOver}>Start a new conversation</button>
     </div>
   </section>
 
