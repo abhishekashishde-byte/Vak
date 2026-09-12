@@ -1,7 +1,7 @@
 {
   "name": "ana-translate",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,10 +12,12 @@
     "@marsidev/react-turnstile": "latest",
     "@supabase/supabase-js": "latest",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "lucide-react": "latest",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "vite": "latest"
   },
   "devDependencies": {}
 }
