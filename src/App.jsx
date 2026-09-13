@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, Check, Clipboard, Languages, LogOut, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
+import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
 
 const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
 const REGISTER_KEY = 'ana-german-register'
+const DRAFT_KEY = 'ana-translate-draft-v1'
 
 function parseJson(text = '') {
   try { return JSON.parse(String(text).replace(/```json|```/g, '').trim()) }
@@ -17,6 +19,12 @@ function isWord(part = '') {
 }
 function loadGlossary() {
   try { return JSON.parse(localStorage.getItem(GLOSSARY_KEY) || '[]') } catch { return [] }
+}
+function loadDraft() {
+  try {
+    const value = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}')
+    return value && typeof value === 'object' ? value : {}
+  } catch { return {} }
 }
 function TranslationText({ text, onWord }) {
   const parts = useMemo(() => splitTranslation(text), [text])
@@ -35,9 +43,11 @@ async function callLuna(text, instructions) {
 }
 
 export default function App() {
-  const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
-  const [target, setTarget] = useState('German')
+  const [input, setInput] = useState(() => String(loadDraft().input || ''))
+  const [output, setOutput] = useState(() => String(loadDraft().output || ''))
+  const [target, setTarget] = useState(() => TARGETS.includes(loadDraft().target) ? loadDraft().target : 'German')
+  const [outputMode, setOutputMode] = useState(() => loadDraft().outputMode === 'device' ? 'device' : 'online')
+  const [offlineNotice, setOfflineNotice] = useState('')
   const [register, setRegister] = useState(() => { try { return localStorage.getItem(REGISTER_KEY) || 'formal' } catch { return 'formal' } })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -52,6 +62,9 @@ export default function App() {
 
   useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
   useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
+  useEffect(() => {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, updatedAt: Date.now() })) } catch {}
+  }, [input, output, target, outputMode])
   useEffect(() => {
     const hydrate = () => {
       try {
@@ -74,15 +87,25 @@ export default function App() {
 
   const translate = async () => {
     const text = input.trim(); if (!text || loading) return
-    setLoading(true); setError(''); setSelected(null); setCopied(false)
+    setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     try {
       let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
       if (target === 'German') instructions += `\nUse flawless Standard German as written in Germany. ${registerRules()}`
       if (target === 'Hinglish') instructions += `\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.`
       instructions += glossaryInstructions()
       setOutput(await callLuna(text, instructions))
-    } catch (err) { setError(err.message || 'Could not translate') }
-    finally { setLoading(false) }
+      setOutputMode('online')
+    } catch (err) {
+      const deviceResult = await tryOnDeviceTranslation(text, target)
+      if (deviceResult) {
+        setOutput(deviceResult)
+        setOutputMode('device')
+        setOfflineNotice('Basic on-device translation. Reconnect for Ana’s full context, glossary and tone handling.')
+      } else {
+        const network = getNetworkState()
+        setError(network.online ? (err.message || 'Could not translate') : 'You’re offline. Your text is saved automatically. Reconnect to use Ana’s full translation; on-device translation is not available for this language pair on this browser.')
+      }
+    } finally { setLoading(false) }
   }
 
   const inspectWord = async (word, start, end) => {
@@ -116,7 +139,7 @@ export default function App() {
     setNewSource(''); setNewPreferred('')
   }
   const copyOutput = async () => { if (!output) return; await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1400) }
-  const clear = () => { setInput(''); setOutput(''); setSelected(null); setError(''); inputRef.current?.focus() }
+  const clear = () => { setInput(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
 
   return <main className="app-shell">
     <header className="topbar">
@@ -133,16 +156,17 @@ export default function App() {
     <section className="translator-card">
       <div className="toolbar">
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
-        <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
+        <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
         {target === 'German' && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
         <article className="pane input-pane"><div className="pane-label">Original</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder="Type or paste anything…" onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>⌘/Ctrl + Enter</span></div></article>
-        <article className="pane output-pane"><div className="pane-label">{target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">Your translation will appear here.</div>}</div><div className="pane-foot"><span>{output ? 'Tap a word to refine it' : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
+        <article className="pane output-pane"><div className="pane-label">{target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">Your translation will appear here.</div>}</div><div className="pane-foot"><span>{output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
+    {offlineNotice && <div className="ana-offline-note">{offlineNotice}</div>}
     {error && <div className="error">{error}</div>}
     <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? 'Translating…' : 'Translate'}</button></div>
 
