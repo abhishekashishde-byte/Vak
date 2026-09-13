@@ -89,9 +89,9 @@ function ensureOverlay() {
     const details = pendingDetails
 
     // Microphone and screen capture must remain attached to a genuine user tap.
-    // After the privacy gate on iPhone Live and for Meeting Listen, return to the
-    // real start button instead of replaying it synthetically.
-    if ((details?.mode === 'Live interpreter' && isIOSDevice()) || details?.mode === 'Meeting Listen') {
+    // Where browser capture can reject a synthetic replay, approve privacy first
+    // and return to the real start control for one final user tap.
+    if ((details?.mode === 'Live interpreter' && isIOSDevice()) || details?.mode === 'Meeting Listen' || details?.mode === 'Live Subtitles') {
       if (button?.isConnected) button.dataset.anaPrivacyBypass = '1'
       closeGate()
       requestAnimationFrame(() => {
@@ -147,6 +147,9 @@ function openGate(button, details) {
     continueButton.textContent = 'Continue'
   } else if (details.mode === 'Meeting Listen') {
     ownerCopy.textContent = 'Before Ana listens to a meeting, make sure participants are appropriately informed. Ana saves the text transcript on this device but does not store meeting audio. After Continue, tap Start listening once more so browser audio capture opens from your real tap.'
+    continueButton.textContent = 'Continue'
+  } else if (details.mode === 'Live Subtitles') {
+    ownerCopy.textContent = 'Before Ana starts live subtitles, make sure the people whose speech may be captured are appropriately informed. Subtitles are temporary and are not saved as a meeting transcript. After Continue, tap Start subtitles once more so audio capture opens directly from your tap.'
     continueButton.textContent = 'Continue'
   } else {
     ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed.'
