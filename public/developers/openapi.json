@@ -1,0 +1,151 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ana Platform API",
+    "version": "1.0.0-beta",
+    "description": "Private-beta APIs for meaning-first translation, speech transcription and Talk for Me realtime sessions. Call these endpoints from a trusted backend; do not expose partner API keys in browser or mobile bundles."
+  },
+  "servers": [
+    { "url": "https://vak-gray.vercel.app" }
+  ],
+  "security": [
+    { "AnaPlatformKey": [] }
+  ],
+  "components": {
+    "securitySchemes": {
+      "AnaPlatformKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Ana Platform API key"
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/translate": {
+      "post": {
+        "summary": "Translate text",
+        "operationId": "translateText",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text", "target"],
+                "properties": {
+                  "text": { "type": "string", "maxLength": 24000 },
+                  "target": { "type": "string" },
+                  "source": { "type": "string", "description": "Optional source-language hint. Omit for auto-detect." },
+                  "context": { "type": "string", "maxLength": 1200 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": { "type": "string" },
+                    "source": { "type": "string" },
+                    "target": { "type": "string" },
+                    "translation": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid API key" },
+          "503": { "description": "Private-beta API access is not configured" }
+        }
+      }
+    },
+    "/api/v1/transcribe": {
+      "post": {
+        "summary": "Transcribe an audio segment",
+        "operationId": "transcribeAudio",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["audio"],
+                "properties": {
+                  "audio": { "type": "string", "contentEncoding": "base64" },
+                  "mimeType": { "type": "string", "examples": ["audio/webm"] },
+                  "language": { "type": "string", "description": "Optional language hint." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transcript",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": { "type": "string" },
+                    "text": { "type": "string" },
+                    "speech_detected": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "413": { "description": "Audio segment exceeds 8 MB" }
+        }
+      }
+    },
+    "/api/v1/talk-session": {
+      "post": {
+        "summary": "Create a Talk for Me realtime session",
+        "operationId": "createTalkSession",
+        "description": "Creates a short-lived realtime client secret configured with Ana's owner-goal, critical-fact and owner-escalation contract. The integrating product must handle the returned tool calls and its own disclosure/consent requirements.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["goal"],
+                "properties": {
+                  "goal": { "type": "string", "maxLength": 5000 },
+                  "ownerLanguage": { "type": "string" },
+                  "otherLanguage": { "type": "string" },
+                  "context": { "type": "string", "maxLength": 3000 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Short-lived realtime session credential and integration contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": { "type": "string" },
+                    "client_secret": { "type": "string" },
+                    "expires_at": { "type": "integer" },
+                    "session": { "type": "object" },
+                    "integration_contract": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
