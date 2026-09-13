@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f1ea" />
   <meta name="description" content="Ana — your voice, in any language." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,6 +14,16 @@
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    // Ana behaves like a full-screen app on mobile. Prevent browser pinch gestures
+    // from scaling the workspace and making controls disappear off-screen.
+    document.addEventListener('gesturestart', function (event) { event.preventDefault() }, { passive: false })
+    document.addEventListener('gesturechange', function (event) { event.preventDefault() }, { passive: false })
+    document.addEventListener('gestureend', function (event) { event.preventDefault() }, { passive: false })
+    document.addEventListener('touchmove', function (event) {
+      if (event.touches && event.touches.length > 1) event.preventDefault()
+    }, { passive: false })
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
