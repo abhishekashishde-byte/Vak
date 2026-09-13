@@ -11,7 +11,7 @@ function talkDetails(button) {
   const selects = stage.querySelectorAll('.ready-languages select')
   const otherLanguage = selects?.[1]?.value || 'English'
   const context = stage.querySelector('.ready-summary p')?.textContent?.trim() || ''
-  return { mode: 'Talk for me', languages: [otherLanguage], context }
+  return { mode: 'Talk for me', languages: [otherLanguage], context, mandatory: true }
 }
 
 function liveDetails(button) {
@@ -104,6 +104,16 @@ function openGate(button, details) {
     disclosures.appendChild(item)
   }
 
+  const ownerCopy = node.querySelector('.ana-privacy-owner-copy')
+  const continueButton = node.querySelector('.ana-privacy-continue')
+  if (details.mode === 'Talk for me') {
+    ownerCopy.textContent = 'Ana will identify herself as an AI communication assistant, explain that speech is processed by an AI service, and ask the other person before the task begins.'
+    continueButton.textContent = 'Start — Ana will ask them'
+  } else {
+    ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed.'
+    continueButton.textContent = "I've informed them — start"
+  }
+
   const sensitive = isSensitiveConversation(details.context)
   const badge = node.querySelector('.ana-privacy-sensitive')
   badge.hidden = !sensitive
@@ -113,9 +123,14 @@ function openGate(button, details) {
 
 function interceptStart(event) {
   const button = event.target?.closest?.('button')
-  if (!button || button === bypassButton) return
+  if (!button) return
+  if (button.dataset?.anaPrivacyBypass === '1') {
+    delete button.dataset.anaPrivacyBypass
+    return
+  }
+  if (button === bypassButton) return
   const details = detailsFor(button)
-  if (!details || !shouldRequireDisclosure(details.context)) return
+  if (!details || (!details.mandatory && !shouldRequireDisclosure(details.context))) return
 
   event.preventDefault()
   event.stopPropagation()
