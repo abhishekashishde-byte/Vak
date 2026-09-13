@@ -1,0 +1,35 @@
+name: Add Talk counterparty permission
+
+on:
+  push:
+    paths:
+      - 'scripts/add-talk-permission.mjs'
+      - '.github/workflows/add-talk-permission.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply permission gate
+        run: node scripts/add-talk-permission.mjs
+      - name: Install
+        run: npm ci
+      - name: Trust tests
+        run: npm run test:trust
+      - name: Production build
+        run: npm run build
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/TalkForMeRealtime.jsx src/conversationPrivacyGate.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Require counterparty permission before Talk"
+          git push
