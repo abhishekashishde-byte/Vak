@@ -40,13 +40,13 @@ function roomDetails(button) {
 }
 
 function captionsDetails(button) {
-  if (!button.classList.contains('captions-start') || !/start captions/i.test(button.textContent || '')) return null
+  if (!button.classList.contains('captions-start') || !/start (?:captions|subtitles)/i.test(button.textContent || '')) return null
   const stage = button.closest('.captions-wrap')
   if (!stage) return null
   const selects = stage.querySelectorAll('.captions-toolbar select')
   const target = selects?.[1]?.value || 'English'
   const languages = target && target !== 'Original only' ? ['English', target] : ['English']
-  return { mode: 'Universal Captions', languages, context: '' }
+  return { mode: 'Live Subtitles', languages, context: '' }
 }
 
 function meetingDetails(button) {
