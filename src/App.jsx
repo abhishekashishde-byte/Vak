@@ -4,10 +4,19 @@ import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
 import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
 
-const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
+const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
 const REGISTER_KEY = 'ana-german-register'
 const DRAFT_KEY = 'ana-translate-draft-v1'
+const GERMAN_TARGETS = new Set(['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)'])
+const isGermanTarget = value => GERMAN_TARGETS.has(value)
+const germanVariantRule = value => value === 'Swabian German (Schwäbisch)'
+  ? 'Use natural Swabian German (Schwäbisch) as spoken in Baden-Württemberg. Keep it authentic but readable and avoid caricature.'
+  : value === 'Bavarian German (Bairisch)'
+    ? 'Use natural Bavarian German (Bairisch) as spoken in Bavaria. Keep it authentic but readable and avoid caricature.'
+    : value === 'Low German (Plattdeutsch)'
+      ? 'Use natural Low German (Plattdeutsch), not Standard German. Keep it understandable and avoid invented dialect spellings.'
+      : 'Use flawless Standard German (Hochdeutsch) as written in Germany.'
 
 function parseJson(text = '') {
   try { return JSON.parse(String(text).replace(/```json|```/g, '').trim()) }
@@ -90,7 +99,7 @@ export default function App() {
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     try {
       let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
-      if (target === 'German') instructions += `\nUse flawless Standard German as written in Germany. ${registerRules()}`
+      if (isGermanTarget(target)) instructions += `\n${germanVariantRule(target)} ${registerRules()}`
       if (target === 'Hinglish') instructions += `\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.`
       instructions += glossaryInstructions()
       setOutput(await callLuna(text, instructions))
@@ -115,7 +124,7 @@ export default function App() {
     try {
       const prompt = `SOURCE TEXT:\n${input}\n\nCURRENT ${target.toUpperCase()} TRANSLATION:\n${output}\n\nSELECTED TARGET WORD:\n${word}\n\nIdentify the source word or short source phrase represented by the selected target word, then suggest up to 5 natural alternatives that are drop-in replacements for exactly this selected span. Return JSON only: {"sourceTerm":"...","partOfSpeech":"...","meaning":"short plain-English meaning in context","alternatives":[{"term":"...","note":"short nuance"}]}`
       let instructions = `You are a bilingual editor refining a translation into ${target}. Return valid JSON only.`
-      if (target === 'German') instructions += ` ${registerRules()}`
+      if (isGermanTarget(target)) instructions += ` ${germanVariantRule(target)} ${registerRules()}`
       if (target === 'Hinglish') instructions += ' Hinglish must be natural Hindi written only in Roman/Latin letters, never Devanagari.'
       const parsed = parseJson(await callLuna(prompt, instructions)) || {}
       const alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives.filter(x => x?.term && String(x.term).toLowerCase() !== word.toLowerCase()).slice(0, 5) : []
@@ -157,7 +166,7 @@ export default function App() {
       <div className="toolbar">
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
         <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
-        {target === 'German' && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
+        {isGermanTarget(target) && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">

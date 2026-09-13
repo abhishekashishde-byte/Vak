@@ -2,14 +2,26 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, LoaderCircle, Mic, Plus, Square, Trash2, UsersRound, Volume2, X } from 'lucide-react'
 import { getPersonalLanguageMemory } from './personalLanguageMemory.js'
 
-const LANGUAGES = ['English', 'German', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
+const LANGUAGES = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const MAX_PARTICIPANTS = 4
 
 const speechLocale = language => ({
   English: 'en-US',
   German: 'de-DE',
+  'Swabian German (Schwäbisch)': 'de-DE',
+  'Bavarian German (Bairisch)': 'de-DE',
+  'Low German (Plattdeutsch)': 'de-DE',
   Hindi: 'hi-IN',
   Hinglish: 'hi-IN',
+  Bengali: 'bn-IN',
+  Tamil: 'ta-IN',
+  Telugu: 'te-IN',
+  Marathi: 'mr-IN',
+  Gujarati: 'gu-IN',
+  Punjabi: 'pa-IN',
+  Malayalam: 'ml-IN',
+  Kannada: 'kn-IN',
+  Urdu: 'ur-IN',
   French: 'fr-FR',
   Spanish: 'es-ES',
   Italian: 'it-IT',

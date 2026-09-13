@@ -5,11 +5,25 @@ import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from '.
 const LANGS = [
   { name: 'English', iso: 'en' },
   { name: 'German', iso: 'de' },
+  { name: 'Swabian German (Schwäbisch)', iso: 'de' },
+  { name: 'Bavarian German (Bairisch)', iso: 'de' },
+  { name: 'Low German (Plattdeutsch)', iso: 'de' },
   { name: 'Hindi', iso: 'hi' },
+  { name: 'Hinglish', iso: 'hi' },
+  { name: 'Bengali', iso: 'bn' },
+  { name: 'Tamil', iso: 'ta' },
+  { name: 'Telugu', iso: 'te' },
+  { name: 'Marathi', iso: 'mr' },
+  { name: 'Gujarati', iso: 'gu' },
+  { name: 'Punjabi', iso: 'pa' },
+  { name: 'Malayalam', iso: 'ml' },
+  { name: 'Kannada', iso: 'kn' },
+  { name: 'Urdu', iso: 'ur' },
   { name: 'French', iso: 'fr' },
   { name: 'Spanish', iso: 'es' },
   { name: 'Italian', iso: 'it' },
 ]
+const INDIAN_SPEECH_LANGS = new Set(['Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu'])
 
 const isoFor = language => LANGS.find(x => x.name === language)?.iso || 'en'
 const validLanguage = value => LANGS.some(x => x.name === value)
@@ -136,7 +150,7 @@ LANGUAGE DIRECTION:
 - If the speaker uses ${languageA}, speak ONLY the natural ${languageB} translation aloud.
 - If the speaker uses ${languageB}, speak ONLY the natural ${languageA} translation aloud.
 - Mixed-language speech is normal. Determine the dominant sentence intent and translate the whole intended message once into the other conversation language.
-${languageA === 'Hindi' || languageB === 'Hindi' ? '- When Hindi is one side, Roman-script Hindi/Hinglish and ordinary Hindi-English code-switching belong to the Hindi side when the speaker is fundamentally speaking Hindi. Do not force Roman Hindi into English merely because it uses Latin letters.\n' : ''}- Preserve the speaker's first-person perspective, intent, tone, politeness, names, dates, numbers and meaning.
+${INDIAN_SPEECH_LANGS.has(languageA) || INDIAN_SPEECH_LANGS.has(languageB) ? '- Natural code-switching with English or German is normal for Indian-language speakers. Determine the intended language from the whole utterance rather than a borrowed word. For Hinglish, treat Roman-script conversational Hindi as the Hindi side and never mistake Latin script alone for English.\n' : ''}- Preserve the speaker's first-person perspective, intent, tone, politeness, names, dates, numbers and meaning.
 - Never answer a question yourself. Translate the question.
 - Never solve a request yourself. Translate the request.
 - Never explain, summarize, comment, add advice, introduce yourself, or say phrases such as “they said” or “the translation is”.

@@ -3,7 +3,7 @@ import { AlertTriangle, Camera, CameraOff, Check, ImagePlus, Languages, LoaderCi
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { getNetworkState } from './networkResilience.js'
 
-const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
+const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024
 const MAX_IMAGE_EDGE = 1800
 

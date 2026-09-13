@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Download, FileText, LoaderCircle, Upload, 
 import { buildTranslatedPdf, downloadBytes, enrichScannedPages, extractPdfLayout, layoutToPlainText } from './lib/pdfLayout.js'
 import { assessDocumentLayout, combineDocumentQuality } from './lib/documentQuality.js'
 
-const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
+const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const MAX_PDF_BYTES = 20 * 1024 * 1024
 
 function parseJson(text = '') {

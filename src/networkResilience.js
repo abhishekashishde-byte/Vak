@@ -31,9 +31,9 @@ export function subscribeNetworkState(listener) {
 }
 
 export async function tryOnDeviceTranslation(text, target) {
-  const targetCodes = { English: 'en', German: 'de', Hindi: 'hi', French: 'fr', Spanish: 'es', Italian: 'it' }
+  const targetCodes = { English: 'en', German: 'de', Hindi: 'hi', Bengali: 'bn', Tamil: 'ta', Telugu: 'te', Marathi: 'mr', Gujarati: 'gu', Punjabi: 'pa', Malayalam: 'ml', Kannada: 'kn', Urdu: 'ur', French: 'fr', Spanish: 'es', Italian: 'it' }
   const targetLanguage = targetCodes[target]
-  if (!text?.trim() || !targetLanguage || target === 'Hinglish') return null
+  if (!text?.trim() || !targetLanguage || target === 'Hinglish' || target.includes('German (') || target.startsWith('Swabian German') || target.startsWith('Bavarian German') || target.startsWith('Low German')) return null
 
   const TranslatorApi = globalThis.Translator
   const DetectorApi = globalThis.LanguageDetector

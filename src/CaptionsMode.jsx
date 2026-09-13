@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Captions, Expand, Mic, MonitorUp, Pause, Play, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 
-const TARGETS = ['Original only', 'English', 'German', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
+const TARGETS = ['Original only', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 
 const clean = value => String(value || '').trim()
 

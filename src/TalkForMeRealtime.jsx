@@ -4,18 +4,32 @@ import { ArrowRight, Check, Languages, ListChecks, Mic, Pause, Send, ShieldCheck
 const HOME_LANGS = [
   { name: 'English', code: 'en-US' },
   { name: 'German', code: 'de-DE' },
+  { name: 'Swabian German (Schwäbisch)', code: 'de-DE' },
+  { name: 'Bavarian German (Bairisch)', code: 'de-DE' },
+  { name: 'Low German (Plattdeutsch)', code: 'de-DE' },
   { name: 'Hindi', code: 'hi-IN' },
   { name: 'Hinglish', code: 'hi-IN' },
+  { name: 'Bengali', code: 'bn-IN' },
+  { name: 'Tamil', code: 'ta-IN' },
+  { name: 'Telugu', code: 'te-IN' },
+  { name: 'Marathi', code: 'mr-IN' },
+  { name: 'Gujarati', code: 'gu-IN' },
+  { name: 'Punjabi', code: 'pa-IN' },
+  { name: 'Malayalam', code: 'ml-IN' },
+  { name: 'Kannada', code: 'kn-IN' },
+  { name: 'Urdu', code: 'ur-IN' },
   { name: 'French', code: 'fr-FR' },
   { name: 'Spanish', code: 'es-ES' },
   { name: 'Italian', code: 'it-IT' },
 ]
 
-const OTHER_LANGS = HOME_LANGS.filter(x => x.name !== 'Hinglish')
+const OTHER_LANGS = [...HOME_LANGS]
 const COMPLETE_STATUSES = new Set(['confirmed', 'unavailable'])
 
 const isoFor = language => ({
-  English: 'en', German: 'de', Hindi: 'hi', French: 'fr', Spanish: 'es', Italian: 'it',
+  English: 'en', German: 'de', 'Swabian German (Schwäbisch)': 'de', 'Bavarian German (Bairisch)': 'de', 'Low German (Plattdeutsch)': 'de',
+  Hindi: 'hi', Hinglish: 'hi', Bengali: 'bn', Tamil: 'ta', Telugu: 'te', Marathi: 'mr', Gujarati: 'gu', Punjabi: 'pa', Malayalam: 'ml', Kannada: 'kn', Urdu: 'ur',
+  French: 'fr', Spanish: 'es', Italian: 'it',
 }[language] || 'en')
 
 function parseJson(text = '') {
@@ -152,7 +166,7 @@ export default function TalkForMeRealtime() {
     setError('')
 
     try {
-      const prompt = `CONVERSATION WITH USER:\n${briefingTranscript(next)}\n\nBuild the minimum sufficient mental model Ana needs to represent the user in a real conversation. Infer the outcome and implied intent. Separate missing information into: required before start, discoverable live from the other person, and owner decision later. Ask only for information required before start, one question at a time. If Ana can sensibly open the conversation and pursue the goal, set ready=true. Detect the language the user is naturally using; if it is Roman-script conversational Hindi, use Hinglish.\n\nAlso create a SHORT critical-fact checklist for information that must be known or explicitly established before Ana can give the owner a reliable handoff. Include only facts material to the user's actual goal. Money, dates, times, quantities, ticket/passenger categories, appointment slots, names, addresses, reference numbers, eligibility/rules, commitments and component price breakdowns are critical when relevant. If one quoted total covers multiple requested people/items/categories, include the meaningful breakdown as a required fact unless a breakdown would genuinely be meaningless or unavailable. Facts already supplied by the owner may be marked confirmed with their exact value. Do not invent facts merely to fill the checklist.\n\nReturn JSON only:\n{"ready":true|false,"summary":"concise operational brief","question":"one necessary follow-up in the user's own language, otherwise empty","knownFacts":["fact 1","fact 2"],"criticalFacts":[{"key":"stable_short_key","label":"plain owner-facing label","required":true,"risk":"normal|high","status":"missing|confirmed","value":"exact value if already known"}],"userLanguage":"English|German|Hindi|Hinglish|French|Spanish|Italian","otherLanguage":"German|English|Hindi|French|Spanish|Italian|"}`
+      const prompt = `CONVERSATION WITH USER:\n${briefingTranscript(next)}\n\nBuild the minimum sufficient mental model Ana needs to represent the user in a real conversation. Infer the outcome and implied intent. Separate missing information into: required before start, discoverable live from the other person, and owner decision later. Ask only for information required before start, one question at a time. If Ana can sensibly open the conversation and pursue the goal, set ready=true. Detect the language the user is naturally using; if it is Roman-script conversational Hindi, use Hinglish.\n\nAlso create a SHORT critical-fact checklist for information that must be known or explicitly established before Ana can give the owner a reliable handoff. Include only facts material to the user's actual goal. Money, dates, times, quantities, ticket/passenger categories, appointment slots, names, addresses, reference numbers, eligibility/rules, commitments and component price breakdowns are critical when relevant. If one quoted total covers multiple requested people/items/categories, include the meaningful breakdown as a required fact unless a breakdown would genuinely be meaningless or unavailable. Facts already supplied by the owner may be marked confirmed with their exact value. Do not invent facts merely to fill the checklist.\n\nReturn JSON only:\n{"ready":true|false,"summary":"concise operational brief","question":"one necessary follow-up in the user's own language, otherwise empty","knownFacts":["fact 1","fact 2"],"criticalFacts":[{"key":"stable_short_key","label":"plain owner-facing label","required":true,"risk":"normal|high","status":"missing|confirmed","value":"exact value if already known"}],"userLanguage":"English|German|Swabian German (Schwäbisch)|Bavarian German (Bairisch)|Low German (Plattdeutsch)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian","otherLanguage":"German|English|Swabian German (Schwäbisch)|Bavarian German (Bairisch)|Low German (Plattdeutsch)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian|"}`
       const instructions = `You are Ana preparing to speak on a user's behalf. Do not interrogate the user. Do not ask for information Ana can obtain from the other party. Never invent facts. Treat the critical-fact list as a completion gate, not a wish list: include only details the owner genuinely needs for this task. Mark money, exact dates/times, quantities, identity/address/reference details and commitments as high risk when an error would materially change the outcome. The follow-up question must be in the language the user is currently using. Return valid JSON only.`
       const parsed = parseJson(await askAna(prompt, instructions))
       if (!parsed) throw new Error('Ana could not understand that. Please try again.')
