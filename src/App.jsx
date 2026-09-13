@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, Check, Clipboard, Languages, LogOut, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import { markAccountPreferencesChanged } from './accountPreferences.js'
 
 const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
@@ -49,8 +50,18 @@ export default function App() {
   const [newPreferred, setNewPreferred] = useState('')
   const inputRef = useRef(null)
 
-  useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register) } catch {} }, [register])
-  useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)) } catch {} }, [glossary])
+  useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
+  useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
+  useEffect(() => {
+    const hydrate = () => {
+      try {
+        setRegister(localStorage.getItem(REGISTER_KEY) || 'formal')
+        setGlossary(loadGlossary())
+      } catch {}
+    }
+    window.addEventListener('ana-account-preferences-hydrated', hydrate)
+    return () => window.removeEventListener('ana-account-preferences-hydrated', hydrate)
+  }, [])
   useEffect(() => { inputRef.current?.focus() }, [])
 
   const activeGlossary = glossary.filter(item => item.target === target)
