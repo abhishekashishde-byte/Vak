@@ -78,7 +78,8 @@ function setManual(next) {
   manualMode = Boolean(next)
   holding = false
   clearTimeout(tailTimer)
-  if (manualMode) setTrack(false)
+  const current = conversation()
+  if (manualMode || current?.ownerPending) setTrack(false)
   else setTrack(true)
   render()
 }
@@ -116,7 +117,8 @@ function ensureCounterpartyButton(overlay, language) {
     bindHold(counterpartyButton)
   }
   const copy = COPY[language] || COPY.English
-  counterpartyButton.textContent = holding ? copy.listening : copy.hold
+  const label = holding ? copy.listening : copy.hold
+  if (counterpartyButton.textContent !== label) counterpartyButton.textContent = label
   return counterpartyButton
 }
 
@@ -136,8 +138,12 @@ function render() {
   const controls = ensureOwnerControls(current.card)
   controls.classList.toggle('manual', manualMode)
   controls.classList.toggle('blocked', current.ownerPending || current.speaking)
-  controls.querySelector('[data-mode="auto"]')?.classList.toggle('active', !manualMode)
-  controls.querySelector('[data-mode="manual"]')?.classList.toggle('active', manualMode)
+  const autoButton = controls.querySelector('[data-mode="auto"]')
+  const manualButton = controls.querySelector('[data-mode="manual"]')
+  autoButton?.classList.toggle('active', !manualMode)
+  manualButton?.classList.toggle('active', manualMode)
+  if (autoButton) autoButton.disabled = current.ownerPending
+  if (manualButton) manualButton.disabled = current.ownerPending
   const hold = controls.querySelector('.ana-ptt-hold')
   if (hold) hold.disabled = !manualMode || current.ownerPending || current.speaking
 
