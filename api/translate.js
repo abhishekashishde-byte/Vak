@@ -53,13 +53,14 @@ export default async function handler(req, res) {
 
   const rawInstructions = instructions || 'You are Ana, a precise and natural translation assistant.'
   const isAnaBriefing = rawInstructions.includes("preparing to speak on a user's behalf")
-  const isTalkTurn = rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user')
+  const isTalkDebrief = rawInstructions.includes('reviewing a live real-world conversation after speaking for the user')
+  const isTalkTurn = !isTalkDebrief && (rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user'))
 
   // Interactive briefing must be fast. The heavier reasoning model is reserved for
   // places where the user is not blocked waiting for Ana to produce the next screen.
-  const model = isAnaBriefing ? 'gpt-5.6-luna' : isTalkTurn ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
-  const reasoningEffort = isAnaBriefing ? 'low' : isTalkTurn ? 'medium' : 'medium'
-  const deadlineMs = isAnaBriefing ? 5500 : isTalkTurn ? 15000 : 20000
+  const model = (isAnaBriefing || isTalkDebrief) ? 'gpt-5.6-luna' : isTalkTurn ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
+  const reasoningEffort = (isAnaBriefing || isTalkDebrief) ? 'low' : isTalkTurn ? 'medium' : 'medium'
+  const deadlineMs = isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : 20000
 
   let finalInstructions = rawInstructions
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
@@ -76,6 +77,7 @@ export default async function handler(req, res) {
       reasoning: { effort: reasoningEffort },
     }
     if (isAnaBriefing) body.max_output_tokens = 900
+    if (isTalkDebrief) body.max_output_tokens = 700
 
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',

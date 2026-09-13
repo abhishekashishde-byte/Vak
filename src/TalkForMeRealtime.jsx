@@ -156,40 +156,41 @@ export default function TalkForMeRealtime() {
 
   const unresolvedCriticalFacts = () => criticalFactsRef.current.filter(item => item.required && !COMPLETE_STATUSES.has(item.status))
 
-  const sendBrief = async () => {
+  const sendBrief = () => {
     const text = briefInput.trim()
     if (!text || briefLoading) return
+
     const next = [...briefing, { role: 'user', text }]
     setBriefing(next)
     setBriefInput('')
-    setBriefLoading(true)
+    setBriefLoading(false)
     setError('')
 
-    try {
-      const prompt = `CONVERSATION WITH USER:\n${briefingTranscript(next)}\n\nBuild the minimum sufficient mental model Ana needs to represent the user in a real conversation. Infer the outcome and implied intent. Separate missing information into: required before start, discoverable live from the other person, and owner decision later. Ask only for information required before start, one question at a time. If Ana can sensibly open the conversation and pursue the goal, set ready=true. Detect the language the user is naturally using; if it is Roman-script conversational Hindi, use Hinglish.\n\nAlso create a SHORT critical-fact checklist for information that must be known or explicitly established before Ana can give the owner a reliable handoff. Include only facts material to the user's actual goal. Money, dates, times, quantities, ticket/passenger categories, appointment slots, names, addresses, reference numbers, eligibility/rules, commitments and component price breakdowns are critical when relevant. If one quoted total covers multiple requested people/items/categories, include the meaningful breakdown as a required fact unless a breakdown would genuinely be meaningless or unavailable. Facts already supplied by the owner may be marked confirmed with their exact value. Do not invent facts merely to fill the checklist.\n\nReturn JSON only:\n{"ready":true|false,"summary":"concise operational brief","question":"one necessary follow-up in the user's own language, otherwise empty","knownFacts":["fact 1","fact 2"],"criticalFacts":[{"key":"stable_short_key","label":"plain owner-facing label","required":true,"risk":"normal|high","status":"missing|confirmed","value":"exact value if already known"}],"userLanguage":"English|German|Swabian German (Schwäbisch)|Bavarian German (Bairisch)|Low German (Plattdeutsch)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian","otherLanguage":"German|English|Swabian German (Schwäbisch)|Bavarian German (Bairisch)|Low German (Plattdeutsch)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian|"}`
-      const instructions = `You are Ana preparing to speak on a user's behalf. Do not interrogate the user. Do not ask for information Ana can obtain from the other party. Never invent facts. Treat the critical-fact list as a completion gate, not a wish list: include only details the owner genuinely needs for this task. Mark money, exact dates/times, quantities, identity/address/reference details and commitments as high risk when an error would materially change the outcome. The follow-up question must be in the language the user is currently using. Return valid JSON only.`
-      const parsed = parseJson(await askAna(prompt, instructions))
-      if (!parsed) throw new Error('Ana could not understand that. Please try again.')
+    // Talk for Me must never block the owner on a separate reasoning call.
+    // The owner's own words become the operational brief immediately. The
+    // Realtime agent discovers routine facts live and the deterministic
+    // completion gate still prevents the task from closing prematurely.
+    const userBrief = next
+      .filter(message => message.role === 'user')
+      .map(message => String(message.text || '').trim())
+      .filter(Boolean)
+      .join('\n')
 
-      const summary = String(parsed.summary || '').trim()
-      setContextSummary(summary || text)
-      setKnownFacts(Array.isArray(parsed.knownFacts) ? parsed.knownFacts.filter(Boolean).map(String) : [])
-      replaceCriticalFacts(normalizeCriticalFacts(parsed.criticalFacts))
-      if (HOME_LANGS.some(x => x.name === parsed.userLanguage)) setHomeLanguage(parsed.userLanguage)
-      if (OTHER_LANGS.some(x => x.name === parsed.otherLanguage)) setOtherLanguage(parsed.otherLanguage)
+    setContextSummary(userBrief || text)
+    setKnownFacts([])
+    replaceCriticalFacts([{
+      key: 'owner_goal_requirements',
+      label: "Owner's requested outcome and conditions",
+      required: true,
+      risk: 'high',
+      status: 'missing',
+      value: '',
+      evidence: '',
+      reason: 'Ana must verify that the explicit owner goal and every material condition are satisfied before closing.',
+    }])
 
-      if (parsed.ready) {
-        setBriefing(prev => [...prev, { role: 'ana', text: 'I have enough context. I’m ready to take it from here.' }])
-        setStage('ready')
-      } else {
-        const question = String(parsed.question || 'What else should I know before I speak for you?').trim()
-        setBriefing(prev => [...prev, { role: 'ana', text: question }])
-      }
-    } catch (err) {
-      setError(err.message || 'Could not prepare the conversation.')
-    } finally {
-      setBriefLoading(false)
-    }
+    setBriefing(prev => [...prev, { role: 'ana', text: 'I have enough context. I’m ready to take it from here.' }])
+    setStage('ready')
   }
 
   const stopMeter = () => {
@@ -265,6 +266,9 @@ BEHAVIOR:
 - Keep the conversation focused on the user's stated goal.
 
 CRITICAL FACT VERIFICATION — mandatory:
+- Treat every explicit outcome, constraint and condition in USER'S GOAL / BRIEF as binding. The owner must not have to repeat it.
+- At the beginning of the live task, identify the material requirements in the brief and create/update structured critical facts for them as they become relevant. If the conversation reveals a new material dependency, rule or condition, create a required critical fact for that too.
+- The synthetic owner_goal_requirements fact is always required. Keep it unresolved until the requested outcome and every material owner condition have actually been satisfied or explicitly established as unavailable. Immediately before completing, record owner_goal_requirements as confirmed with concise evidence of why the owner's goal is satisfied. Never confirm it merely because the other person ended the conversation.
 - Maintain the checklist above as structured evidence, not just as memory in prose.
 - Whenever a checklist fact is learned, call record_critical_fact before considering the task complete.
 - Use status=confirmed only when the other person's statement is sufficiently clear and internally consistent to rely on in the owner handoff, or when it was already explicitly supplied by the owner.
