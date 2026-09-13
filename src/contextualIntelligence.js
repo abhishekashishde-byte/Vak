@@ -1,3 +1,5 @@
+import { minimiseSensitiveDebriefRequest, privacyRealtimePolicy } from './conversationPrivacy.js'
+
 let installed = false
 let nativeFetch = null
 let nativeRtcSend = null
@@ -68,10 +70,10 @@ function augmentTranslateFetch(input, init = {}) {
   }
 
   try {
-    const body = JSON.parse(init.body)
+    let body = JSON.parse(init.body)
+    body = minimiseSensitiveDebriefRequest(body)
     const policy = policyForInstructions(body.instructions)
-    if (!policy) return { input, init }
-    body.instructions = `${clean(body.instructions)}${policy}`.trim()
+    if (policy) body.instructions = `${clean(body.instructions)}${policy}`.trim()
     return { input, init: { ...init, body: JSON.stringify(body) } }
   } catch {
     return { input, init }
@@ -85,8 +87,11 @@ function augmentRealtimeEvent(data) {
     const event = JSON.parse(data)
     if (event?.type !== 'session.update' || !event?.session?.instructions) return data
     const policy = policyForInstructions(event.session.instructions)
-    if (!policy || policy === TRANSLATION_CONTEXT_POLICY) return data
-    event.session.instructions = `${clean(event.session.instructions)}${policy}`.trim()
+    const privacy = privacyRealtimePolicy(event.session.instructions)
+    if (!policy && !privacy) return data
+    const additions = [policy && policy !== TRANSLATION_CONTEXT_POLICY ? policy : '', privacy].filter(Boolean).join('')
+    if (!additions) return data
+    event.session.instructions = `${clean(event.session.instructions)}${additions}`.trim()
     return JSON.stringify(event)
   } catch {
     return data
