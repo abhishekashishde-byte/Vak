@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/translate.js": { "maxDuration": 30 }
+    "api/translate.js": { "maxDuration": 30 },
+    "api/meeting-segment.js": { "maxDuration": 30 },
+    "api/v1/translate.js": { "maxDuration": 30 },
+    "api/v1/transcribe.js": { "maxDuration": 30 },
+    "api/v1/talk-session.js": { "maxDuration": 20 }
   }
 }
