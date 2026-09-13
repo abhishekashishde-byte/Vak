@@ -1,33 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CloudOff, RadioTower } from 'lucide-react'
 import { getNetworkState, subscribeNetworkState } from './networkResilience.js'
 
 export default function NetworkStatus() {
   const [state, setState] = useState(getNetworkState)
   const [restored, setRestored] = useState(false)
+  const previousOnlineRef = useRef(state.online)
+  const timerRef = useRef(null)
 
   useEffect(() => {
-    let timer
-    return subscribeNetworkState(next => {
-      const wasOffline = state.online === false
+    const unsubscribe = subscribeNetworkState(next => {
+      const wasOffline = previousOnlineRef.current === false
+      previousOnlineRef.current = next.online
       setState(next)
       if (wasOffline && next.online) {
         setRestored(true)
-        clearTimeout(timer)
-        timer = setTimeout(() => setRestored(false), 3200)
+        clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => setRestored(false), 3200)
       }
     })
-  }, [state.online])
+    return () => {
+      unsubscribe()
+      clearTimeout(timerRef.current)
+    }
+  }, [])
 
   if (!state.online) {
     return <div className="ana-network-banner offline" role="status">
-      <CloudOff size={15}/><span><strong>You’re offline.</strong> Ana will keep your current work. Voice, documents and cloud translation need a connection.</span>
+      <CloudOff size={15}/><span><strong>You’re offline.</strong> Typed translation drafts stay saved. Voice, documents and Ana’s cloud translation need a connection.</span>
     </div>
   }
 
   if (state.weak) {
     return <div className="ana-network-banner weak" role="status">
-      <RadioTower size={15}/><span><strong>Weak connection.</strong> Ana will preserve your work if the connection drops; live voice may need to reconnect.</span>
+      <RadioTower size={15}/><span><strong>Weak connection.</strong> Translation drafts stay saved; live voice may pause or need to reconnect.</span>
     </div>
   }
 
