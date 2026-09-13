@@ -305,15 +305,17 @@ ${INDIAN_SPEECH_LANGS.has(languageA) || INDIAN_SPEECH_LANGS.has(languageB) ? '- 
     resetTurnBuffers()
 
     try {
-      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
-      const tokenData = await tokenResponse.json()
-      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Ana Live.')
-
+      // iOS/WebKit requires microphone access to happen directly from the user's tap.
+      // Acquire the mic before any network await so transient user activation is not lost.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
       mediaRef.current = stream
       startMeter(stream)
+
+      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
+      const tokenData = await tokenResponse.json()
+      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Ana Live.')
 
       const pc = new RTCPeerConnection()
       peerRef.current = pc
@@ -394,7 +396,10 @@ ${INDIAN_SPEECH_LANGS.has(languageA) || INDIAN_SPEECH_LANGS.has(languageB) ? '- 
       setSessionState('listening')
       setMicEnabled(listeningMode === 'auto')
     } catch (err) {
-      setError(err.message || 'Could not start realtime interpretation.')
+      const denied = err?.name === 'NotAllowedError' || /not allowed|permission denied|permission/i.test(String(err?.message || ''))
+      setError(denied
+        ? 'Microphone access is blocked for this website. Allow Microphone for Ana in your browser/site settings, then tap Start conversation again.'
+        : (err?.message || 'Could not start realtime interpretation.'))
       stopSession(false)
     }
   }
