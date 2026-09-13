@@ -38,8 +38,8 @@ const learnFromInstructions = instructions => {
 
   const patch = {}
   const owner = text.match(/OWNER LANGUAGE:\s*(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)/i)
-  const other = text.match(/OTHER PERSON LANGUAGE:\s*(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)/i)
-  const live = text.match(/live two-way interpreter between\s+(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)\s+and\s+(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)/i)
+  const other = text.match(/OTHER PERSON LANGUAGE:\s*(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)/i)
+  const live = text.match(/live two-way interpreter between\s+(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)\s+and\s+(English|German|Swabian German \(Schwäbisch\)|Bavarian German \(Bairisch\)|Low German \(Plattdeutsch\)|Hindi|Hinglish|Bengali|Tamil|Telugu|Marathi|Gujarati|Punjabi|Malayalam|Kannada|Urdu|French|Spanish|Italian)/i)
 
   if (owner?.[1]) patch.ownerLanguage = owner[1]
   if (other?.[1]) patch.lastOtherLanguage = other[1]
