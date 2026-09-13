@@ -24,8 +24,16 @@ function liveDetails(button) {
   return { mode: 'Live interpreter', languages: [first, second], context: '' }
 }
 
+function roomDetails(button) {
+  if (!button.classList.contains('room-start') || !/open room/i.test(button.textContent || '')) return null
+  const stage = button.closest('.room-setup')
+  if (!stage) return null
+  const languages = [...stage.querySelectorAll('.room-person-row select')].map(select => select.value).filter(Boolean)
+  return { mode: 'Conversation Room', languages: languages.length ? languages : ['English'], context: '' }
+}
+
 function detailsFor(button) {
-  return talkDetails(button) || liveDetails(button)
+  return talkDetails(button) || liveDetails(button) || roomDetails(button)
 }
 
 function ensureOverlay() {
@@ -40,7 +48,7 @@ function ensureOverlay() {
       <div class="ana-privacy-sensitive" hidden>Extra privacy mode is active for this conversation.</div>
       <div class="ana-privacy-disclosures"></div>
       <div class="ana-privacy-facts">
-        <span><b>Live processing</b> Speech is sent to the realtime AI service only while the voice session is running.</span>
+        <span><b>Voice processing</b> Speech is sent to the AI service only while Ana is actively listening or translating.</span>
         <span><b>No conversation memory</b> Ana does not add what people say to your personal language memory.</span>
         <span><b>Session-only transcript</b> Ana does not sync voice-session transcripts into your account preferences.</span>
       </div>
