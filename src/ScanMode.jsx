@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Download, FileText, LoaderCircle, Upload, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileText, LoaderCircle, Upload, X } from 'lucide-react'
 import { buildTranslatedPdf, downloadBytes, enrichScannedPages, extractPdfLayout, layoutToPlainText } from './lib/pdfLayout.js'
+import { assessDocumentLayout, combineDocumentQuality } from './lib/documentQuality.js'
 
 const TARGETS = ['German', 'English', 'Hindi', 'Hinglish', 'French', 'Spanish', 'Italian']
 const MAX_PDF_BYTES = 20 * 1024 * 1024
@@ -76,13 +77,8 @@ async function translateLayout(layout, target, onProgress) {
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index]
     onProgress?.(index + 1, chunks.length)
-    const payload = chunk.map(block => ({
-      id: block.id,
-      page: block.pageIndex + 1,
-      type: block.type,
-      text: block.text,
-    }))
-    let instructions = `You are Ana translating positioned PDF text blocks into ${target}. Translate ONLY each object's text value. Keep every id exactly unchanged. Preserve numbers, names, dates, references, legal clause numbering, technical meaning and document register. Keep repeated terminology consistent across the document. Do not merge, split, reorder or omit blocks. Preserve deliberate line breaks when useful. Return ONLY a valid JSON array in this exact shape: [{"id":"same-id","text":"translated text"}]. No Markdown fences and no commentary.`
+    const payload = chunk.map(block => ({ id: block.id, page: block.pageIndex + 1, type: block.type, text: block.text }))
+    let instructions = `You are Ana translating positioned PDF text blocks into ${target}. Translate ONLY each object's text value. Keep every id exactly unchanged. Preserve numbers, names, dates, references, legal clause numbering, technical meaning and document register. Keep repeated terminology consistent across the document. Do not merge, split, reorder or omit blocks. For short form fields, labels, headings and table cells, prefer the shortest natural translation that preserves the full meaning because the available space is limited. Preserve deliberate line breaks when useful. Return ONLY a valid JSON array in this exact shape: [{"id":"same-id","text":"translated text"}]. No Markdown fences and no commentary.`
     if (guide) instructions += `\nDOCUMENT TRANSLATION GUIDE: ${guide}`
     if (target === 'Hinglish') instructions += ' Hinglish means natural spoken Hindi written entirely in Roman/Latin letters. Never use Devanagari. Keep names, brands, numbers and unavoidable English terms naturally.'
     const raw = await callAna(JSON.stringify(payload), instructions)
@@ -100,6 +96,42 @@ async function translateLayout(layout, target, onProgress) {
   return translated
 }
 
+async function rescueDenseTranslations(layout, translated, target, rescueIds) {
+  if (!rescueIds?.length) return translated
+  const wanted = new Set(rescueIds)
+  const translations = new Map(translated.map(item => [item.id, item.text]))
+  const payload = layout.blocks.filter(block => wanted.has(block.id)).map(block => ({
+    id: block.id,
+    page: block.pageIndex + 1,
+    type: block.type,
+    source: block.text,
+    currentTranslation: translations.get(block.id) || '',
+  }))
+  if (!payload.length) return translated
+
+  let instructions = `You are doing a layout-rescue pass on a translated PDF. Rewrite ONLY currentTranslation into a more compact natural ${target} version when this can be done WITHOUT losing any factual, legal, medical, technical or procedural meaning. Preserve every number, date, name, reference, condition, negation, obligation, permission and qualifier exactly in meaning. Do not use unexplained abbreviations. For labels/headings/table cells, prefer conventional short wording. If shortening would lose meaning, return the current translation unchanged. Keep every id unchanged. Return ONLY JSON: [{"id":"same-id","text":"compact translation"}].`
+  if (target === 'Hinglish') instructions += ' Hinglish must remain Roman/Latin-script Hindi only.'
+
+  try {
+    const parsed = parseJson(await callAna(JSON.stringify(payload), instructions))
+    if (!Array.isArray(parsed)) return translated
+    const replacements = new Map(parsed.filter(item => item?.id).map(item => [String(item.id), String(item.text || '').trim()]))
+    return translated.map(item => replacements.get(item.id) ? { ...item, text: replacements.get(item.id) } : item)
+  } catch {
+    return translated
+  }
+}
+
+function qualityMessage(quality) {
+  if (!quality?.review) return ''
+  const parts = []
+  if (quality.layoutIssues) parts.push(`${quality.layoutIssues} very dense text area${quality.layoutIssues === 1 ? '' : 's'}`)
+  if (quality.handwritten) parts.push(`${quality.handwritten} handwritten area${quality.handwritten === 1 ? '' : 's'}`)
+  if (quality.lowConfidence) parts.push(`${quality.lowConfidence} hard-to-read area${quality.lowConfidence === 1 ? '' : 's'}`)
+  const pages = quality.pages?.length ? ` Page${quality.pages.length === 1 ? '' : 's'} ${quality.pages.join(', ')}.` : ''
+  return `${parts.join(', ') || 'A few areas'} may need a quick visual check.${pages}`
+}
+
 export default function ScanMode() {
   const inputRef = useRef(null)
   const [file, setFile] = useState(null)
@@ -110,8 +142,9 @@ export default function ScanMode() {
   const [resultName, setResultName] = useState('')
   const [progress, setProgress] = useState(0)
   const [downloaded, setDownloaded] = useState(false)
+  const [quality, setQuality] = useState(null)
 
-  const busy = ['preparing', 'reading', 'translating', 'building'].includes(status)
+  const busy = ['preparing', 'reading', 'translating', 'checking', 'optimizing', 'building'].includes(status)
   const filename = useMemo(() => file?.name || '', [file])
 
   const reset = () => {
@@ -122,6 +155,7 @@ export default function ScanMode() {
     setResultName('')
     setProgress(0)
     setDownloaded(false)
+    setQuality(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -131,38 +165,59 @@ export default function ScanMode() {
     setResultBytes(null)
     setResultName('')
     setDownloaded(false)
+    setQuality(null)
     setProgress(6)
     setStatus('preparing')
 
     try {
       let layout = await extractPdfLayout(selected)
+      const scanSignals = []
 
       if (layout.ocrPages?.length) {
         setStatus('reading')
         setProgress(10)
-        layout = await enrichScannedPages(selected, layout, readScannedPage, (current, total) => {
+        layout = await enrichScannedPages(selected, layout, async args => {
+          const result = await readScannedPage(args)
+          scanSignals.push({
+            pageNumber: args.pageNumber,
+            lowConfidenceCount: Number(result.lowConfidenceCount || 0),
+            handwrittenCount: Number(result.handwrittenCount || 0),
+          })
+          return result
+        }, (current, total) => {
           const ratio = total ? current / total : 0
           setProgress(Math.round(10 + ratio * 18))
         })
       }
 
-      if (!layout.blocks.length) {
-        throw new Error('Ana could not find readable text in this PDF.')
-      }
+      if (!layout.blocks.length) throw new Error('Ana could not find readable text in this PDF.')
 
       setStatus('translating')
       setProgress(30)
-      const blocks = await translateLayout(layout, language, (current, total) => {
+      let blocks = await translateLayout(layout, language, (current, total) => {
         const ratio = total ? current / total : 0
-        setProgress(Math.round(30 + ratio * 50))
+        setProgress(Math.round(30 + ratio * 48))
       })
 
+      setStatus('checking')
+      setProgress(80)
+      let layoutReport = assessDocumentLayout(layout, blocks)
+
+      if (layoutReport.rescueIds?.length) {
+        setStatus('optimizing')
+        setProgress(84)
+        blocks = await rescueDenseTranslations(layout, blocks, language, layoutReport.rescueIds)
+        layoutReport = assessDocumentLayout(layout, blocks)
+      }
+
       setStatus('building')
-      setProgress(84)
+      setProgress(90)
       const bytes = await buildTranslatedPdf(selected, layout, blocks)
+      const finalQuality = combineDocumentQuality(layoutReport, scanSignals)
       const base = selected.name.replace(/\.pdf$/i, '') || 'document'
       const outputName = `${base}-${language.toLowerCase()}-ana.pdf`
 
+      setQuality(finalQuality)
       setResultBytes(bytes)
       setResultName(outputName)
       setProgress(100)
@@ -205,15 +260,19 @@ export default function ScanMode() {
       ? 'Reading scanned pages…'
       : status === 'translating'
         ? `Translating to ${target}…`
-        : status === 'building'
-          ? 'Rebuilding the translated layout…'
-          : ''
+        : status === 'checking'
+          ? 'Checking the translated layout…'
+          : status === 'optimizing'
+            ? 'Making dense areas fit naturally…'
+            : status === 'building'
+              ? 'Rebuilding the translated layout…'
+              : ''
 
   return <section className="scan-page scan-direct">
     <header className="scan-hero scan-direct-hero">
       <div className="eyebrow">Ana Documents</div>
       <h1>Give Ana a PDF. Get it back translated.</h1>
-      <p>Digital or scanned. Ana reads the layout, translates the document and fits the result back onto the original pages.</p>
+      <p>Digital or scanned. Ana reads the layout, translates the document, checks dense areas and fits the result back onto the original pages.</p>
     </header>
 
     <div className="scan-language-row">
@@ -240,12 +299,13 @@ export default function ScanMode() {
     </article>}
 
     {status === 'done' && <article className="scan-result-card">
-      <CheckCircle2 size={34}/>
+      {quality?.review ? <AlertTriangle size={34}/> : <CheckCircle2 size={34}/>} 
       <div>
         <span className="scan-result-kicker">READY</span>
-        <h2>Your translated PDF is ready.</h2>
+        <h2>{quality?.review ? 'Your translated PDF is ready — with a quick-check note.' : 'Your translated PDF is ready.'}</h2>
         <p>{resultName}</p>
       </div>
+      {quality?.review && <p className="scan-download-hint"><strong>Quick visual check recommended.</strong> {qualityMessage(quality)}</p>}
       <button className="scan-download" onClick={downloadResult}><Download size={18}/> {downloaded ? 'Download again' : 'Download PDF'}</button>
       {downloaded && <p className="scan-download-hint">If your browser opens the PDF instead of saving it, use the browser download icon.</p>}
       <button className="scan-again" onClick={reset}>Translate another PDF</button>
