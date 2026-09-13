@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeftRight, Languages, Mic, Square, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Languages, Mic, Square, Trash2, Volume2 } from 'lucide-react'
+import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 
 const LANGS = [
   { name: 'English', iso: 'en' },
@@ -11,16 +12,32 @@ const LANGS = [
 ]
 
 const isoFor = language => LANGS.find(x => x.name === language)?.iso || 'en'
+const validLanguage = value => LANGS.some(x => x.name === value)
+const rememberedPair = () => {
+  const pair = getPersonalLanguageMemory()?.lastLiveLanguages
+  return Array.isArray(pair) && pair.length === 2 && pair[0] !== pair[1] && pair.every(validLanguage) ? pair : ['Hindi', 'German']
+}
+const normalise = value => String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+const NON_SPEECH = new Set(['uh', 'um', 'hmm', 'hm', 'mm', 'mmm', 'äh', 'ähm', 'eh', 'erm', 'ah'])
+const ignorableFragment = value => {
+  const text = normalise(value)
+  if (!text) return true
+  const words = text.split(/\s+/).filter(Boolean)
+  return words.length === 1 && NON_SPEECH.has(words[0])
+}
 
 export default function LiveMode() {
-  const [languageA, setLanguageA] = useState('Hindi')
-  const [languageB, setLanguageB] = useState('German')
+  const initialPair = rememberedPair()
+  const [languageA, setLanguageA] = useState(initialPair[0])
+  const [languageB, setLanguageB] = useState(initialPair[1])
   const [sessionState, setSessionState] = useState('idle')
   const [interim, setInterim] = useState('')
   const [latestInput, setLatestInput] = useState('')
   const [latestOutput, setLatestOutput] = useState('')
   const [turns, setTurns] = useState([])
   const [error, setError] = useState('')
+  const [listeningMode, setListeningMode] = useState('auto')
+  const [holding, setHolding] = useState(false)
 
   const peerRef = useRef(null)
   const dataChannelRef = useRef(null)
@@ -32,14 +49,39 @@ export default function LiveMode() {
   const orbRef = useRef(null)
   const audioContextRef = useRef(null)
   const meterFrameRef = useRef(null)
+  const suppressResponseRef = useRef(false)
+  const lastInputSeenRef = useRef({ text: '', at: 0 })
+  const lastCommittedRef = useRef({ original: '', translation: '', at: 0 })
+  const currentResponseRef = useRef(null)
+  const sessionStateRef = useRef('idle')
 
   const active = ['connecting', 'listening', 'translating', 'speaking'].includes(sessionState)
   const realtimeSupported = typeof window !== 'undefined' && Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia)
 
+  useEffect(() => { sessionStateRef.current = sessionState }, [sessionState])
   useEffect(() => () => stopSession(false), [])
+  useEffect(() => {
+    if (active) return
+    rememberPersonalLanguagePreference({ lastLiveLanguages: [languageA, languageB] })
+  }, [languageA, languageB, active])
+  useEffect(() => {
+    const hydrate = () => {
+      if (activeRef.current) return
+      const pair = rememberedPair()
+      setLanguageA(pair[0])
+      setLanguageB(pair[1])
+    }
+    window.addEventListener('ana-account-preferences-hydrated', hydrate)
+    return () => window.removeEventListener('ana-account-preferences-hydrated', hydrate)
+  }, [])
+  useEffect(() => {
+    if (!activeRef.current) return
+    if (listeningMode === 'manual') setMicEnabled(holding && sessionState === 'listening')
+    else setMicEnabled(true)
+  }, [listeningMode, holding, sessionState])
 
   const setMicEnabled = enabled => {
-    mediaRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
+    mediaRef.current?.getAudioTracks?.().forEach(track => { track.enabled = Boolean(enabled) })
   }
 
   const stopMeter = () => {
@@ -82,44 +124,71 @@ export default function LiveMode() {
 
 YOUR ONLY JOB IS TO INTERPRET. You are not a conversational assistant in this mode.
 
-For every completed speech turn:
-- Detect whether the speaker is speaking ${languageA} or ${languageB} from the audio and meaning.
+TURN QUALITY:
+- Wait for a complete communicative thought before translating. A natural short pause inside a sentence is not automatically the end of the turn.
+- Ignore obvious background speech, television/radio bleed, accidental distant voices, mic bumps, breathing, and non-lexical fillers such as “uh”, “hmm” or “äh” when they do not carry a message for the conversation.
+- Do NOT ignore meaningful short replies such as yes/no, okay, thanks, a number, a name, a price, or a time.
+- If audio is too fragmentary to establish a useful meaning, remain silent rather than inventing a translation.
+- Never translate the same completed turn twice. If a speaker interrupts your translation, stop immediately; listen to the new turn and do not replay the interrupted translation from the beginning unless the speaker explicitly asks.
+
+LANGUAGE DIRECTION:
+- Detect whether the speaker's intended side of the conversation is ${languageA} or ${languageB} from the whole utterance, not from one borrowed word.
 - If the speaker uses ${languageA}, speak ONLY the natural ${languageB} translation aloud.
 - If the speaker uses ${languageB}, speak ONLY the natural ${languageA} translation aloud.
-- Preserve the speaker's first-person perspective, intent, tone, politeness, names, dates, numbers and meaning.
-- If the speaker mixes languages, infer the intended meaning and translate it into the OTHER conversation language.
+- Mixed-language speech is normal. Determine the dominant sentence intent and translate the whole intended message once into the other conversation language.
+${languageA === 'Hindi' || languageB === 'Hindi' ? '- When Hindi is one side, Roman-script Hindi/Hinglish and ordinary Hindi-English code-switching belong to the Hindi side when the speaker is fundamentally speaking Hindi. Do not force Roman Hindi into English merely because it uses Latin letters.\n' : ''}- Preserve the speaker's first-person perspective, intent, tone, politeness, names, dates, numbers and meaning.
 - Never answer a question yourself. Translate the question.
 - Never solve a request yourself. Translate the request.
 - Never explain, summarize, comment, add advice, introduce yourself, or say phrases such as “they said” or “the translation is”.
 - Never repeat the source sentence before translating it.
 - Do not continue the conversation on your own. After speaking the translation, stop and wait for either person to speak next.
-- If either person starts talking while you are speaking, stop immediately and listen. Never talk over a human speaker.
 - Sound like a natural human interpreter, not a robot. Keep the translation concise and faithful.`
+
+  const resetTurnBuffers = () => {
+    lastInputRef.current = ''
+    outputRef.current = ''
+    currentResponseRef.current = null
+    suppressResponseRef.current = false
+  }
 
   const finishTurn = () => {
     const original = lastInputRef.current.trim()
     const translation = outputRef.current.trim()
     if (original && translation) {
-      setTurns(prev => [...prev, {
-        id: `${Date.now()}-${Math.random()}`,
-        original,
-        translation,
-      }])
+      const now = Date.now()
+      const previous = lastCommittedRef.current
+      const duplicate = normalise(original) === normalise(previous.original)
+        && normalise(translation) === normalise(previous.translation)
+        && now - previous.at < 5000
+      if (!duplicate) {
+        lastCommittedRef.current = { original, translation, at: now }
+        setTurns(prev => [...prev, { id: `${now}-${Math.random()}`, original, translation }])
+      }
     }
-    lastInputRef.current = ''
+    resetTurnBuffers()
+  }
+
+  const cancelSuppressedResponse = () => {
+    sendRealtime({ type: 'response.cancel' })
     outputRef.current = ''
+    setLatestOutput('')
+    suppressResponseRef.current = false
   }
 
   const handleRealtimeEvent = event => {
     switch (event.type) {
       case 'input_audio_buffer.speech_started':
         if (activeRef.current) {
-          if (lastInputRef.current && outputRef.current) finishTurn()
+          if (sessionStateRef.current === 'speaking') {
+            outputRef.current = ''
+            setLatestOutput('')
+          }
           setInterim('')
           setLatestInput('')
           setLatestOutput('')
           lastInputRef.current = ''
           outputRef.current = ''
+          suppressResponseRef.current = false
           setSessionState('listening')
         }
         break
@@ -134,19 +203,35 @@ For every completed speech turn:
 
       case 'conversation.item.input_audio_transcription.completed': {
         const transcript = String(event.transcript || '').trim()
-        if (transcript) {
-          lastInputRef.current = transcript
-          setLatestInput(transcript)
+        const now = Date.now()
+        const normalized = normalise(transcript)
+        const duplicate = normalized && normalized === lastInputSeenRef.current.text && now - lastInputSeenRef.current.at < 1800
+        lastInputSeenRef.current = { text: normalized, at: now }
+        if (!transcript || ignorableFragment(transcript) || duplicate) {
+          suppressResponseRef.current = true
+          lastInputRef.current = ''
+          setLatestInput('')
           setInterim('')
+          break
         }
+        lastInputRef.current = transcript
+        setLatestInput(transcript)
+        setInterim('')
         break
       }
 
       case 'response.created':
+        currentResponseRef.current = event.response?.id || null
+        if (suppressResponseRef.current) {
+          cancelSuppressedResponse()
+          if (activeRef.current) setSessionState('listening')
+          break
+        }
         if (activeRef.current) setSessionState('translating')
         break
 
       case 'response.output_audio_transcript.delta': {
+        if (suppressResponseRef.current) break
         const delta = String(event.delta || '')
         if (delta) {
           outputRef.current += delta
@@ -157,6 +242,7 @@ For every completed speech turn:
       }
 
       case 'response.output_audio_transcript.done': {
+        if (suppressResponseRef.current) break
         const transcript = String(event.transcript || outputRef.current || '').trim()
         if (transcript) {
           outputRef.current = transcript
@@ -165,13 +251,19 @@ For every completed speech turn:
         break
       }
 
-      case 'response.done':
-        finishTurn()
-        if (activeRef.current) setSessionState('listening')
+      case 'response.done': {
+        const status = event.response?.status || 'completed'
+        if (!suppressResponseRef.current && status === 'completed') finishTurn()
+        else resetTurnBuffers()
+        if (activeRef.current) {
+          setSessionState('listening')
+          if (listeningMode === 'manual') setMicEnabled(holding)
+        }
         break
+      }
 
       case 'error':
-        setError(event.error?.message || 'Realtime interpretation error.')
+        if (!/cancel/i.test(event.error?.message || '')) setError(event.error?.message || 'Realtime interpretation error.')
         break
 
       default:
@@ -189,12 +281,14 @@ For every completed speech turn:
       return
     }
 
+    rememberPersonalLanguagePreference({ lastLiveLanguages: [languageA, languageB] })
     setError('')
     setInterim('')
     setLatestInput('')
     setLatestOutput('')
     setSessionState('connecting')
     activeRef.current = true
+    resetTurnBuffers()
 
     try {
       const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
@@ -209,6 +303,15 @@ For every completed speech turn:
 
       const pc = new RTCPeerConnection()
       peerRef.current = pc
+      pc.addEventListener('connectionstatechange', () => {
+        if (!activeRef.current) return
+        if (pc.connectionState === 'failed') {
+          setMicEnabled(false)
+          setError('The connection dropped. End and start again when your network is stable.')
+          setSessionState('idle')
+          activeRef.current = false
+        }
+      })
 
       const audio = document.createElement('audio')
       audio.autoplay = true
@@ -264,10 +367,8 @@ For every completed speech turn:
                 delay: 'low',
               },
               turn_detection: {
-                type: 'server_vad',
-                threshold: 0.55,
-                prefix_padding_ms: 250,
-                silence_duration_ms: 350,
+                type: 'semantic_vad',
+                eagerness: 'medium',
                 create_response: true,
                 interrupt_response: true,
               },
@@ -277,7 +378,7 @@ For every completed speech turn:
       })
 
       setSessionState('listening')
-      setMicEnabled(true)
+      setMicEnabled(listeningMode === 'auto')
     } catch (err) {
       setError(err.message || 'Could not start realtime interpretation.')
       stopSession(false)
@@ -286,6 +387,7 @@ For every completed speech turn:
 
   function stopSession(clearLatest = true) {
     activeRef.current = false
+    setHolding(false)
     try { dataChannelRef.current?.close() } catch {}
     dataChannelRef.current = null
     try { peerRef.current?.close() } catch {}
@@ -301,11 +403,10 @@ For every completed speech turn:
     remoteAudioRef.current = null
     stopMeter()
     setInterim('')
+    resetTurnBuffers()
     if (clearLatest) {
       setLatestInput('')
       setLatestOutput('')
-      lastInputRef.current = ''
-      outputRef.current = ''
     }
     setSessionState('idle')
   }
@@ -323,12 +424,27 @@ For every completed speech turn:
     setLatestOutput('')
     setInterim('')
     setError('')
+    lastCommittedRef.current = { original: '', translation: '', at: 0 }
+  }
+
+  const beginHold = event => {
+    if (!active || listeningMode !== 'manual' || sessionState !== 'listening') return
+    event?.preventDefault?.()
+    setHolding(true)
+    setMicEnabled(true)
+    try { event?.currentTarget?.setPointerCapture?.(event.pointerId) } catch {}
+  }
+
+  const endHold = event => {
+    event?.preventDefault?.()
+    setHolding(false)
+    setMicEnabled(false)
   }
 
   const stateTitle = sessionState === 'connecting'
     ? 'Connecting Ana…'
     : sessionState === 'listening'
-      ? 'Listening'
+      ? (listeningMode === 'manual' && !holding ? 'Ready when you are' : 'Listening')
       : sessionState === 'translating'
         ? 'Translating…'
         : sessionState === 'speaking'
@@ -336,9 +452,9 @@ For every completed speech turn:
           : 'Ready for both of you'
 
   const stateDetail = sessionState === 'listening'
-    ? (interim || `Either person can speak in ${languageA} or ${languageB}.`)
+    ? (interim || (listeningMode === 'manual' ? (holding ? 'Speak now. Release when the person is finished.' : 'Hold the button below while either person speaks.') : `Either person can speak in ${languageA} or ${languageB}.`))
     : sessionState === 'translating'
-      ? (latestInput || 'Understanding the finished turn…')
+      ? (latestInput || 'Waiting for the thought to finish…')
       : sessionState === 'speaking'
         ? (latestOutput || 'Speaking the translation aloud… You can interrupt Ana anytime.')
         : sessionState === 'connecting'
@@ -349,7 +465,7 @@ For every completed speech turn:
     <div className="live-head">
       <div className="eyebrow"><Mic size={14}/> Two-way live interpreter</div>
       <h1>Talk naturally. Ana handles both sides.</h1>
-      <p>Speak either language. Ana detects who spoke, translates into the other language and says it aloud.</p>
+      <p>Ana waits for the thought, handles mixed language naturally and stays quiet when background noise is not part of the conversation.</p>
     </div>
 
     <div className="live-card live-interpreter-card">
@@ -362,6 +478,10 @@ For every completed speech turn:
         <select value={languageB} onChange={e => setLanguageB(e.target.value)} disabled={active}>
           {LANGS.filter(x => x.name !== languageA).map(x => <option key={x.name}>{x.name}</option>)}
         </select>
+        <div className="live-listen-mode" aria-label="Listening mode">
+          <button className={listeningMode === 'auto' ? 'active' : ''} onClick={() => setListeningMode('auto')} disabled={active && sessionState !== 'listening'}>Automatic</button>
+          <button className={listeningMode === 'manual' ? 'active' : ''} onClick={() => setListeningMode('manual')} disabled={active && sessionState !== 'listening'}>Noisy place</button>
+        </div>
         <div className="spacer"/>
         <button className="ghost icon-text" onClick={clearTranscript} disabled={active && !turns.length}><Trash2 size={15}/> Clear</button>
       </div>
@@ -389,7 +509,15 @@ For every completed speech turn:
         <button className={`live-mic${active ? ' active' : ''}`} onClick={active ? () => stopSession() : startSession} disabled={sessionState === 'connecting'}>
           {active ? <Square size={19}/> : <Mic size={21}/>}<span>{sessionState === 'connecting' ? 'Connecting…' : active ? 'End conversation' : 'Start conversation'}</span>
         </button>
-        <div className={`live-status${active ? ' on' : ''}`}>{active ? `${languageA} ↔ ${languageB} · automatic direction · interruptible` : 'Microphone off'}</div>
+        {active && listeningMode === 'manual' && <button
+          className={`live-hold${holding ? ' active' : ''}`}
+          onPointerDown={beginHold}
+          onPointerUp={endHold}
+          onPointerCancel={endHold}
+          onLostPointerCapture={endHold}
+          disabled={sessionState !== 'listening'}
+        ><Volume2 size={18}/><span>{holding ? 'Listening — release when finished' : 'Hold while someone speaks'}</span></button>}
+        <div className={`live-status${active ? ' on' : ''}`}>{active ? `${languageA} ↔ ${languageB} · ${listeningMode === 'manual' ? 'controlled listening' : 'automatic direction'} · interruptible` : `Microphone off · ${languageA} ↔ ${languageB} remembered`}</div>
       </div>
     </div>
 
