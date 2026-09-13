@@ -17,9 +17,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - name: Install
-        run: npm ci
+        run: npm install
       - name: Talk for Me adversarial trust tests
         run: npm run test:trust
       - name: Production build
