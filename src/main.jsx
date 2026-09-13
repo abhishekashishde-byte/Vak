@@ -9,18 +9,22 @@ import { installCounterpartyView } from './counterpartyView.js'
 import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installPushToTalkFallback } from './pushToTalk.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
+import { installTalkPolish } from './talkPolish.js'
 import './styles.css'
 import './briefVoice.css'
 import './criticalFacts.css'
 import './counterpartyView.css'
 import './pushToTalk.css'
 import './privacySettings.css'
+import './livePolish.css'
+import './talkPolish.css'
 import './briefVoice.js'
 
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
 installContextualIntelligence()
 installRealtimeTonePolicy()
+installTalkPolish()
 installCounterpartyView()
 installPushToTalkFallback()
 installConversationPrivacyGate()
