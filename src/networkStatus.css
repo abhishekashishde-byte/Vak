@@ -1,3 +1,4 @@
 .ana-network-banner{position:sticky;top:0;z-index:90;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 16px;font:600 13px/1.35 Inter,system-ui,sans-serif;text-align:center;border-bottom:1px solid rgba(30,27,23,.12);backdrop-filter:blur(14px)}
 .ana-network-banner span{max-width:900px}.ana-network-banner strong{font-weight:750}.ana-network-banner.offline{background:rgba(49,45,40,.95);color:#fff}.ana-network-banner.weak{background:rgba(241,220,161,.96);color:#332d20}.ana-network-banner.restored{background:rgba(224,238,222,.96);color:#223124}
-@media(max-width:700px){.ana-network-banner{font-size:12px;padding:8px 12px}.ana-network-banner svg{flex:0 0 auto}}
+.ana-offline-note{max-width:980px;margin:14px auto 0;padding:11px 14px;border:1px solid rgba(86,75,49,.16);border-radius:14px;background:rgba(241,220,161,.42);color:#574b31;font:600 13px/1.45 Inter,system-ui,sans-serif}
+@media(max-width:700px){.ana-network-banner{font-size:12px;padding:8px 12px}.ana-network-banner svg{flex:0 0 auto}.ana-offline-note{margin:12px 14px 0;font-size:12px}}
