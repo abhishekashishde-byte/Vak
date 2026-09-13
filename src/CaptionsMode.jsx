@@ -145,7 +145,7 @@ export default function CaptionsMode() {
         break
       case 'error':
       case 'session.error':
-        setError(event.error?.message || 'Live captioning was interrupted.')
+        setError(event.error?.message || 'Live Subtitles were interrupted.')
         break
       default:
         break
@@ -171,7 +171,7 @@ export default function CaptionsMode() {
 
   const startSession = async () => {
     if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
-      setError('Live captions are not supported in this browser.')
+      setError('Live Subtitles are not supported in this browser.')
       return
     }
 
@@ -201,14 +201,14 @@ export default function CaptionsMode() {
         body: JSON.stringify({ targetLanguage: codeFor(targetRef.current) }),
       })
       const tokenData = await tokenResponse.json()
-      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime translation captions.')
+      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime Live Subtitles.')
 
       const pc = new RTCPeerConnection()
       peerRef.current = pc
       const audioTrack = stream.getAudioTracks()[0]
       pc.addTrack(audioTrack, stream)
 
-      // Translation sessions also return translated audio. Captions intentionally do not play it;
+      // Translation sessions also return translated audio. Live Subtitles intentionally do not play it;
       // the remote track is left unattached while transcript deltas are rendered on screen.
       pc.ontrack = () => {}
 
@@ -217,7 +217,7 @@ export default function CaptionsMode() {
         if (pc.connectionState === 'connected') setSessionState(pausedRef.current ? 'paused' : 'listening')
         else if (['disconnected', 'connecting'].includes(pc.connectionState)) setSessionState('recovering')
         else if (['failed', 'closed'].includes(pc.connectionState)) {
-          setError('The live caption connection ended. Start captions again to continue.')
+          setError('The Live Subtitles connection ended. Start again to continue.')
           stopSession(false, true)
         }
       })
@@ -239,19 +239,19 @@ export default function CaptionsMode() {
         },
       })
       const answerSdp = await sdpResponse.text()
-      if (!sdpResponse.ok) throw new Error(answerSdp || 'Could not connect realtime translation captions.')
+      if (!sdpResponse.ok) throw new Error(answerSdp || 'Could not connect Live Subtitles.')
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
 
       await new Promise((resolve, reject) => {
         if (channel.readyState === 'open') return resolve()
-        const timer = setTimeout(() => reject(new Error('Realtime captions connection timed out.')), 10000)
+        const timer = setTimeout(() => reject(new Error('Live Subtitles connection timed out.')), 10000)
         channel.addEventListener('open', () => { clearTimeout(timer); resolve() }, { once: true })
-        channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Realtime captions could not connect.')) }, { once: true })
+        channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Live Subtitles could not connect.')) }, { once: true })
       })
 
       setSessionState('listening')
     } catch (err) {
-      setError(err.message || 'Could not start Universal Captions.')
+      setError(err.message || 'Could not start Live Subtitles.')
       stopSession(false, false)
     }
   }
@@ -330,14 +330,14 @@ export default function CaptionsMode() {
           ? 'Listening · translating live'
           : 'Ready'
 
-  const displayOriginal = interimOriginal || latest?.original || (active ? 'Waiting for speech…' : 'Start captions when you’re ready.')
+  const displayOriginal = interimOriginal || latest?.original || (active ? 'Waiting for speech…' : 'Start Live Subtitles when you’re ready.')
   const displayTranslation = interimTranslated || (!interimOriginal ? latest?.translated : '')
 
   return <section className="captions-wrap">
     <header className="captions-head">
-      <div className="eyebrow"><Captions size={14}/> Universal Captions</div>
+      <div className="eyebrow"><Captions size={14}/> Live Subtitles</div>
       <h1>Understand what’s being said, live.</h1>
-      <p>Source speech and its translation now stream onto the screen while the person is still speaking.</p>
+      <p>Temporary translated subtitles stream onto the screen while the person is still speaking.</p>
     </header>
 
     <div className="captions-toolbar">
@@ -345,11 +345,11 @@ export default function CaptionsMode() {
         <option value="microphone">Microphone</option>
         {screenSupported && <option value="screen">Tab / screen audio</option>}
       </select></label>
-      <label><span>Translate captions to</span><select value={target} onChange={e => changeTarget(e.target.value)}>
+      <label><span>Translate subtitles to</span><select value={target} onChange={e => changeTarget(e.target.value)}>
         {TARGETS.map(value => <option key={value}>{value}</option>)}
       </select></label>
-      <button className="captions-icon-btn" onClick={enterFullscreen} title="Fullscreen captions"><Expand size={17}/></button>
-      <button className="captions-icon-btn" onClick={clearCaptions} disabled={!captions.length && !interimOriginal && !interimTranslated} title="Clear captions"><Trash2 size={17}/></button>
+      <button className="captions-icon-btn" onClick={enterFullscreen} title="Fullscreen subtitles"><Expand size={17}/></button>
+      <button className="captions-icon-btn" onClick={clearCaptions} disabled={!captions.length && !interimOriginal && !interimTranslated} title="Clear subtitles"><Trash2 size={17}/></button>
     </div>
 
     <div className={`captions-stage ${active ? 'active' : ''}`}>
@@ -375,13 +375,13 @@ export default function CaptionsMode() {
       {error && <div className="error captions-error">{error}</div>}
 
       <div className="captions-controls">
-        {!active ? <button className="captions-start" onClick={startSession} disabled={sessionState === 'connecting'}><Mic size={19}/> Start captions</button> : <>
+        {!active ? <button className="captions-start" onClick={startSession} disabled={sessionState === 'connecting'}><Mic size={19}/> Start subtitles</button> : <>
           <button className="captions-pause" onClick={togglePause}>{paused ? <Play size={18}/> : <Pause size={18}/>} {paused ? 'Resume' : 'Pause'}</button>
           <button className="captions-stop" onClick={() => stopSession()}><Square size={17}/> End</button>
         </>}
       </div>
     </div>
 
-    <p className="captions-footnote">Captions stay in this session and are not added to Ana’s personal language memory.</p>
+    <p className="captions-footnote">Live Subtitles are temporary. They stay only in this session and are not saved as a meeting transcript or added to Ana’s personal language memory.</p>
   </section>
 }
