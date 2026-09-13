@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, Clipboard, Languages, LogOut, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowLeftRight, Check, Clipboard, Languages, LoaderCircle, LogOut, Mic, Plus, RotateCcw, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { useTranslateDictation } from './useTranslateDictation.js'
 import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
 import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
@@ -68,6 +69,41 @@ export default function App() {
   const [newSource, setNewSource] = useState('')
   const [newPreferred, setNewPreferred] = useState('')
   const inputRef = useRef(null)
+  const dictationPositionRef = useRef(null)
+  const insertDictation = text => {
+    const position = dictationPositionRef.current
+    setInput(previous => {
+      const start = Math.min(position?.start ?? previous.length, previous.length)
+      const end = Math.min(position?.end ?? start, previous.length)
+      const before = previous.slice(0, start)
+      const after = previous.slice(end)
+      const needsSpaceBefore = before && !/\s$/.test(before)
+      const needsSpaceAfter = after && !/^\s|^[.,!?;:]/.test(after)
+      const inserted = `${needsSpaceBefore ? ' ' : ''}${text}${needsSpaceAfter ? ' ' : ''}`
+      const next = before + inserted + after
+      const caret = before.length + inserted.length
+      queueMicrotask(() => {
+        inputRef.current?.focus()
+        inputRef.current?.setSelectionRange?.(caret, caret)
+      })
+      return next
+    })
+    dictationPositionRef.current = null
+  }
+  const { state: dictationState, toggle: toggleDictation, supported: dictationSupported } = useTranslateDictation({
+    onTranscript: insertDictation,
+    onError: message => setError(message),
+  })
+  const handleDictation = () => {
+    if (dictationState === 'idle') {
+      dictationPositionRef.current = {
+        start: inputRef.current?.selectionStart ?? input.length,
+        end: inputRef.current?.selectionEnd ?? input.length,
+      }
+      setError('')
+    }
+    toggleDictation()
+  }
 
   useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
   useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
@@ -170,7 +206,7 @@ export default function App() {
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
-        <article className="pane input-pane"><div className="pane-label">Original</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder="Type or paste anything…" onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>⌘/Ctrl + Enter</span></div></article>
+        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>Original</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder="Type, paste, or speak anything…" onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
         <article className="pane output-pane"><div className="pane-label">{target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">Your translation will appear here.</div>}</div><div className="pane-foot"><span>{output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
