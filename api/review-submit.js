@@ -8,6 +8,7 @@ function escapeHtml(value = '') {
 }
 
 const clean = (value, max) => String(value || '').trim().slice(0, max)
+const FEATURES = new Set(['Translate', 'Live interpreter', 'Talk for me', 'Live Subtitles', 'Meeting Listen', 'Conversation Room', 'Documents', 'Camera'])
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
 
   if (name.length < 2) return res.status(400).json({ error: 'Please add a display name.' })
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Please choose a rating from 1 to 5.' })
-  if (!feature) return res.status(400).json({ error: 'Please choose the Ana feature you used.' })
+  if (!FEATURES.has(feature)) return res.status(400).json({ error: 'Please choose a valid Ana feature.' })
   if (review.length < 20) return res.status(400).json({ error: 'Please tell us a little more about your experience.' })
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Please check the email address.' })
 
