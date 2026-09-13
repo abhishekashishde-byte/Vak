@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
   const resendKey = process.env.RESEND_API_KEY
   const adminEmail = process.env.ANA_ADMIN_EMAIL
-  const from = process.env.ANA_NOTIFY_FROM || 'Ana Notifications <onboarding@resend.dev>'
+  const from = process.env.ANA_NOTIFY_FROM || 'Ana Notifications <notifications@tri-vana.de>'
 
   if (!resendKey || !adminEmail) {
     console.warn('[auth-notify] Email notification is not configured')
