@@ -2,6 +2,7 @@ let installed = false
 let overlay = null
 let manualOwnerView = false
 let sessionPresent = false
+let renderFrame = null
 
 const COPY = {
   English: {
@@ -74,6 +75,20 @@ const COPY = {
 
 const STATES = ['connecting', 'listening', 'thinking', 'speaking', 'needs-user', 'idle']
 
+function setText(node, value) {
+  if (!node) return false
+  const next = String(value ?? '')
+  if (node.textContent === next) return false
+  node.textContent = next
+  return true
+}
+
+function setClass(node, name, enabled) {
+  if (!node) return
+  const has = node.classList.contains(name)
+  if (has !== Boolean(enabled)) node.classList.toggle(name, Boolean(enabled))
+}
+
 function getConversation() {
   const stage = document.querySelector('.talk-wrap.voice-stage')
   const card = stage?.querySelector('.voice-card')
@@ -119,7 +134,7 @@ function ensureReturnButton(stage, language) {
     stage.appendChild(button)
   }
   const copy = COPY[language] || COPY.English
-  button.textContent = copy.showAgain
+  setText(button, copy.showAgain)
   return button
 }
 
@@ -132,7 +147,7 @@ function render() {
   if (!conversation) {
     if (sessionPresent) manualOwnerView = false
     sessionPresent = false
-    overlay?.classList.remove('visible')
+    setClass(overlay, 'visible', false)
     removeReturnButtons()
     return
   }
@@ -143,33 +158,41 @@ function render() {
   const current = copy[state] || copy.idle
 
   const node = ensureOverlay()
-  node.dataset.state = state
-  node.querySelector('.counterparty-copy strong').textContent = current[0]
-  node.querySelector('.counterparty-copy span').textContent = current[1]
-  node.querySelector('.counterparty-language').textContent = `Ana · ${otherLanguage}`
+  if (node.dataset.state !== state) node.dataset.state = state
+  setText(node.querySelector('.counterparty-copy strong'), current[0])
+  setText(node.querySelector('.counterparty-copy span'), current[1])
+  setText(node.querySelector('.counterparty-language'), `Ana · ${otherLanguage}`)
 
   const ownerButton = node.querySelector('.counterparty-owner-button')
-  ownerButton.textContent = ownerPending ? copy.ownerNeeded : copy.owner
-  ownerButton.classList.toggle('attention', ownerPending)
+  setText(ownerButton, ownerPending ? copy.ownerNeeded : copy.owner)
+  setClass(ownerButton, 'attention', ownerPending)
 
   if (manualOwnerView) {
-    node.classList.remove('visible')
+    setClass(node, 'visible', false)
     ensureReturnButton(stage, otherLanguage)
   } else {
     removeReturnButtons()
-    node.classList.add('visible')
+    setClass(node, 'visible', true)
   }
+}
+
+function scheduleRender() {
+  if (renderFrame != null) return
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = null
+    render()
+  })
 }
 
 export function installCounterpartyView() {
   if (installed || typeof window === 'undefined' || typeof MutationObserver === 'undefined') return
   installed = true
 
-  const observer = new MutationObserver(() => render())
+  const observer = new MutationObserver(scheduleRender)
   const start = () => {
     if (!document.body) return
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
-    render()
+    scheduleRender()
   }
 
   if (document.body) start()
