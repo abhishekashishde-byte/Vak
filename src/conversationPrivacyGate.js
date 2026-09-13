@@ -32,8 +32,18 @@ function roomDetails(button) {
   return { mode: 'Conversation Room', languages: languages.length ? languages : ['English'], context: '' }
 }
 
+function captionsDetails(button) {
+  if (!button.classList.contains('captions-start') || !/start captions/i.test(button.textContent || '')) return null
+  const stage = button.closest('.captions-wrap')
+  if (!stage) return null
+  const selects = stage.querySelectorAll('.captions-toolbar select')
+  const target = selects?.[1]?.value || 'English'
+  const languages = target && target !== 'Original only' ? ['English', target] : ['English']
+  return { mode: 'Universal Captions', languages, context: '' }
+}
+
 function detailsFor(button) {
-  return talkDetails(button) || liveDetails(button) || roomDetails(button)
+  return talkDetails(button) || liveDetails(button) || roomDetails(button) || captionsDetails(button)
 }
 
 function ensureOverlay() {
@@ -44,7 +54,7 @@ function ensureOverlay() {
     <div class="ana-privacy-card" role="dialog" aria-modal="true" aria-label="Voice privacy">
       <div class="ana-privacy-kicker">Privacy before voice</div>
       <h2>Make the conversation transparent.</h2>
-      <p class="ana-privacy-owner-copy">Before Ana starts listening, show or explain the notice below to the other person.</p>
+      <p class="ana-privacy-owner-copy">Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed.</p>
       <div class="ana-privacy-sensitive" hidden>Extra privacy mode is active for this conversation.</div>
       <div class="ana-privacy-disclosures"></div>
       <div class="ana-privacy-facts">
