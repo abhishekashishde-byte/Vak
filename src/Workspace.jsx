@@ -3,6 +3,7 @@ import { Camera, Captions, Languages, Mic, MessagesSquare, ScanText, ShieldCheck
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
+import TalkPermissionBoundary from './TalkPermissionBoundary.jsx'
 import RoomMode from './RoomMode.jsx'
 import CaptionsMode from './CaptionsMode.jsx'
 import CameraMode from './CameraMode.jsx'
@@ -11,6 +12,7 @@ import PrivacySettings from './PrivacySettings.jsx'
 import NetworkStatus from './NetworkStatus.jsx'
 import './live.css'
 import './talk.css'
+import './talk-consent.css'
 import './room.css'
 import './captions.css'
 import './camera.css'
@@ -36,7 +38,7 @@ export default function Workspace() {
     {mode === 'translate' && <App/>}
     {mode === 'scan' && <main className="app-shell"><ScanMode/></main>}
     {mode === 'live' && <main className="app-shell"><LiveMode/></main>}
-    {mode === 'talk' && <main className="app-shell"><TalkForMe/></main>}
+    {mode === 'talk' && <main className="app-shell"><TalkPermissionBoundary><TalkForMe/></TalkPermissionBoundary></main>}
     {mode === 'room' && <main className="app-shell"><RoomMode/></main>}
     {mode === 'captions' && <main className="app-shell"><CaptionsMode/></main>}
     {mode === 'camera' && <main className="app-shell"><CameraMode/></main>}
