@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f4f1ea" />
+  <title>Ana Reviews — Real customer experiences</title>
+  <meta name="description" content="Search real Ana customer experiences or submit your own review for moderation." />
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#171717;background:#f4f1ea}*{box-sizing:border-box}body{margin:0;background:#f4f1ea;background-image:linear-gradient(rgba(255,255,255,.34),rgba(255,255,255,.34)),repeating-radial-gradient(circle at 17% 22%,rgba(71,63,49,.04) 0 1px,transparent 1px 3px)}a{color:inherit}.wrap{width:min(1080px,calc(100% - 28px));margin:auto}.top{height:72px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(43,39,33,.12)}.brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:800}.brand img{width:35px;height:35px}.nav{display:flex;gap:7px;flex-wrap:wrap}.nav a{text-decoration:none;font-size:11px;font-weight:700;padding:8px 10px;border-radius:999px}.nav a:hover{background:#ebe5dc}.hero{padding:72px 0 40px;max-width:760px}.kicker{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#8b8277;font-weight:750}.hero h1{font-size:clamp(42px,8vw,76px);line-height:.94;letter-spacing:-.055em;margin:12px 0 17px}.hero p{font-size:16px;line-height:1.6;color:#6f685f;max-width:650px}.review-tools{display:flex;gap:9px;margin:5px 0 22px}.review-tools input,.review-tools select{height:44px;border:1px solid rgba(43,39,33,.14);background:#fffdfa;border-radius:12px;padding:0 13px;color:#26231f;outline:none}.review-tools input{flex:1}.reviews{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:62px}.review{border:1px solid rgba(43,39,33,.12);border-radius:17px;background:rgba(255,253,249,.75);padding:19px}.review-top{display:flex;justify-content:space-between;gap:12px}.review-name strong{display:block;font-size:14px}.review-name span{display:block;font-size:10px;color:#8b8378;margin-top:3px}.stars{letter-spacing:2px;font-size:13px}.review p{font-size:13px;line-height:1.6;color:#514b43;margin:15px 0}.tags{display:flex;gap:6px;flex-wrap:wrap}.tags span{font-size:9px;background:#eee8de;border-radius:999px;padding:5px 7px;color:#71695f}.empty{grid-column:1/-1;border:1px dashed rgba(43,39,33,.18);border-radius:17px;padding:36px;text-align:center;color:#756d63}.empty strong{display:block;color:#38332d;margin-bottom:5px}.submit-section{border-top:1px solid rgba(43,39,33,.12);padding:55px 0 72px;display:grid;grid-template-columns:.8fr 1.2fr;gap:38px}.submit-copy h2{font-size:34px;letter-spacing:-.04em;margin:8px 0 12px}.submit-copy p{font-size:13px;color:#71695f;line-height:1.6}.moderation{font-size:10px!important;background:#ebe5dc;padding:11px;border-radius:11px}.form{border:1px solid rgba(43,39,33,.12);background:#fffdfa;border-radius:18px;padding:18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}.field label{font-size:10px;font-weight:750;color:#625b52}.field input,.field select,.field textarea{width:100%;border:1px solid rgba(43,39,33,.13);border-radius:10px;background:white;padding:10px 11px;outline:none;color:#222}.field textarea{min-height:130px;resize:vertical}.rating{display:flex;gap:6px}.rating button{width:37px;height:37px;border:1px solid rgba(43,39,33,.13);background:white;border-radius:9px;cursor:pointer}.rating button.active{background:#171717;color:white}.submit-btn{margin-top:13px;width:100%;border:0;border-radius:11px;background:#171717;color:white;font-weight:800;padding:12px 15px;cursor:pointer}.submit-btn:disabled{opacity:.5}.status{font-size:11px;margin:10px 0 0;min-height:16px}.status.ok{color:#44633f}.status.err{color:#9c3e47}.honeypot{position:absolute!important;left:-10000px!important}.foot{border-top:1px solid rgba(43,39,33,.1);padding:20px 0 35px;font-size:10px;color:#847c72;display:flex;justify-content:space-between;gap:16px}.foot nav{display:flex;gap:12px}.foot a{text-decoration:none}
+    @media(max-width:720px){.top{height:auto;padding:12px 0;align-items:flex-start}.nav{justify-content:flex-end}.hero{padding:50px 0 28px}.review-tools{flex-direction:column}.review-tools input,.review-tools select{width:100%}.reviews{grid-template-columns:1fr}.submit-section{grid-template-columns:1fr;gap:18px}.grid{grid-template-columns:1fr}.field.full{grid-column:auto}.foot{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top"><a class="brand" href="/meet-ana/"><img src="/ana-app-icon.png" alt="Ana"><span>Ana</span></a><nav class="nav"><a href="/meet-ana/">Product</a><a href="/learn/">Learn</a><a href="/reviews/" aria-current="page">Reviews</a><a href="/developers/">Developers</a><a href="/">Open Ana</a></nav></header>
+
+    <main>
+      <section class="hero"><div class="kicker">Customer experiences</div><h1>How people use Ana.</h1><p>Search published reviews by feature, language or country. Reviews are submitted by users and checked before publication so the page does not become a wall of spam or personal information.</p></section>
+
+      <div class="review-tools"><input id="search" type="search" placeholder="Search reviews — e.g. Germany, Hindi, Talk for me"><select id="featureFilter"><option value="">All features</option><option>Translate</option><option>Live interpreter</option><option>Talk for me</option><option>Live Subtitles</option><option>Meeting Listen</option><option>Conversation Room</option><option>Documents</option><option>Camera</option></select></div>
+      <section id="reviews" class="reviews" aria-live="polite"><div class="empty"><strong>Loading reviews…</strong></div></section>
+
+      <section class="submit-section" id="write-review">
+        <div class="submit-copy"><div class="kicker">Share your experience</div><h2>Used Ana? Tell others what worked.</h2><p>Specific experiences are the most useful: what you were trying to do, which languages you used and what Ana helped you accomplish.</p><p class="moderation"><b>Before it appears publicly:</b> your review is sent for moderation. Your private contact email is never published. Reviews may be rejected for spam, abuse, personal data or unverifiable promotional content.</p></div>
+        <form class="form" id="reviewForm">
+          <div class="grid">
+            <div class="field"><label for="name">Display name *</label><input id="name" name="name" maxlength="60" required></div>
+            <div class="field"><label for="country">Country</label><input id="country" name="country" maxlength="60" placeholder="Germany"></div>
+            <div class="field"><label for="languages">Languages used</label><input id="languages" name="languages" maxlength="100" placeholder="Hindi → German"></div>
+            <div class="field"><label for="feature">Ana feature *</label><select id="feature" name="feature" required><option value="">Choose one</option><option>Translate</option><option>Live interpreter</option><option>Talk for me</option><option>Live Subtitles</option><option>Meeting Listen</option><option>Conversation Room</option><option>Documents</option><option>Camera</option></select></div>
+            <div class="field full"><label>Rating *</label><div class="rating" id="ratingButtons" aria-label="Rating"><button type="button" data-rating="1">1★</button><button type="button" data-rating="2">2★</button><button type="button" data-rating="3">3★</button><button type="button" data-rating="4">4★</button><button type="button" data-rating="5">5★</button></div><input type="hidden" id="rating" name="rating" required></div>
+            <div class="field full"><label for="review">Your review *</label><textarea id="review" name="review" maxlength="1600" minlength="20" required placeholder="What were you trying to do, and how did Ana help?"></textarea></div>
+            <div class="field full"><label for="email">Private contact email — optional</label><input id="email" name="email" type="email" maxlength="160" placeholder="Only used if we need to verify your review"></div>
+            <div class="honeypot" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+          </div>
+          <button class="submit-btn" id="submitBtn" type="submit">Send review for moderation</button><p class="status" id="status" role="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer class="foot"><span>© Ana · Your voice, in any language.</span><nav><a href="/learn/">Learn</a><a href="/developers/">Developers</a><a href="/">Open Ana</a></nav></footer>
+  </div>
+<script>
+  const reviewsNode = document.getElementById('reviews')
+  const search = document.getElementById('search')
+  const featureFilter = document.getElementById('featureFilter')
+  let reviews = []
+
+  function esc(value=''){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]))}
+  function render(){
+    const q = search.value.trim().toLowerCase(); const feature = featureFilter.value
+    const visible = reviews.filter(r => (!feature || r.feature === feature) && (!q || [r.name,r.country,r.languages,r.feature,r.review].join(' ').toLowerCase().includes(q)))
+    if(!visible.length){reviewsNode.innerHTML = `<div class="empty"><strong>${reviews.length ? 'No reviews match that search.' : 'No published reviews yet.'}</strong><span>${reviews.length ? 'Try another word or feature.' : 'Ana is not going to invent testimonials. Be among the first to share a real experience.'}</span></div>`;return}
+    reviewsNode.innerHTML = visible.map(r => `<article class="review"><div class="review-top"><div class="review-name"><strong>${esc(r.name)}</strong><span>${esc([r.country,r.languages].filter(Boolean).join(' · '))}</span></div><div class="stars" aria-label="${Number(r.rating)||0} out of 5">${'★'.repeat(Number(r.rating)||0)}${'☆'.repeat(5-(Number(r.rating)||0))}</div></div><p>${esc(r.review)}</p><div class="tags"><span>${esc(r.feature)}</span>${r.verified ? '<span>Verified Ana user</span>' : ''}</div></article>`).join('')
+  }
+  fetch('/reviews.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).then(data=>{reviews=Array.isArray(data)?data:[];render()}).catch(()=>{reviews=[];render()})
+  search.addEventListener('input',render); featureFilter.addEventListener('change',render)
+
+  const ratingInput=document.getElementById('rating'); document.querySelectorAll('#ratingButtons button').forEach(button=>button.addEventListener('click',()=>{ratingInput.value=button.dataset.rating;document.querySelectorAll('#ratingButtons button').forEach(b=>b.classList.toggle('active',Number(b.dataset.rating)<=Number(button.dataset.rating))) }))
+  document.getElementById('reviewForm').addEventListener('submit',async event=>{
+    event.preventDefault(); const status=document.getElementById('status'); const submit=document.getElementById('submitBtn');
+    if(!ratingInput.value){status.className='status err';status.textContent='Please choose a rating.';return}
+    const data=Object.fromEntries(new FormData(event.currentTarget).entries()); data.rating=Number(data.rating)
+    submit.disabled=true; status.className='status'; status.textContent='Sending…'
+    try{const response=await fetch('/api/review-submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not submit review.');status.className='status ok';status.textContent=result.message||'Thank you. Your review was sent for moderation.';event.currentTarget.reset();ratingInput.value='';document.querySelectorAll('#ratingButtons button').forEach(b=>b.classList.remove('active'))}catch(error){status.className='status err';status.textContent=error.message||'Could not submit review.'}finally{submit.disabled=false}
+  })
+</script>
+</body>
+</html>
