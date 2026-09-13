@@ -501,15 +501,16 @@ CRITICAL FACT VERIFICATION — mandatory:
     closingResponseRef.current = null
 
     try {
-      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
-      const tokenData = await tokenResponse.json()
-      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Ana voice.')
-
+      // Keep microphone access directly attached to the user's Start tap on iOS/WebKit.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
       mediaRef.current = stream
       startMeter(stream)
+
+      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
+      const tokenData = await tokenResponse.json()
+      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Ana voice.')
 
       const pc = new RTCPeerConnection()
       peerRef.current = pc
