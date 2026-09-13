@@ -4,6 +4,13 @@ let installed = false
 let bypassButton = null
 let overlay = null
 let pendingButton = null
+let pendingDetails = null
+
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent || '')
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
 
 function talkDetails(button) {
   const stage = button.closest('.talk-wrap.ready-stage')
@@ -70,6 +77,22 @@ function ensureOverlay() {
   overlay.querySelector('.ana-privacy-cancel')?.addEventListener('click', closeGate)
   overlay.querySelector('.ana-privacy-continue')?.addEventListener('click', () => {
     const button = pendingButton
+    const details = pendingDetails
+
+    // iOS/WebKit can reject getUserMedia when Live is started by a synthetic
+    // button.click() after the privacy modal. Preserve the privacy approval,
+    // then require one genuine tap on the real Live start button so microphone
+    // access is initiated by the user's finger rather than a replayed click.
+    if (details?.mode === 'Live interpreter' && isIOSDevice()) {
+      if (button?.isConnected) button.dataset.anaPrivacyBypass = '1'
+      closeGate()
+      requestAnimationFrame(() => {
+        try { button?.focus?.({ preventScroll: true }) } catch {}
+        try { button?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }) } catch {}
+      })
+      return
+    }
+
     closeGate()
     if (!button?.isConnected) return
     bypassButton = button
@@ -84,11 +107,13 @@ function ensureOverlay() {
 
 function closeGate() {
   pendingButton = null
+  pendingDetails = null
   overlay?.classList.remove('visible')
 }
 
 function openGate(button, details) {
   pendingButton = button
+  pendingDetails = details
   const node = ensureOverlay()
   const disclosures = node.querySelector('.ana-privacy-disclosures')
   disclosures.innerHTML = ''
@@ -109,6 +134,9 @@ function openGate(button, details) {
   if (details.mode === 'Talk for me') {
     ownerCopy.textContent = 'Ana will identify herself as an AI communication assistant, explain that speech is processed by an AI service, and ask the other person before the task begins.'
     continueButton.textContent = 'Start — Ana will ask them'
+  } else if (details.mode === 'Live interpreter' && isIOSDevice()) {
+    ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed. On iPhone, after Continue, tap Start conversation once more so the microphone opens directly from your tap.'
+    continueButton.textContent = 'Continue'
   } else {
     ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed.'
     continueButton.textContent = "I've informed them — start"
