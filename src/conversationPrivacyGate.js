@@ -49,8 +49,17 @@ function captionsDetails(button) {
   return { mode: 'Universal Captions', languages, context: '' }
 }
 
+function meetingDetails(button) {
+  if (!button.classList.contains('meeting-start') || !/start listening/i.test(button.textContent || '')) return null
+  const stage = button.closest('.meeting-wrap')
+  if (!stage) return null
+  const selects = stage.querySelectorAll('.meeting-toolbar select')
+  const target = selects?.[1]?.value || 'English'
+  return { mode: 'Meeting Listen', languages: [target], context: '' }
+}
+
 function detailsFor(button) {
-  return talkDetails(button) || liveDetails(button) || roomDetails(button) || captionsDetails(button)
+  return talkDetails(button) || liveDetails(button) || roomDetails(button) || captionsDetails(button) || meetingDetails(button)
 }
 
 function ensureOverlay() {
@@ -79,11 +88,10 @@ function ensureOverlay() {
     const button = pendingButton
     const details = pendingDetails
 
-    // iOS/WebKit can reject getUserMedia when Live is started by a synthetic
-    // button.click() after the privacy modal. Preserve the privacy approval,
-    // then require one genuine tap on the real Live start button so microphone
-    // access is initiated by the user's finger rather than a replayed click.
-    if (details?.mode === 'Live interpreter' && isIOSDevice()) {
+    // Microphone and screen capture must remain attached to a genuine user tap.
+    // After the privacy gate on iPhone Live and for Meeting Listen, return to the
+    // real start button instead of replaying it synthetically.
+    if ((details?.mode === 'Live interpreter' && isIOSDevice()) || details?.mode === 'Meeting Listen') {
       if (button?.isConnected) button.dataset.anaPrivacyBypass = '1'
       closeGate()
       requestAnimationFrame(() => {
@@ -136,6 +144,9 @@ function openGate(button, details) {
     continueButton.textContent = 'Start — Ana will ask them'
   } else if (details.mode === 'Live interpreter' && isIOSDevice()) {
     ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed. On iPhone, after Continue, tap Start conversation once more so the microphone opens directly from your tap.'
+    continueButton.textContent = 'Continue'
+  } else if (details.mode === 'Meeting Listen') {
+    ownerCopy.textContent = 'Before Ana listens to a meeting, make sure participants are appropriately informed. Ana saves the text transcript on this device but does not store meeting audio. After Continue, tap Start listening once more so browser audio capture opens from your real tap.'
     continueButton.textContent = 'Continue'
   } else {
     ownerCopy.textContent = 'Before Ana starts listening, make sure the people whose speech may be captured are appropriately informed.'
