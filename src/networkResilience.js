@@ -77,7 +77,7 @@ export function installNetworkResilience() {
     nativeFetch = window.fetch.bind(window)
     window.fetch = (input, init) => {
       if (navigator.onLine === false && aiEndpoint(input)) {
-        const error = new Error('Ana needs a connection for this feature. Your current work is safe — reconnect to continue.')
+        const error = new Error('Ana needs a connection for this feature. Reconnect to continue; Ana will not guess or invent a result while offline.')
         error.code = 'ANA_OFFLINE'
         return Promise.reject(error)
       }
