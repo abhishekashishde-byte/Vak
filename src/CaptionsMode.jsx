@@ -41,6 +41,8 @@ export default function CaptionsMode() {
   const dataChannelRef = useRef(null)
   const streamRef = useRef(null)
   const activeRef = useRef(false)
+  const pausedRef = useRef(false)
+  const targetRef = useRef(target)
   const scrollRef = useRef(null)
 
   const active = ['connecting', 'listening', 'recovering'].includes(sessionState) || paused
@@ -66,19 +68,20 @@ export default function CaptionsMode() {
   const addCompletedCaption = transcript => {
     const original = clean(transcript)
     if (!original) return
+    const currentTarget = targetRef.current
     const id = `${Date.now()}-${Math.random()}`
     const item = {
       id,
       original,
-      translated: target === 'Original only' ? '' : null,
-      target,
+      translated: currentTarget === 'Original only' ? '' : null,
+      target: currentTarget,
       createdAt: Date.now(),
     }
     setCaptions(current => [...current, item])
     setInterim('')
 
-    if (target === 'Original only') return
-    translateCaption(original, target)
+    if (currentTarget === 'Original only') return
+    translateCaption(original, currentTarget)
       .then(translated => {
         setCaptions(current => current.map(value => value.id === id ? { ...value, translated } : value))
       })
@@ -90,13 +93,13 @@ export default function CaptionsMode() {
   const handleRealtimeEvent = event => {
     switch (event.type) {
       case 'input_audio_buffer.speech_started':
-        if (activeRef.current && !paused) setSessionState('listening')
+        if (activeRef.current && !pausedRef.current) setSessionState('listening')
         break
       case 'conversation.item.input_audio_transcription.delta':
-        if (!paused) setInterim(current => `${current}${event.delta || ''}`)
+        if (!pausedRef.current) setInterim(current => `${current}${event.delta || ''}`)
         break
       case 'conversation.item.input_audio_transcription.completed':
-        if (!paused) addCompletedCaption(event.transcript)
+        if (!pausedRef.current) addCompletedCaption(event.transcript)
         break
       case 'error':
         setError(event.error?.message || 'Live captioning was interrupted.')
@@ -131,6 +134,7 @@ export default function CaptionsMode() {
 
     setError('')
     setInterim('')
+    pausedRef.current = false
     setPaused(false)
     setSessionState('connecting')
     activeRef.current = true
@@ -155,7 +159,7 @@ export default function CaptionsMode() {
 
       pc.addEventListener('connectionstatechange', () => {
         if (!activeRef.current) return
-        if (pc.connectionState === 'connected') setSessionState(paused ? 'paused' : 'listening')
+        if (pc.connectionState === 'connected') setSessionState(pausedRef.current ? 'paused' : 'listening')
         else if (['disconnected', 'connecting'].includes(pc.connectionState)) setSessionState('recovering')
         else if (['failed', 'closed'].includes(pc.connectionState)) {
           setError('The live caption connection ended. Start captions again to continue.')
@@ -221,6 +225,7 @@ export default function CaptionsMode() {
 
   function stopSession(clearInterim = true) {
     activeRef.current = false
+    pausedRef.current = false
     try { dataChannelRef.current?.close() } catch {}
     dataChannelRef.current = null
     try { peerRef.current?.close() } catch {}
@@ -234,7 +239,8 @@ export default function CaptionsMode() {
 
   const togglePause = () => {
     if (!activeRef.current) return
-    const next = !paused
+    const next = !pausedRef.current
+    pausedRef.current = next
     setPaused(next)
     setTrackEnabled(!next)
     setSessionState(next ? 'paused' : 'listening')
@@ -242,6 +248,7 @@ export default function CaptionsMode() {
   }
 
   const changeTarget = value => {
+    targetRef.current = value
     setTarget(value)
     rememberPersonalLanguagePreference?.({ lastCaptionTarget: value })
   }
