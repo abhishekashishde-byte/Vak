@@ -4,7 +4,31 @@ import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from '.
 
 const TARGETS = ['Original only', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 
+const LANGUAGE_CODES = {
+  'Original only': 'en',
+  German: 'de',
+  'Swabian German (Schwäbisch)': 'de',
+  'Bavarian German (Bairisch)': 'de',
+  'Low German (Plattdeutsch)': 'de',
+  English: 'en',
+  Hindi: 'hi',
+  Hinglish: 'hi',
+  Bengali: 'bn',
+  Tamil: 'ta',
+  Telugu: 'te',
+  Marathi: 'mr',
+  Gujarati: 'gu',
+  Punjabi: 'pa',
+  Malayalam: 'ml',
+  Kannada: 'kn',
+  Urdu: 'ur',
+  French: 'fr',
+  Spanish: 'es',
+  Italian: 'it',
+}
+
 const clean = value => String(value || '').trim()
+const codeFor = target => LANGUAGE_CODES[target] || 'en'
 
 function initialTarget() {
   const memory = getPersonalLanguageMemory?.() || {}
@@ -13,27 +37,13 @@ function initialTarget() {
   return 'English'
 }
 
-async function translateCaption(text, target) {
-  if (!text || target === 'Original only') return ''
-  let instructions = `You are Ana creating live translated subtitles. Detect the source language automatically and translate ONLY the supplied speech into natural ${target}. Preserve the speaker's first-person perspective, intent, tone, names, numbers, dates, uncertainty and factual meaning. Do not answer questions, summarize, explain, censor or add commentary. If the speech is already in ${target}, return it naturally without changing its meaning. Return ONLY the translated subtitle text.`
-  if (target === 'Hinglish') instructions += ' Hinglish means natural conversational Hindi written entirely in Roman/Latin letters. Never use Devanagari.'
-
-  const response = await fetch('/api/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, instructions }),
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || 'Ana could not translate this caption.')
-  return clean(data.content)
-}
-
 export default function CaptionsMode() {
   const [target, setTarget] = useState(initialTarget)
   const [source, setSource] = useState('microphone')
   const [sessionState, setSessionState] = useState('idle')
   const [paused, setPaused] = useState(false)
-  const [interim, setInterim] = useState('')
+  const [interimOriginal, setInterimOriginal] = useState('')
+  const [interimTranslated, setInterimTranslated] = useState('')
   const [captions, setCaptions] = useState([])
   const [error, setError] = useState('')
 
@@ -44,17 +54,19 @@ export default function CaptionsMode() {
   const pausedRef = useRef(false)
   const targetRef = useRef(target)
   const scrollRef = useRef(null)
+  const originalBufferRef = useRef('')
+  const translatedBufferRef = useRef('')
+  const segmentTimerRef = useRef(null)
 
   const active = ['connecting', 'listening', 'recovering'].includes(sessionState) || paused
   const screenSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
   const latest = captions[captions.length - 1] || null
-
   const visibleCaptions = useMemo(() => captions.slice(-80), [captions])
 
-  useEffect(() => () => stopSession(false), [])
+  useEffect(() => () => stopSession(false, false), [])
   useEffect(() => {
     scrollRef.current?.scrollTo?.({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [captions, interim])
+  }, [captions, interimOriginal, interimTranslated])
 
   const setTrackEnabled = enabled => {
     streamRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
@@ -65,43 +77,74 @@ export default function CaptionsMode() {
     if (channel?.readyState === 'open') channel.send(JSON.stringify(event))
   }
 
-  const addCompletedCaption = transcript => {
-    const original = clean(transcript)
-    if (!original) return
+  const clearSegmentTimer = () => {
+    if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current)
+    segmentTimerRef.current = null
+  }
+
+  const commitLiveSegment = (force = false) => {
+    clearSegmentTimer()
+    const original = clean(originalBufferRef.current)
+    const translated = clean(translatedBufferRef.current)
     const currentTarget = targetRef.current
-    const id = `${Date.now()}-${Math.random()}`
-    const item = {
-      id,
+
+    if (!original) {
+      originalBufferRef.current = ''
+      translatedBufferRef.current = ''
+      setInterimOriginal('')
+      setInterimTranslated('')
+      return
+    }
+
+    if (!force && currentTarget !== 'Original only' && !translated) {
+      segmentTimerRef.current = setTimeout(() => commitLiveSegment(true), 650)
+      return
+    }
+
+    setCaptions(current => [...current, {
+      id: `${Date.now()}-${Math.random()}`,
       original,
-      translated: currentTarget === 'Original only' ? '' : null,
+      translated: currentTarget === 'Original only' ? '' : translated,
       target: currentTarget,
       createdAt: Date.now(),
-    }
-    setCaptions(current => [...current, item])
-    setInterim('')
+    }])
 
-    if (currentTarget === 'Original only') return
-    translateCaption(original, currentTarget)
-      .then(translated => {
-        setCaptions(current => current.map(value => value.id === id ? { ...value, translated } : value))
-      })
-      .catch(() => {
-        setCaptions(current => current.map(value => value.id === id ? { ...value, translated: '', translationFailed: true } : value))
-      })
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
+    setInterimOriginal('')
+    setInterimTranslated('')
+  }
+
+  const scheduleSegmentCommit = () => {
+    clearSegmentTimer()
+    segmentTimerRef.current = setTimeout(() => commitLiveSegment(false), 1050)
   }
 
   const handleRealtimeEvent = event => {
+    if (pausedRef.current) return
+
     switch (event.type) {
-      case 'input_audio_buffer.speech_started':
-        if (activeRef.current && !pausedRef.current) setSessionState('listening')
+      case 'session.input_transcript.delta': {
+        const delta = String(event.delta || '')
+        if (!delta) break
+        originalBufferRef.current += delta
+        setInterimOriginal(originalBufferRef.current)
+        scheduleSegmentCommit()
         break
-      case 'conversation.item.input_audio_transcription.delta':
-        if (!pausedRef.current) setInterim(current => `${current}${event.delta || ''}`)
+      }
+      case 'session.output_transcript.delta': {
+        const delta = String(event.delta || '')
+        if (!delta) break
+        translatedBufferRef.current += delta
+        setInterimTranslated(translatedBufferRef.current)
+        scheduleSegmentCommit()
         break
-      case 'conversation.item.input_audio_transcription.completed':
-        if (!pausedRef.current) addCompletedCaption(event.transcript)
+      }
+      case 'session.closed':
+        if (activeRef.current) stopSession(false, true)
         break
       case 'error':
+      case 'session.error':
         setError(event.error?.message || 'Live captioning was interrupted.')
         break
       default:
@@ -133,29 +176,41 @@ export default function CaptionsMode() {
     }
 
     setError('')
-    setInterim('')
+    setInterimOriginal('')
+    setInterimTranslated('')
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
     pausedRef.current = false
     setPaused(false)
     setSessionState('connecting')
     activeRef.current = true
 
     try {
-      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
-      const tokenData = await tokenResponse.json()
-      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Universal Captions.')
-
+      // Acquire the media stream directly from the user's tap. This is important on iOS/WebKit.
       const stream = await getSourceStream()
       streamRef.current = stream
       stream.getTracks().forEach(track => {
         track.addEventListener('ended', () => {
-          if (activeRef.current) stopSession(false)
+          if (activeRef.current) stopSession(false, true)
         }, { once: true })
       })
+
+      const tokenResponse = await fetch('/api/realtime-translation-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: codeFor(targetRef.current) }),
+      })
+      const tokenData = await tokenResponse.json()
+      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime translation captions.')
 
       const pc = new RTCPeerConnection()
       peerRef.current = pc
       const audioTrack = stream.getAudioTracks()[0]
       pc.addTrack(audioTrack, stream)
+
+      // Translation sessions also return translated audio. Captions intentionally do not play it;
+      // the remote track is left unattached while transcript deltas are rendered on screen.
+      pc.ontrack = () => {}
 
       pc.addEventListener('connectionstatechange', () => {
         if (!activeRef.current) return
@@ -163,7 +218,7 @@ export default function CaptionsMode() {
         else if (['disconnected', 'connecting'].includes(pc.connectionState)) setSessionState('recovering')
         else if (['failed', 'closed'].includes(pc.connectionState)) {
           setError('The live caption connection ended. Start captions again to continue.')
-          stopSession(false)
+          stopSession(false, true)
         }
       })
 
@@ -175,7 +230,7 @@ export default function CaptionsMode() {
 
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
-      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/translations/calls', {
         method: 'POST',
         body: offer.sdp,
         headers: {
@@ -184,55 +239,40 @@ export default function CaptionsMode() {
         },
       })
       const answerSdp = await sdpResponse.text()
-      if (!sdpResponse.ok) throw new Error(answerSdp || 'Could not connect Universal Captions.')
+      if (!sdpResponse.ok) throw new Error(answerSdp || 'Could not connect realtime translation captions.')
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
 
       await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Universal Captions connection timed out.')), 10000)
+        if (channel.readyState === 'open') return resolve()
+        const timer = setTimeout(() => reject(new Error('Realtime captions connection timed out.')), 10000)
         channel.addEventListener('open', () => { clearTimeout(timer); resolve() }, { once: true })
-        channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Universal Captions could not connect.')) }, { once: true })
-      })
-
-      sendRealtime({
-        type: 'session.update',
-        session: {
-          type: 'realtime',
-          model: 'gpt-realtime-2.1',
-          instructions: 'You are Ana Universal Captions. This session is transcription-only. Never create spoken or text responses. Preserve multilingual speech and code-switching faithfully in the input transcription.',
-          audio: {
-            input: {
-              transcription: {
-                model: 'gpt-live-transcribe',
-                delay: 'low',
-              },
-              turn_detection: {
-                type: 'semantic_vad',
-                eagerness: 'medium',
-                create_response: false,
-                interrupt_response: false,
-              },
-            },
-          },
-        },
+        channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Realtime captions could not connect.')) }, { once: true })
       })
 
       setSessionState('listening')
     } catch (err) {
       setError(err.message || 'Could not start Universal Captions.')
-      stopSession(false)
+      stopSession(false, false)
     }
   }
 
-  function stopSession(clearInterim = true) {
+  function stopSession(clearLive = true, saveLive = true) {
     activeRef.current = false
     pausedRef.current = false
+    clearSegmentTimer()
+    if (saveLive) commitLiveSegment(true)
     try { dataChannelRef.current?.close() } catch {}
     dataChannelRef.current = null
     try { peerRef.current?.close() } catch {}
     peerRef.current = null
     streamRef.current?.getTracks?.().forEach(track => track.stop())
     streamRef.current = null
-    if (clearInterim) setInterim('')
+    if (clearLive) {
+      originalBufferRef.current = ''
+      translatedBufferRef.current = ''
+      setInterimOriginal('')
+      setInterimTranslated('')
+    }
     setPaused(false)
     setSessionState('idle')
   }
@@ -240,22 +280,37 @@ export default function CaptionsMode() {
   const togglePause = () => {
     if (!activeRef.current) return
     const next = !pausedRef.current
+    if (next) commitLiveSegment(true)
     pausedRef.current = next
     setPaused(next)
     setTrackEnabled(!next)
     setSessionState(next ? 'paused' : 'listening')
-    if (next) setInterim('')
   }
 
   const changeTarget = value => {
+    if (activeRef.current) commitLiveSegment(true)
     targetRef.current = value
     setTarget(value)
     rememberPersonalLanguagePreference?.({ lastCaptionTarget: value })
+
+    if (activeRef.current) {
+      sendRealtime({
+        type: 'session.update',
+        session: {
+          audio: {
+            output: { language: codeFor(value) },
+          },
+        },
+      })
+    }
   }
 
   const clearCaptions = () => {
     setCaptions([])
-    setInterim('')
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
+    setInterimOriginal('')
+    setInterimTranslated('')
   }
 
   const enterFullscreen = () => {
@@ -272,14 +327,17 @@ export default function CaptionsMode() {
       : paused
         ? 'Paused'
         : active
-          ? 'Listening'
+          ? 'Listening · translating live'
           : 'Ready'
+
+  const displayOriginal = interimOriginal || latest?.original || (active ? 'Waiting for speech…' : 'Start captions when you’re ready.')
+  const displayTranslation = interimTranslated || (!interimOriginal ? latest?.translated : '')
 
   return <section className="captions-wrap">
     <header className="captions-head">
       <div className="eyebrow"><Captions size={14}/> Universal Captions</div>
       <h1>Understand what’s being said, live.</h1>
-      <p>Use the microphone for people around you, or share tab/screen audio when your browser supports it.</p>
+      <p>Source speech and its translation now stream onto the screen while the person is still speaking.</p>
     </header>
 
     <div className="captions-toolbar">
@@ -291,7 +349,7 @@ export default function CaptionsMode() {
         {TARGETS.map(value => <option key={value}>{value}</option>)}
       </select></label>
       <button className="captions-icon-btn" onClick={enterFullscreen} title="Fullscreen captions"><Expand size={17}/></button>
-      <button className="captions-icon-btn" onClick={clearCaptions} disabled={!captions.length && !interim} title="Clear captions"><Trash2 size={17}/></button>
+      <button className="captions-icon-btn" onClick={clearCaptions} disabled={!captions.length && !interimOriginal && !interimTranslated} title="Clear captions"><Trash2 size={17}/></button>
     </div>
 
     <div className={`captions-stage ${active ? 'active' : ''}`}>
@@ -301,22 +359,16 @@ export default function CaptionsMode() {
       </div>
 
       <div className="captions-live-copy">
-        <div className="captions-original">{interim || latest?.original || (active ? 'Waiting for speech…' : 'Start captions when you’re ready.')}</div>
-        {target !== 'Original only' && <div className={`captions-translation ${latest?.translated === null ? 'pending' : ''}`}>
-          {interim
-            ? '…'
-            : latest?.translated === null
-              ? 'Translating…'
-              : latest?.translationFailed
-                ? 'Translation unavailable for this line.'
-                : latest?.translated || `Translation will appear here in ${target}.`}
+        <div className="captions-original">{displayOriginal}</div>
+        {target !== 'Original only' && <div className={`captions-translation ${interimOriginal && !interimTranslated ? 'pending' : ''}`}>
+          {displayTranslation || (interimOriginal ? '…' : `Translation will appear here in ${target}.`)}
         </div>}
       </div>
 
       <div ref={scrollRef} className="captions-history">
         {visibleCaptions.map(item => <article key={item.id}>
           <p>{item.original}</p>
-          {item.target !== 'Original only' && <strong>{item.translated === null ? 'Translating…' : item.translated || '—'}</strong>}
+          {item.target !== 'Original only' && <strong>{item.translated || '—'}</strong>}
         </article>)}
       </div>
 
