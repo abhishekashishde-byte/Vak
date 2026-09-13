@@ -14,6 +14,8 @@ export const DEFAULT_PRIVACY_SETTINGS = {
 
 let installed = false
 let applyingRemote = false
+let bootstrapping = true
+let suppressMarksUntil = 0
 let syncTimer = null
 let syncState = 'local'
 
@@ -84,6 +86,7 @@ const applyRemoteBundle = remote => {
       writeJson(PRIVACY_KEY, { ...DEFAULT_PRIVACY_SETTINGS, ...remote.privacy })
     }
     setLocalUpdatedAt(remote.updatedAt || Date.now())
+    suppressMarksUntil = Date.now() + 400
   } finally {
     applyingRemote = false
   }
@@ -116,7 +119,10 @@ async function uploadPreferences(user, bundle = getLocalPreferenceBundle(), upda
 }
 
 export async function hydrateAccountPreferences() {
-  if (!supabase) return
+  if (!supabase) {
+    bootstrapping = false
+    return
+  }
   try {
     const { data, error } = await supabase.auth.getUser()
     if (error || !data?.user) {
@@ -148,11 +154,13 @@ export async function hydrateAccountPreferences() {
     }
   } catch {
     setSyncState('error')
+  } finally {
+    bootstrapping = false
   }
 }
 
 export function markAccountPreferencesChanged() {
-  if (applyingRemote) return
+  if (applyingRemote || bootstrapping || Date.now() < suppressMarksUntil) return
   const now = Date.now()
   setLocalUpdatedAt(now)
   emit('ana-account-preferences-changed', getLocalPreferenceBundle())
@@ -172,6 +180,7 @@ export function updatePrivacySettings(patch) {
   const next = { ...getPrivacySettings(), ...(patch || {}) }
   if (!['always', 'sensitive'].includes(next.disclosureMode)) next.disclosureMode = 'always'
   writeJson(PRIVACY_KEY, next)
+  if (bootstrapping) bootstrapping = false
   markAccountPreferencesChanged()
   emit('ana-privacy-settings-changed', next)
   return next
@@ -183,6 +192,7 @@ export async function clearRememberedLanguageData() {
     localStorage.setItem(GLOSSARY_KEY, '[]')
     localStorage.setItem(REGISTER_KEY, 'formal')
   } catch {}
+  if (bootstrapping) bootstrapping = false
   markAccountPreferencesChanged()
   emit('ana-account-preferences-hydrated', getLocalPreferenceBundle())
 }
