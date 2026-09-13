@@ -7,6 +7,7 @@ import RoomMode from './RoomMode.jsx'
 import CaptionsMode from './CaptionsMode.jsx'
 import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
+import NetworkStatus from './NetworkStatus.jsx'
 import './live.css'
 import './talk.css'
 import './room.css'
@@ -19,6 +20,7 @@ export default function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   return <>
+    <NetworkStatus/>
     <nav className="mode-switch" aria-label="Ana modes">
       <button className={mode === 'translate' ? 'active' : ''} onClick={() => setMode('translate')}><Languages size={15}/> Translate</button>
       <button className={mode === 'scan' ? 'active' : ''} onClick={() => setMode('scan')}><ScanText size={15}/> Scan</button>
