@@ -1,3 +1,5 @@
+import { markAccountPreferencesChanged } from './accountPreferences.js'
+
 const MEMORY_KEY = 'ana-personal-language-memory-v1'
 const GLOSSARY_KEY = 'ana-glossary-v1'
 const REGISTER_KEY = 'ana-german-register'
@@ -21,6 +23,7 @@ const writeMemory = patch => {
   try {
     const next = { ...readMemory(), ...patch, updatedAt: Date.now() }
     localStorage.setItem(MEMORY_KEY, JSON.stringify(next))
+    markAccountPreferencesChanged()
     return next
   } catch {
     return readMemory()
