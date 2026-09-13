@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Captions, Languages, Mic, MessagesSquare, ScanText, ShieldCheck, UsersRound } from 'lucide-react'
+import { Camera, Captions, Languages, Mic, MessagesSquare, ScanText, ShieldCheck, UsersRound } from 'lucide-react'
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
 import RoomMode from './RoomMode.jsx'
 import CaptionsMode from './CaptionsMode.jsx'
+import CameraMode from './CameraMode.jsx'
 import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
 import NetworkStatus from './NetworkStatus.jsx'
@@ -12,6 +13,7 @@ import './live.css'
 import './talk.css'
 import './room.css'
 import './captions.css'
+import './camera.css'
 import './scan.css'
 import './ana-identity.css'
 
@@ -28,6 +30,7 @@ export default function Workspace() {
       <button className={mode === 'talk' ? 'active' : ''} onClick={() => setMode('talk')}><MessagesSquare size={15}/> Talk for me</button>
       <button className={mode === 'room' ? 'active' : ''} onClick={() => setMode('room')}><UsersRound size={15}/> Room</button>
       <button className={mode === 'captions' ? 'active' : ''} onClick={() => setMode('captions')}><Captions size={15}/> Captions</button>
+      <button className={mode === 'camera' ? 'active' : ''} onClick={() => setMode('camera')}><Camera size={15}/> Camera</button>
       <button className="privacy-settings-trigger" onClick={() => setSettingsOpen(true)} title="Privacy & memory"><ShieldCheck size={15}/> Privacy</button>
     </nav>
     {mode === 'translate' && <App/>}
@@ -36,6 +39,7 @@ export default function Workspace() {
     {mode === 'talk' && <main className="app-shell"><TalkForMe/></main>}
     {mode === 'room' && <main className="app-shell"><RoomMode/></main>}
     {mode === 'captions' && <main className="app-shell"><CaptionsMode/></main>}
+    {mode === 'camera' && <main className="app-shell"><CameraMode/></main>}
     <PrivacySettings open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
   </>
 }
