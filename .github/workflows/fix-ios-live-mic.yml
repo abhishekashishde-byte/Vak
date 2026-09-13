@@ -1,0 +1,35 @@
+name: Fix iOS Live microphone
+
+on:
+  push:
+    paths:
+      - 'scripts/fix-ios-live-mic.mjs'
+      - '.github/workflows/fix-ios-live-mic.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply iOS Live microphone fix
+        run: node scripts/fix-ios-live-mic.mjs
+      - name: Install
+        run: npm install
+      - name: Trust tests
+        run: npm run test:trust
+      - name: Production build
+        run: npm run build
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/LiveMode.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix iOS microphone start in Live"
+          git push
