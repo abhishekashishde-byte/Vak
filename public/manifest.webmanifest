@@ -1,0 +1,14 @@
+{
+  "name": "Ana — Your voice, in any language",
+  "short_name": "Ana",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#f4f1ea",
+  "description": "Translation, interpreting and multilingual communication with Ana.",
+  "icons": [
+    { "src": "/ana-app-icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/ana-app-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
