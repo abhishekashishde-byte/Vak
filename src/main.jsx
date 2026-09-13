@@ -6,6 +6,7 @@ import { installAnaNaturalVoice } from './naturalVoice.js'
 import { installContextualIntelligence } from './contextualIntelligence.js'
 import { installConversationPrivacyGate } from './conversationPrivacyGate.js'
 import { installCounterpartyView } from './counterpartyView.js'
+import { installNetworkResilience } from './networkResilience.js'
 import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installPushToTalkFallback } from './pushToTalk.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
@@ -18,8 +19,10 @@ import './pushToTalk.css'
 import './privacySettings.css'
 import './livePolish.css'
 import './talkPolish.css'
+import './networkStatus.css'
 import './briefVoice.js'
 
+installNetworkResilience()
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
 installContextualIntelligence()
