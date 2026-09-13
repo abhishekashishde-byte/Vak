@@ -128,10 +128,16 @@ export async function hydrateAccountPreferences() {
     const remote = user.user_metadata?.ana_preferences
     const local = getLocalPreferenceBundle()
     const localTs = localUpdatedAt()
+    const remoteTs = Number(remote?.updatedAt || 0) || 0
 
-    if (remote?.updatedAt && Number(remote.updatedAt) > localTs) {
+    if (remoteTs && remoteTs > localTs) {
       applyRemoteBundle(remote)
       setSyncState('synced')
+      return
+    }
+
+    if (remoteTs && remoteTs === localTs) {
+      setSyncState(local.privacy?.syncAcrossDevices === false ? 'local' : 'synced')
       return
     }
 
@@ -188,7 +194,7 @@ export function installAccountPreferenceSync() {
 
   if (supabase) {
     supabase.auth.onAuthStateChange(event => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setTimeout(() => hydrateAccountPreferences(), 0)
       }
       if (event === 'SIGNED_OUT') setSyncState('local')
