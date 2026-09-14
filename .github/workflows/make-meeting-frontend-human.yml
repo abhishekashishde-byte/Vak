@@ -1,0 +1,36 @@
+name: Make meeting frontend human
+
+on:
+  push:
+    paths:
+      - '.github/workflows/make-meeting-frontend-human.yml'
+      - 'scripts/make-meeting-frontend-human.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply readable meeting frontend
+        run: node scripts/make-meeting-frontend-human.mjs
+      - name: Validate production build
+        run: |
+          npm install
+          npm run build
+      - name: Commit meeting frontend fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/MeetingMode.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'Show human-readable meeting transcript only'
+          git push origin main
