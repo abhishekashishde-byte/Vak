@@ -1,0 +1,24 @@
+name: Apply translate formatting improvements
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/improve-translate-paste-format-alignment.mjs
+      - .github/workflows/apply-translate-formatting.yml
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: node scripts/improve-translate-paste-format-alignment.mjs
+      - run: npm install && npm run build
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.jsx src/styles.css
+          git diff --cached --quiet || git commit -m "Improve pasted formatting and translation alignment"
+          git push
