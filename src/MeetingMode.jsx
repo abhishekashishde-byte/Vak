@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Clipboard, Download, Headphones, Mic, MonitorUp, Pause, Play, Square, Trash2 } from 'lucide-react'
+import { Check, Clipboard, Download, Headphones, History, Mic, MonitorUp, Pause, Play, Sparkles, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
+import './meeting-notes.css'
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const STORAGE_KEY = 'ana-meeting-transcript-v2'
+const HISTORY_KEY = 'ana-meeting-history-v1'
 
 const LANGUAGE_CODES = {
   German: 'de',
@@ -30,6 +32,18 @@ const LANGUAGE_CODES = {
 const clean = value => String(value || '').trim()
 const codeFor = target => LANGUAGE_CODES[target] || 'en'
 const appendText = (base, next) => [clean(base), clean(next)].filter(Boolean).join(' ').replace(/\s+([,.;!?])/g, '$1').trim()
+
+function readMeetingHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch { return [] }
+}
+
+function formatMeetingDate(value) {
+  if (!value) return ''
+  try { return new Date(value).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
+}
 
 function readSavedMeeting() {
   try {
@@ -72,6 +86,10 @@ export default function MeetingMode() {
   const [liveTranslation, setLiveTranslation] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [notesStatus, setNotesStatus] = useState('idle')
+  const [meetingNotes, setMeetingNotes] = useState(null)
+  const [notesError, setNotesError] = useState('')
+  const [meetingHistory, setMeetingHistory] = useState(readMeetingHistory)
 
   const peerRef = useRef(null)
   const dataChannelRef = useRef(null)
@@ -79,6 +97,9 @@ export default function MeetingMode() {
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
   const targetRef = useRef(target)
+  const startedAtRef = useRef(Number(saved.startedAt) || 0)
+  const originalTextRef = useRef(clean(saved.originalText))
+  const translatedTextRef = useRef(clean(saved.translatedText))
   const originalBufferRef = useRef('')
   const translatedBufferRef = useRef('')
   const commitTimerRef = useRef(null)
@@ -102,6 +123,10 @@ export default function MeetingMode() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ target, startedAt, originalText, translatedText, updatedAt: Date.now() }))
     } catch {}
   }, [target, startedAt, originalText, translatedText])
+
+  useEffect(() => { originalTextRef.current = originalText }, [originalText])
+  useEffect(() => { translatedTextRef.current = translatedText }, [translatedText])
+  useEffect(() => { startedAtRef.current = startedAt || 0 }, [startedAt])
 
   useEffect(() => {
     const node = translationPaneRef.current
@@ -142,8 +167,8 @@ export default function MeetingMode() {
       return
     }
 
-    if (original) setOriginalText(current => appendText(current, original))
-    if (translated) setTranslatedText(current => appendText(current, translated))
+    if (original) { const value=appendText(originalTextRef.current, original); originalTextRef.current=value; setOriginalText(value) }
+    if (translated) { const value=appendText(translatedTextRef.current, translated); translatedTextRef.current=value; setTranslatedText(value) }
 
     originalBufferRef.current = ''
     translatedBufferRef.current = ''
@@ -218,6 +243,9 @@ export default function MeetingMode() {
     }
 
     setError('')
+    setNotesError('')
+    setMeetingNotes(null)
+    setNotesStatus('idle')
     setSessionState('connecting')
     setPaused(false)
     pausedRef.current = false
@@ -313,6 +341,80 @@ export default function MeetingMode() {
     streamRef.current = null
     setPaused(false)
     setSessionState(startedAt ? 'ended' : 'idle')
+  }
+
+  const saveMeetingRecord = record => {
+    const next = [record, ...readMeetingHistory().filter(item => item?.id !== record.id)].slice(0, 50)
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch {}
+    setMeetingHistory(next)
+  }
+
+  const generateMeetingNotes = async ({ transcript, translation, start, end }) => {
+    const outputLanguage = targetRef.current
+    setNotesStatus('preparing')
+    setNotesError('')
+    const instructions = 'Create concise post-meeting notes from this transcript. Write in ' + outputLanguage + '. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions. Each action must contain task, owner and deadline. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the meeting topic.'
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: transcript, instructions }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error || 'Could not prepare meeting notes.')
+      const raw = String(data?.content || '').replaceAll('\`\`\`json', '').replaceAll('\`\`\`', '').trim()
+      const notes = JSON.parse(raw)
+      const record = {
+        id: (start || Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
+        title: clean(notes?.title) || 'Meeting',
+        startedAt: start || end,
+        endedAt: end,
+        durationMs: Math.max(0, end - (start || end)),
+        target: outputLanguage,
+        notes,
+        originalText: transcript,
+        translatedText: translation,
+      }
+      setMeetingNotes(record)
+      saveMeetingRecord(record)
+      setNotesStatus('ready')
+    } catch (err) {
+      const record = {
+        id: (start || Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
+        title: 'Meeting · ' + formatMeetingDate(start || end),
+        startedAt: start || end,
+        endedAt: end,
+        durationMs: Math.max(0, end - (start || end)),
+        target: outputLanguage,
+        notes: null,
+        originalText: transcript,
+        translatedText: translation,
+      }
+      saveMeetingRecord(record)
+      setNotesError(err.message || 'The transcript was saved, but Ana could not create notes.')
+      setNotesStatus('error')
+    }
+  }
+
+  const endMeeting = async () => {
+    if (!activeRef.current) return
+    const finalOriginal = appendText(originalTextRef.current, originalBufferRef.current)
+    const finalTranslation = appendText(translatedTextRef.current, translatedBufferRef.current)
+    const start = startedAtRef.current || Date.now()
+    const end = Date.now()
+    setOriginalText(finalOriginal)
+    setTranslatedText(finalTranslation)
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
+    setLiveOriginal('')
+    setLiveTranslation('')
+    stopMeeting(false)
+    setSessionState('ended')
+    if (finalOriginal.length >= 20) await generateMeetingNotes({ transcript: finalOriginal, translation: finalTranslation, start, end })
+    else {
+      setNotesStatus('error')
+      setNotesError('Not enough speech was captured to create meeting notes.')
+    }
   }
 
   const togglePause = () => {
@@ -430,7 +532,7 @@ export default function MeetingMode() {
           <div className="meeting-controls">
             {!active ? <button className="meeting-start" onClick={startMeeting}><Headphones size={18}/> Start listening</button> : <>
               <button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button>
-              <button className="meeting-stop" onClick={() => stopMeeting(true)}><Square size={16}/> End meeting</button>
+              <button className="meeting-stop" onClick={endMeeting}><Square size={16}/> End meeting</button>
             </>}
           </div>
 
@@ -442,6 +544,26 @@ export default function MeetingMode() {
         </div>
       </div>
     </section>
+
+    {(notesStatus !== 'idle' || meetingNotes) && <section className="meeting-notes-card">
+      <div className="meeting-notes-head"><div><Sparkles size={16}/><h2>After the meeting</h2></div><span>Created once when you end the meeting</span></div>
+      {notesStatus === 'preparing' && <div className="meeting-notes-loading"><i/>Ana is preparing the meeting title, summary, key points and actions…</div>}
+      {meetingNotes?.notes && <div className="meeting-notes-body">
+        <h2 className="meeting-notes-title">{meetingNotes.title}</h2>
+        <div className="meeting-notes-meta">{formatMeetingDate(meetingNotes.startedAt)} · {formatTime(meetingNotes.durationMs)} · {meetingNotes.target}</div>
+        {meetingNotes.notes.summary && <section className="meeting-notes-section"><h3>Summary</h3><p>{meetingNotes.notes.summary}</p></section>}
+        {!!meetingNotes.notes.keyPoints?.length && <section className="meeting-notes-section"><h3>Key points</h3><ul>{meetingNotes.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+        {!!meetingNotes.notes.decisions?.length && <section className="meeting-notes-section"><h3>Decisions</h3><ul>{meetingNotes.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+        {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item==='string'?item:item?.task}</strong>{typeof item!=='string'&&(item?.owner||item?.deadline)&&<small>{item?.owner?'Owner: '+item.owner:'Owner: not specified'}{item?.deadline?' · Deadline: '+item.deadline:''}</small>}</div>)}</div></section>}
+        {!!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+      </div>}
+      {notesError && <div className="meeting-notes-error">{notesError}</div>}
+    </section>}
+
+    {!!meetingHistory.length && <section className="meeting-history">
+      <div className="meeting-history-head"><div><History size={16}/><h2>Meeting history</h2></div><span>{meetingHistory.length} saved</span></div>
+      <div className="meeting-history-list">{meetingHistory.map(record=><details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title||'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs||0)}</span></div><span>{record.target}</span></summary><div className="meeting-history-detail">{record.notes?.summary&&<div><h4>Summary</h4><p>{record.notes.summary}</p></div>}<div className="meeting-history-transcripts"><details><summary>Translated transcript</summary><p>{record.translatedText||'—'}</p></details><details><summary>Original transcript</summary><p>{record.originalText||'—'}</p></details></div></div></details>)}</div>
+    </section>}
 
     <p className="meeting-footnote">Ana transcribes and translates through the realtime audio connection. The text grows continuously in this single screen; audio itself is not saved here.</p>
   </section>
