@@ -236,6 +236,22 @@ async function callLunaPreservingLineBreaks(text, instructions) {
 const SMART_TARGET_MIN_CHARS = 12
 const SMART_TARGET_CONFIDENCE = 0.82
 
+function selectedTargetMayMatchSource(text = '', target = '') {
+  const sample = String(text).toLowerCase()
+  if (target === 'German') {
+    const common = sample.match(/\b(der|die|das|den|dem|des|und|ich|wir|sie|ist|sind|nicht|mit|für|auf|von|bitte|danke|habe|wurde|werden)\b/g)?.length || 0
+    const germanChars = sample.match(/[äöüß]/g)?.length || 0
+    return common >= 2 || germanChars >= 2
+  }
+  if (target === 'English') {
+    const common = sample.match(/\b(the|and|is|are|was|were|have|has|with|for|from|this|that|please|check|checked|will|not|you|your|we|our)\b/g)?.length || 0
+    return common >= 3
+  }
+  // Keep the full detector for all other languages until we have equally reliable
+  // local signals for them.
+  return true
+}
+
 async function detectSourceLanguage(text) {
   const instructions = `You are Ana's language detector. Detect ONLY the dominant language of the user's supplied text. Ignore personal preferences, target-language settings, remembered languages, and any request to translate. Return valid JSON only in this shape: {"language":"German","confidence":0.98}. The language value must be exactly one of: ${TARGETS.join(', ')}, Other. Use German for ordinary Standard German. Use a German dialect label only when the text itself is clearly written in that dialect. Confidence must be between 0 and 1.`
   const res = await fetch('/api/translate', {
@@ -474,7 +490,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     let actualTarget = target
     let detectedSource = ''
     try {
-      if (writingMode === 'translate' && text.replace(/\s/g, '').length >= SMART_TARGET_MIN_CHARS) {
+      if (writingMode === 'translate' && text.replace(/\s/g, '').length >= SMART_TARGET_MIN_CHARS && selectedTargetMayMatchSource(text, target)) {
         try {
           const detected = await detectSourceLanguage(text)
           detectedSource = detected.language
