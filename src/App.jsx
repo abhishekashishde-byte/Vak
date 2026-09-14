@@ -75,6 +75,7 @@ export default function App() {
   const [output, setOutput] = useState(() => String(loadDraft().output || ''))
   const [target, setTarget] = useState(() => TARGETS.includes(loadDraft().target) ? loadDraft().target : 'German')
   const [outputMode, setOutputMode] = useState(() => loadDraft().outputMode === 'device' ? 'device' : 'online')
+  const [writingMode, setWritingMode] = useState(() => loadDraft().writingMode === 'email' ? 'email' : 'translate')
   const [offlineNotice, setOfflineNotice] = useState('')
   const [register, setRegister] = useState(() => { try { return localStorage.getItem(REGISTER_KEY) || 'formal' } catch { return 'formal' } })
   const [loading, setLoading] = useState(false)
@@ -126,8 +127,8 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
   useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
   useEffect(() => {
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, updatedAt: Date.now() })) } catch {}
-  }, [input, output, target, outputMode])
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, writingMode, updatedAt: Date.now() })) } catch {}
+  }, [input, output, target, outputMode, writingMode])
   useEffect(() => {
     const hydrate = () => {
       try {
@@ -148,25 +149,49 @@ export default function App() {
     ? `\nPERSONAL GLOSSARY — explicit user preferences override ordinary word choice:\n${activeGlossary.map(item => `- "${item.source}" → "${item.preferred}"`).join('\n')}\nPreserve preferred wording unless grammar requires inflection.`
     : ''
 
+  const translationInstructions = () => {
+    let instructions
+    if (writingMode === 'email') {
+      instructions = `You are Ana Email, a bilingual email writing assistant. Detect the source language and produce a complete, natural email in ${target}. Return ONLY the finished email body with no explanation, labels or quotation marks. Preserve every factual detail, name, date, number, URL, request, commitment and intention from the user. Correct spelling, punctuation and grammar. Repair incomplete or fragmented sentences when the intended meaning is clear. Improve flow and politeness so the result reads like a naturally written email, not a literal translation. Ensure the email has an appropriate greeting and closing. If a greeting is missing, add a neutral greeting without inventing a recipient name. If a closing is missing, add an appropriate closing but never invent the sender name. Never invent business facts, people, dates, promises, decisions, requests or missing substantive information.`
+      if (isGermanTarget(target)) {
+        instructions += `\n${germanVariantRule(target)} ${registerRules()}`
+        instructions += register === 'formal'
+          ? '\nFor a missing German closing, normally use “Mit freundlichen Grüßen”. For a missing greeting with no recipient name, use a neutral professional greeting such as “Guten Tag,”.'
+          : '\nFor a missing German closing, normally use “Viele Grüße”. For a missing greeting with no recipient name, use a natural friendly greeting such as “Hallo,”.'
+      }
+      if (target === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script.'
+    } else {
+      instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
+      if (isGermanTarget(target)) instructions += `\n${germanVariantRule(target)} ${registerRules()}`
+      if (target === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.'
+    }
+    return instructions + glossaryInstructions()
+  }
+
   const translate = async () => {
     const text = input.trim(); if (!text || loading) return
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     try {
-      let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
-      if (isGermanTarget(target)) instructions += `\n${germanVariantRule(target)} ${registerRules()}`
-      if (target === 'Hinglish') instructions += `\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.`
-      instructions += glossaryInstructions()
-      setOutput(await callLunaPreservingLineBreaks(text, instructions))
+      const instructions = translationInstructions()
+      const result = writingMode === 'email'
+        ? await callLuna(text, instructions)
+        : await callLunaPreservingLineBreaks(text, instructions)
+      setOutput(result)
       setOutputMode('online')
     } catch (err) {
-      const deviceResult = await tryOnDeviceTranslation(text, target)
-      if (deviceResult) {
-        setOutput(deviceResult)
-        setOutputMode('device')
-        setOfflineNotice('Basic on-device translation. Reconnect for Ana’s full context, glossary and tone handling.')
-      } else {
+      if (writingMode === 'email') {
         const network = getNetworkState()
-        setError(network.online ? (err.message || 'Could not translate') : 'You’re offline. Your text is saved automatically. Reconnect to use Ana’s full translation; on-device translation is not available for this language pair on this browser.')
+        setError(network.online ? (err.message || 'Could not prepare the email') : 'You’re offline. Your draft is saved automatically. Reconnect to use Ana Email.')
+      } else {
+        const deviceResult = await tryOnDeviceTranslation(text, target)
+        if (deviceResult) {
+          setOutput(deviceResult)
+          setOutputMode('device')
+          setOfflineNotice('Basic on-device translation. Reconnect for Ana’s full context, glossary and tone handling.')
+        } else {
+          const network = getNetworkState()
+          setError(network.online ? (err.message || 'Could not translate') : 'You’re offline. Your text is saved automatically. Reconnect to use Ana’s full translation; on-device translation is not available for this language pair on this browser.')
+        }
       }
     } finally { setLoading(false) }
   }
@@ -221,17 +246,18 @@ export default function App() {
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
         <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
         {isGermanTarget(target) && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
+        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'email' ? 'active' : ''} onClick={() => { setWritingMode('email'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Email</button></div>
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
-        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>Original</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder="Type, paste, or speak anything…" onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
-        <article className="pane output-pane"><div className="pane-label">{target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">Your translation will appear here.</div>}</div><div className="pane-foot"><span>{output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
+        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'email' ? 'Email draft' : 'Original'}</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder={writingMode === 'email' ? 'Write roughly what you want to say. Incomplete sentences are okay…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
+        <article className="pane output-pane"><div className="pane-label">{writingMode === 'email' ? `${target} email` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'email' ? 'Your complete email will appear here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'email' ? 'Grammar, flow, greeting and closing are completed without inventing facts' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
     {offlineNotice && <div className="ana-offline-note">{offlineNotice}</div>}
     {error && <div className="error">{error}</div>}
-    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? 'Translating…' : 'Translate'}</button></div>
+    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'email' ? 'Writing…' : 'Translating…') : writingMode === 'email' ? 'Prepare email' : 'Translate'}</button></div>
 
     {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
 
