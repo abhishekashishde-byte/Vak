@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Clipboard, Download, Headphones, Mic, MonitorUp, Pause, Play, Square, Trash2 } from 'lucide-react'
+import { Check, Clipboard, Download, Headphones, Pause, Play, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
@@ -65,7 +65,7 @@ async function sendSegment(blob, target) {
 export default function MeetingMode() {
   const saved = useMemo(() => readSavedMeeting(), [])
   const [target, setTarget] = useState(initialTarget)
-  const [source, setSource] = useState('screen')
+  const [source, setSource] = useState('microphone')
   const [status, setStatus] = useState('idle')
   const [entries, setEntries] = useState(() => Array.isArray(saved.entries) ? saved.entries : [])
   const [startedAt, setStartedAt] = useState(() => Number(saved.startedAt) || null)
@@ -206,12 +206,12 @@ export default function MeetingMode() {
 
   const getMeetingStream = async () => {
     if (source === 'screen') {
-      if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Meeting audio sharing is not supported in this browser. Use Microphone / speakers instead.')
+      if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Computer audio sharing is not supported in this browser. Use Microphone / speakers instead.')
       const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
       const audioTrack = display.getAudioTracks?.()[0]
       if (!audioTrack) {
         display.getTracks().forEach(track => track.stop())
-        throw new Error('No meeting audio was shared. Choose a tab/window/screen with audio sharing enabled, or use Microphone / speakers.')
+        throw new Error('No computer audio was shared. Choose a tab/window/screen with audio sharing enabled, or use Microphone / speakers.')
       }
       streamRef.current = display
       return new MediaStream([audioTrack])
@@ -238,7 +238,6 @@ export default function MeetingMode() {
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
 
     try {
-      // Capture must be requested directly from the user's tap. No network call happens first.
       const audioStream = await getMeetingStream()
       audioStreamRef.current = audioStream
       const now = Date.now()
@@ -347,8 +346,8 @@ export default function MeetingMode() {
         <label>
           <span>Listen to</span>
           <select value={source} onChange={event => setSource(event.target.value)} disabled={active}>
-            {screenSupported && <option value="screen">Meeting / computer audio</option>}
-            <option value="microphone">Microphone / speakers</option>
+            <option value="microphone">Microphone / speakers — no screen sharing</option>
+            {screenSupported && <option value="screen">Computer / tab audio — opens share picker</option>}
           </select>
         </label>
         <label>
@@ -405,6 +404,6 @@ export default function MeetingMode() {
       </div>
     </section>
 
-    <p className="meeting-footnote"><b>Meeting audio</b> works best when your browser lets you share tab/window/system audio. If that is unavailable, play the meeting through speakers and use <b>Microphone / speakers</b>. Translation usually follows a few seconds behind the speaker.</p>
+    <p className="meeting-footnote"><b>Microphone / speakers</b> is the default and does not ask you to share the screen. Use <b>Computer / tab audio</b> only when you want Ana to capture meeting audio directly; browsers require a share picker for that option. Translation usually follows a few seconds behind the speaker.</p>
   </section>
 }
