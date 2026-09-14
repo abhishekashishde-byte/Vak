@@ -46,6 +46,50 @@ function normalizeClipboardText(text = '') {
     .replace(/\n{3,}/g, '\n\n')
 }
 
+function formatReadableLists(text = '') {
+  const rawLines = String(text).replace(/\r\n?/g, '\n').split('\n')
+  const normalised = rawLines.map(line => {
+    const bullet = line.match(/^([ \t]*)([•◦▪‣∙])\s*(.*)$/u)
+    if (bullet) return `${bullet[1]}•  ${bullet[3]}`.replace(/[ \t]+$/, '')
+
+    const numbered = line.match(/^([ \t]*)(\d+[.)])\s*(.*)$/u)
+    if (numbered) return `${numbered[1]}${numbered[2]}  ${numbered[3]}`.replace(/[ \t]+$/, '')
+
+    const dash = line.match(/^([ \t]*)([-*])\s+(.*)$/u)
+    if (dash) return `${dash[1]}${dash[2]}  ${dash[3]}`.replace(/[ \t]+$/, '')
+
+    const arrow = line.match(/^([ \t]*)(→)\s*(.*)$/u)
+    if (arrow) return `${arrow[1]}${arrow[2]}  ${arrow[3]}`.replace(/[ \t]+$/, '')
+    return line.replace(/[ \t]+$/, '')
+  })
+
+  const isListLine = line => /^[ \t]*(?:[•]|[-*]|→|\d+[.)])\s+/u.test(line)
+  const out = []
+
+  for (const line of normalised) {
+    if (!line.trim()) {
+      if (out.length && out[out.length - 1] !== '') out.push('')
+      continue
+    }
+
+    const currentIsList = isListLine(line)
+    const previous = out.length ? out[out.length - 1] : ''
+    const previousNonBlank = [...out].reverse().find(item => item.trim()) || ''
+    const previousWasList = isListLine(previousNonBlank)
+
+    // Give lists room to breathe in the plain-text editor: one visual blank line
+    // before the first item, between items and after the final item.
+    if (currentIsList && out.length && previous !== '') out.push('')
+    if (!currentIsList && previousWasList && previous !== '') out.push('')
+
+    out.push(line)
+  }
+
+  while (out[0] === '') out.shift()
+  while (out[out.length - 1] === '') out.pop()
+  return out.join('\n')
+}
+
 function clipboardHtmlToText(html = '', fallback = '') {
   if (!html || typeof DOMParser === 'undefined') return normalizeClipboardText(fallback)
   try {
@@ -328,9 +372,10 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     if (!clipboard) return
     const plain = clipboard.getData('text/plain') || ''
     const html = clipboard.getData('text/html') || ''
-    const pasted = html && /<(?:li|ol|ul|p|div|br|table|tr|td)\b/i.test(html)
+    const pastedRaw = html && /<(?:li|ol|ul|p|div|br|table|tr|td)\b/i.test(html)
       ? clipboardHtmlToText(html, plain)
       : normalizeClipboardText(plain)
+    const pasted = formatReadableLists(pastedRaw)
     if (!pasted) return
 
     event.preventDefault()
@@ -421,7 +466,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   }
 
   const translate = async () => {
-    const cleanedInput = normalizeClipboardText(input).trim()
+    const cleanedInput = formatReadableLists(normalizeClipboardText(input)).trim()
     const text = cleanedInput; if (!text || loading) return
     if (cleanedInput !== input) setInput(cleanedInput)
     setAlignmentMap([])
