@@ -1,0 +1,36 @@
+name: Upgrade translation quality
+
+on:
+  push:
+    paths:
+      - '.github/workflows/upgrade-translation-quality.yml'
+      - 'scripts/upgrade-translation-quality.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply translation upgrade
+        run: node scripts/upgrade-translation-quality.mjs
+      - name: Validate production build
+        run: |
+          npm install
+          npm run build
+      - name: Commit translation upgrade
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.jsx api/translate.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Improve translation quality and refinement speed'
+          git push origin main
