@@ -1,0 +1,36 @@
+name: Clean Ana translate UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/clean-translate-ui.yml'
+      - 'scripts/clean-translate-ui.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply product UI cleanup
+        run: node scripts/clean-translate-ui.mjs
+      - name: Validate production build
+        run: |
+          npm install
+          npm run build
+      - name: Commit product UI cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.jsx src/styles.css
+          git diff --cached --quiet && exit 0
+          git commit -m 'Remove marketing hero from Ana workspace'
+          git push origin main
