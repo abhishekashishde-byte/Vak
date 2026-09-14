@@ -1,0 +1,36 @@
+name: Fix Meet Ana logo
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-meet-ana-logo.yml'
+      - 'scripts/fix-meet-ana-logo.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply approved Ana logo
+        run: node scripts/fix-meet-ana-logo.mjs
+      - name: Validate production build
+        run: |
+          npm install
+          npm run build
+      - name: Commit logo fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/meet-ana.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Use approved Ana logo on Meet Ana page'
+          git push origin main
