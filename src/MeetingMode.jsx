@@ -254,6 +254,8 @@ export default function MeetingMode() {
     translatedBufferRef.current = ''
     setLiveOriginal('')
     setLiveTranslation('')
+    originalTextRef.current = ''
+    translatedTextRef.current = ''
     setOriginalText('')
     setTranslatedText('')
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
@@ -319,6 +321,7 @@ export default function MeetingMode() {
       })
 
       const now = Date.now()
+      startedAtRef.current = now
       setStartedAt(now)
       setElapsed(0)
       setSessionState('listening')
@@ -340,7 +343,7 @@ export default function MeetingMode() {
     streamRef.current?.getTracks?.().forEach(track => track.stop())
     streamRef.current = null
     setPaused(false)
-    setSessionState(startedAt ? 'ended' : 'idle')
+    setSessionState(startedAtRef.current ? 'ended' : 'idle')
   }
 
   const saveMeetingRecord = record => {
@@ -362,8 +365,10 @@ export default function MeetingMode() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data?.error || 'Could not prepare meeting notes.')
-      const raw = String(data?.content || '').replaceAll('\`\`\`json', '').replaceAll('\`\`\`', '').trim()
-      const notes = JSON.parse(raw)
+      const raw = String(data?.content || '').replace(/```json|```/g, '').trim()
+      const jsonStart = raw.indexOf('{')
+      const jsonEnd = raw.lastIndexOf('}')
+      const notes = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw)
       const record = {
         id: (start || Date.now()) + '-' + Math.random().toString(36).slice(2, 8),
         title: clean(notes?.title) || 'Meeting',
@@ -442,8 +447,14 @@ export default function MeetingMode() {
 
   const clearTranscript = () => {
     if (activeRef.current) return
+    originalTextRef.current = ''
+    translatedTextRef.current = ''
+    startedAtRef.current = 0
     setOriginalText('')
     setTranslatedText('')
+    setMeetingNotes(null)
+    setNotesStatus('idle')
+    setNotesError('')
     setStartedAt(null)
     setElapsed(0)
     setSessionState('idle')
@@ -562,9 +573,9 @@ export default function MeetingMode() {
 
     {!!meetingHistory.length && <section className="meeting-history">
       <div className="meeting-history-head"><div><History size={16}/><h2>Meeting history</h2></div><span>{meetingHistory.length} saved</span></div>
-      <div className="meeting-history-list">{meetingHistory.map(record=><details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title||'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs||0)}</span></div><span>{record.target}</span></summary><div className="meeting-history-detail">{record.notes?.summary&&<div><h4>Summary</h4><p>{record.notes.summary}</p></div>}<div className="meeting-history-transcripts"><details><summary>Translated transcript</summary><p>{record.translatedText||'—'}</p></details><details><summary>Original transcript</summary><p>{record.originalText||'—'}</p></details></div></div></details>)}</div>
+      <div className="meeting-history-list">{meetingHistory.map(record=><details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title||'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs||0)}</span></div><span>{record.target}</span></summary><div className="meeting-history-detail">{record.notes?.summary&&<div><h4>Summary</h4><p>{record.notes.summary}</p></div>}{!!record.notes?.keyPoints?.length&&<div><h4>Key points</h4><ul>{record.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.decisions?.length&&<div><h4>Decisions</h4><ul>{record.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.actions?.length&&<div><h4>To-do / actions</h4><ul>{record.notes.actions.map((item,index)=><li key={index}>{typeof item==='string'?item:[item?.task,item?.owner?'Owner: '+item.owner:'',item?.deadline?'Deadline: '+item.deadline:''].filter(Boolean).join(' · ')}</li>)}</ul></div>}{!!record.notes?.openQuestions?.length&&<div><h4>Open questions</h4><ul>{record.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}<div className="meeting-history-transcripts"><details><summary>Translated transcript</summary><p>{record.translatedText||'—'}</p></details><details><summary>Original transcript</summary><p>{record.originalText||'—'}</p></details></div></div></details>)}</div>
     </section>}
 
-    <p className="meeting-footnote">Ana transcribes and translates through the realtime audio connection. The text grows continuously in this single screen; audio itself is not saved here.</p>
+    <p className="meeting-footnote">During the meeting Ana only listens, transcribes and translates. When you press End meeting, Ana uses the original transcript once to create the meeting title, summary, key points, decisions, actions and open questions, then saves the complete record in Meeting History on this device.</p>
   </section>
 }
