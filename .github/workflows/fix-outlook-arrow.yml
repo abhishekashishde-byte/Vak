@@ -1,0 +1,23 @@
+name: Fix Outlook arrow
+on:
+  push:
+    paths:
+      - 'scripts/fix-outlook-arrow-paste.mjs'
+      - '.github/workflows/fix-outlook-arrow.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: node scripts/fix-outlook-arrow-paste.mjs
+      - run: npm install && npm run build
+      - run: |
+          git config user.name github-actions-bot
+          git config user.email actions@github.com
+          git add src/App.jsx
+          git diff --cached --quiet || git commit -m 'Fix Outlook arrow paste handling'
+          git push origin main
