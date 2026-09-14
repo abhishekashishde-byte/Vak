@@ -35,10 +35,12 @@ function normalizeClipboardText(text = '') {
     .replace(/\r\n?/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/â†’|âžœ|âž¡|Ã¢â€ â€™|Ã¢â€ â€˜/g, '→')
-    // Outlook/legacy clipboard encodings can occasionally turn an arrow between
-    // short technical codes into “à” (for example TPàEQ). Repair only this
-    // uppercase-code pattern so genuine French “à” remains untouched.
-    .replace(/([A-ZÄÖÜ0-9]{1,12})\s*à\s*([A-ZÄÖÜ0-9]{1,12})/g, '$1 → $2')
+    // Outlook can encode Wingdings arrows as the Latin character “à”.
+    // The most reliable plain-text fallback is a line-leading à glued to a word.
+    // Legitimate French/Italian “à” is normally followed by whitespace, so leave that untouched.
+    .replace(/(^|\n)([ \t]*)à(?=[\p{L}\p{N}])/gu, '$1$2→ ')
+    // Also repair arrows accidentally flattened between short technical identifiers.
+    .replace(/([A-ZÄÖÜ0-9]{1,16})\s*à\s*([A-ZÄÖÜ0-9]{1,16})/g, '$1 → $2')
     .replace(/^[ \t]*[•◦▪‣∙]\s*/gm, '• ')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -49,6 +51,23 @@ function clipboardHtmlToText(html = '', fallback = '') {
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const body = doc.body
+
+    // Outlook/Word frequently stores arrows as the character “à” rendered with
+    // Wingdings/Webdings/Symbol. Convert those font-specific glyphs before
+    // extracting text, otherwise the browser correctly returns the literal “à”.
+    body.querySelectorAll('*').forEach(el => {
+      const face = String(el.getAttribute?.('face') || '')
+      const style = String(el.getAttribute?.('style') || '')
+      const font = `${face} ${style}`.toLowerCase()
+      if (!/(wingdings|webdings|symbol)/.test(font)) return
+      ;[...el.childNodes].forEach(node => {
+        if (node.nodeType !== 3 || !node.nodeValue) return
+        node.nodeValue = node.nodeValue
+          .replace(/à/g, '→')
+          .replace(/è/g, '➜')
+      })
+    })
+
     body.querySelectorAll('li').forEach(li => {
       const parent = li.parentElement
       let prefix = '• '
