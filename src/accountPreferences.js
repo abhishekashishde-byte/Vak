@@ -110,17 +110,25 @@ const applyRemoteBundle = remote => {
       const remoteGlossaryTs = Number(remote.glossaryUpdatedAt || 0) || 0
 
       if (remoteGlossaryTs > localGlossaryTs) {
-        writeJson(GLOSSARY_KEY, remoteGlossary)
-        setGlossaryUpdatedAt(remoteGlossaryTs)
+        if (localGlossary.length && glossarySignature(localGlossary) !== glossarySignature(remoteGlossary)) {
+          const merged = mergeGlossaries(localGlossary, remoteGlossary)
+          writeJson(GLOSSARY_KEY, merged)
+          setGlossaryUpdatedAt(Date.now())
+        } else {
+          writeJson(GLOSSARY_KEY, remoteGlossary)
+          setGlossaryUpdatedAt(remoteGlossaryTs)
+        }
       } else if (localGlossaryTs > remoteGlossaryTs) {
-        // Keep the newer local glossary. This prevents an unrelated, newer account
-        // preference bundle from erasing a term that was just saved on this device.
+        if (remoteGlossary.length && glossarySignature(localGlossary) !== glossarySignature(remoteGlossary)) {
+          const merged = mergeGlossaries(remoteGlossary, localGlossary)
+          writeJson(GLOSSARY_KEY, merged)
+          setGlossaryUpdatedAt(Date.now())
+        }
       } else if (!localGlossary.length && remoteGlossary.length) {
-        // Backward compatibility for account bundles created before glossary timestamps.
         writeJson(GLOSSARY_KEY, remoteGlossary)
       } else if (localGlossary.length && remoteGlossary.length && glossarySignature(localGlossary) !== glossarySignature(remoteGlossary)) {
-        // Legacy bundles have no category timestamp. Merge rather than destroy data.
         writeJson(GLOSSARY_KEY, mergeGlossaries(remoteGlossary, localGlossary))
+        setGlossaryUpdatedAt(Date.now())
       }
     }
 
@@ -226,9 +234,17 @@ export async function hydrateAccountPreferences() {
 }
 
 export function markAccountPreferencesChanged() {
-  if (applyingRemote || bootstrapping || Date.now() < suppressMarksUntil) return
+  if (applyingRemote || Date.now() < suppressMarksUntil) return
   const now = Date.now()
   const currentGlossarySignature = glossarySignature(readJson(GLOSSARY_KEY, []))
+  if (bootstrapping) {
+    if (currentGlossarySignature !== lastGlossarySignature) {
+      lastGlossarySignature = currentGlossarySignature
+      setGlossaryUpdatedAt(now)
+      setLocalUpdatedAt(now)
+    }
+    return
+  }
   if (currentGlossarySignature !== lastGlossarySignature) {
     lastGlossarySignature = currentGlossarySignature
     setGlossaryUpdatedAt(now)
