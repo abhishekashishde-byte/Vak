@@ -1,9 +1,10 @@
-name: Add Ana Email mode
+name: Update Ana Write for me mode
 
 on:
   push:
     paths:
       - '.github/workflows/add-email-mode.yml'
+      - 'scripts/add-email-mode.mjs'
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Apply Ana Email mode
+      - name: Apply Ana Write for me mode
         run: node scripts/add-email-mode.mjs
 
       - name: Validate production build
@@ -27,11 +28,11 @@ jobs:
           npm install
           npm run build
 
-      - name: Commit Ana Email mode
+      - name: Commit Ana Write for me mode
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/App.jsx
           git diff --cached --quiet && exit 0
-          git commit -m 'Add smart Email mode to Ana Translate'
+          git commit -m 'Replace Email with Write for me in Ana'
           git push origin main
