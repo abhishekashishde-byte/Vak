@@ -30,7 +30,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add public/meet-ana.html
+          git add public/meet-ana/index.html
           git diff --cached --quiet && exit 0
           git commit -m 'Use approved Ana logo on Meet Ana page'
           git push origin main
