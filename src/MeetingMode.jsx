@@ -83,6 +83,8 @@ export default function MeetingMode() {
   const translatedBufferRef = useRef('')
   const commitTimerRef = useRef(null)
   const commitWaitsRef = useRef(0)
+  const translationPaneRef = useRef(null)
+  const hearingPaneRef = useRef(null)
 
   const active = ['connecting', 'listening', 'recovering'].includes(sessionState) || paused
   const screenSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
@@ -100,6 +102,16 @@ export default function MeetingMode() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ target, startedAt, originalText, translatedText, updatedAt: Date.now() }))
     } catch {}
   }, [target, startedAt, originalText, translatedText])
+
+  useEffect(() => {
+    const node = translationPaneRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [translatedText, liveTranslation])
+
+  useEffect(() => {
+    const node = hearingPaneRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [originalText, liveOriginal])
 
   useEffect(() => () => stopMeeting(false), [])
 
@@ -336,8 +348,11 @@ export default function MeetingMode() {
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
+  const fullOriginal = appendText(originalText, liveOriginal)
+  const fullTranslation = appendText(translatedText, liveTranslation)
+
   const copyTranscript = async () => {
-    const value = clean(translatedText || originalText)
+    const value = clean(fullTranslation || fullOriginal)
     if (!value) return
     await navigator.clipboard.writeText(value)
     setCopied(true)
@@ -345,8 +360,8 @@ export default function MeetingMode() {
   }
 
   const downloadTranscript = () => {
-    if (!originalText && !translatedText) return
-    const text = `Ana Meeting\nTranslated to: ${target}\n\nTRANSLATION\n${translatedText || '—'}\n\nORIGINAL TRANSCRIPT\n${originalText || '—'}\n`
+    if (!fullOriginal && !fullTranslation) return
+    const text = `Ana Meeting\nTranslated to: ${target}\n\nTRANSLATION\n${fullTranslation || '—'}\n\nANA HEARS\n${fullOriginal || '—'}\n`
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -363,14 +378,11 @@ export default function MeetingMode() {
       : paused ? 'Paused'
         : active ? 'Ana is listening now' : sessionState === 'ended' ? 'Meeting ended' : 'Ready'
 
-  const currentOriginal = clean(liveOriginal) || (active ? 'Listening for speech…' : '')
-  const currentTranslation = clean(liveTranslation)
-
   return <section className="meeting-wrap meeting-realtime">
     <header className="meeting-head">
       <div className="eyebrow"><Headphones size={14}/> Meeting</div>
       <h1>Hear it now. Understand it now.</h1>
-      <p>Ana shows what she hears immediately, then streams the translation as it becomes available. The transcript is saved as continuous text — never as recorder chunks.</p>
+      <p>One live screen: the translation stays on top and everything Ana hears builds continuously underneath it.</p>
     </header>
 
     <section className="meeting-setup">
@@ -390,57 +402,47 @@ export default function MeetingMode() {
         </label>
       </div>
 
-      <div className={`meeting-live-card ${active ? 'active' : ''}`}>
+      <div className={`meeting-single-card ${active ? 'active' : ''}`}>
         <div className="meeting-status-row meeting-live-status">
           <div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div>
           <span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span>
         </div>
 
-        <div className="meeting-realtime-stack">
-          <section className={`meeting-live-translation ${currentTranslation ? 'has-text' : ''}`}>
-            <span>Live translation · {target}</span>
-            <strong>{currentTranslation || (active && currentOriginal ? 'Translation is catching up…' : active ? 'Translation will appear here as soon as speech is understood.' : 'Start the meeting when you are ready.')}</strong>
+        <div className="meeting-single-screen">
+          <section className="meeting-complete-translation">
+            <div className="meeting-screen-label"><span>Translation · {target}</span>{active && liveOriginal && !liveTranslation ? <em>catching up…</em> : null}</div>
+            <div ref={translationPaneRef} className="meeting-screen-scroll meeting-translation-scroll">
+              <p>{fullTranslation || (active ? 'Translation will appear here as soon as Ana understands the speech.' : 'Your translated meeting will appear here.')}</p>
+            </div>
           </section>
 
-          <section className="meeting-live-hearing">
-            <span>What Ana hears</span>
-            <p>{currentOriginal || (originalText ? 'Ready to continue listening.' : 'The live transcription appears here immediately while people speak.')}</p>
+          <section className="meeting-complete-hearing">
+            <div className="meeting-screen-label"><span>What Ana hears</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div>
+            <div ref={hearingPaneRef} className="meeting-screen-scroll meeting-hearing-scroll">
+              <p>{fullOriginal || (active ? 'Listening for speech…' : 'Start listening and the transcription will appear here immediately.')}</p>
+            </div>
           </section>
         </div>
 
         {error && <div className="error meeting-error">{error}</div>}
 
-        <div className="meeting-controls">
-          {!active ? <button className="meeting-start" onClick={startMeeting}><Headphones size={18}/> Start listening</button> : <>
-            <button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button>
-            <button className="meeting-stop" onClick={() => stopMeeting(true)}><Square size={16}/> End meeting</button>
-          </>}
+        <div className="meeting-single-footer">
+          <div className="meeting-controls">
+            {!active ? <button className="meeting-start" onClick={startMeeting}><Headphones size={18}/> Start listening</button> : <>
+              <button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button>
+              <button className="meeting-stop" onClick={() => stopMeeting(true)}><Square size={16}/> End meeting</button>
+            </>}
+          </div>
+
+          <div className="meeting-transcript-actions meeting-single-actions">
+            <button onClick={copyTranscript} disabled={!fullTranslation && !fullOriginal}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button>
+            <button onClick={downloadTranscript} disabled={!fullTranslation && !fullOriginal}><Download size={15}/> Download</button>
+            <button onClick={clearTranscript} disabled={active || (!fullTranslation && !fullOriginal)}><Trash2 size={15}/> Clear</button>
+          </div>
         </div>
       </div>
     </section>
 
-    <section className="meeting-transcript meeting-continuous">
-      <div className="meeting-transcript-head">
-        <div><strong>Meeting transcript</strong><span>{originalText || liveOriginal ? 'building continuously as Ana listens' : 'Nothing saved yet'}</span></div>
-        <div>
-          <button onClick={copyTranscript} disabled={!translatedText && !originalText}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy translation'}</button>
-          <button onClick={downloadTranscript} disabled={!translatedText && !originalText}><Download size={15}/> Download</button>
-          <button onClick={clearTranscript} disabled={active || (!translatedText && !originalText)}><Trash2 size={15}/> Clear</button>
-        </div>
-      </div>
-
-      <div className="meeting-continuous-body">
-        <section className="meeting-saved-translation">
-          <span>{target}</span>
-          <p>{appendText(translatedText, liveTranslation) || 'The translated transcript will build here continuously.'}</p>
-        </section>
-        <section className="meeting-saved-original">
-          <span>Original transcript</span>
-          <p>{appendText(originalText, liveOriginal) || 'What Ana hears will build here continuously from the first words.'}</p>
-        </section>
-      </div>
-    </section>
-
-    <p className="meeting-footnote">Ana uses a realtime audio connection for the live transcription and translation. Audio itself is not saved by this meeting view; only the text transcript is kept on this device.</p>
+    <p className="meeting-footnote">Ana transcribes and translates through the realtime audio connection. The text grows continuously in this single screen; audio itself is not saved here.</p>
   </section>
 }
