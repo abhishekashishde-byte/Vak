@@ -168,6 +168,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const [newSource, setNewSource] = useState('')
   const [newPreferred, setNewPreferred] = useState('')
   const inputRef = useRef(null)
+  const refinementCacheRef = useRef(new Map())
   const dictationPositionRef = useRef(null)
   const insertDictation = text => {
     const position = dictationPositionRef.current
@@ -245,7 +246,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
       }
       if (outputTarget === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script.'
     } else {
-      instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${outputTarget}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
+      instructions = `You are Ana, a premium translation engine. Translation quality is the primary goal. Detect the source language and translate into ${outputTarget}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. First understand the complete meaning, intent, clause relationships, idioms, implied meaning, domain terminology and level of formality. Then write the message the way a fluent native speaker of ${outputTarget} would naturally express the SAME meaning. Do not mirror source-language word order, syntax or collocations when they sound unnatural. Prefer natural target-language phrasing over literal word substitution. Preserve every factual claim, request, condition, degree of certainty and emotional tone. Do not add or remove meaning. If the source is awkward or non-native, translate the intended meaning rather than reproducing awkward grammar. If meaning is ambiguous, preserve the ambiguity instead of guessing. Keep terminology consistent throughout. Before returning, silently check semantic fidelity, naturalness, grammar, idiomatic phrasing and terminology consistency, then output only the polished translation.`
       if (isGermanTarget(outputTarget)) instructions += `\n${germanVariantRule(outputTarget)} ${registerRules()}`
       if (outputTarget === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.'
     }
@@ -310,16 +311,26 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
   const inspectWord = async (word, start, end) => {
     if (!output || suggestLoading) return
+    const cacheKey = [target, register, output, start, end].join('::')
+    const cached = refinementCacheRef.current.get(cacheKey)
+    if (cached) { setSelected({ word, start, end, ...cached }); return }
     setSelected({ word, start, end, sourceTerm: '', partOfSpeech: '', meaning: '', alternatives: [] })
     setSuggestLoading(true)
     try {
-      const prompt = `SOURCE TEXT:\n${input}\n\nCURRENT ${target.toUpperCase()} TRANSLATION:\n${output}\n\nSELECTED TARGET WORD:\n${word}\n\nIdentify the source word or short source phrase represented by the selected target word, then suggest up to 5 natural alternatives that are drop-in replacements for exactly this selected span. Return JSON only: {"sourceTerm":"...","partOfSpeech":"...","meaning":"short plain-English meaning in context","alternatives":[{"term":"...","note":"short nuance"}]}`
-      let instructions = `You are a bilingual editor refining a translation into ${target}. Return valid JSON only.`
+      const ratio = output.length ? start / output.length : 0
+      const sourcePos = Math.max(0, Math.min(input.length, Math.round(input.length * ratio)))
+      const sourceContext = input.slice(Math.max(0, sourcePos - 1200), Math.min(input.length, sourcePos + 1200))
+      const targetContext = output.slice(Math.max(0, start - 450), Math.min(output.length, end + 450))
+      const prompt = `SOURCE CONTEXT:\n${sourceContext}\n\nTARGET CONTEXT:\n${targetContext}\n\nSELECTED TARGET WORD:\n${word}\n\nIdentify the exact source word or shortest source phrase represented by this word. Suggest up to 4 fluent, context-correct drop-in alternatives. Keep notes very short. Return JSON only: {\"sourceTerm\":\"...\",\"partOfSpeech\":\"...\",\"meaning\":\"short meaning\",\"alternatives\":[{\"term\":\"...\",\"note\":\"...\"}]}`
+      let instructions = `You are a fast bilingual editor refining a translation into ${target}. Return valid JSON only. Do not explain reasoning.`
       if (isGermanTarget(target)) instructions += ` ${germanVariantRule(target)} ${registerRules()}`
       if (target === 'Hinglish') instructions += ' Hinglish must be natural Hindi written only in Roman/Latin letters, never Devanagari.'
       const parsed = parseJson(await callLuna(prompt, instructions)) || {}
-      const alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives.filter(x => x?.term && String(x.term).toLowerCase() !== word.toLowerCase()).slice(0, 5) : []
-      setSelected(prev => prev ? { ...prev, sourceTerm: String(parsed.sourceTerm || '').trim(), partOfSpeech: String(parsed.partOfSpeech || '').trim(), meaning: String(parsed.meaning || '').trim(), alternatives } : prev)
+      const alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives.filter(x => x?.term && String(x.term).toLowerCase() !== word.toLowerCase()).slice(0, 4) : []
+      const result = { sourceTerm: String(parsed.sourceTerm || '').trim(), partOfSpeech: String(parsed.partOfSpeech || '').trim(), meaning: String(parsed.meaning || '').trim(), alternatives }
+      refinementCacheRef.current.set(cacheKey, result)
+      if (refinementCacheRef.current.size > 60) refinementCacheRef.current.delete(refinementCacheRef.current.keys().next().value)
+      setSelected(prev => prev ? { ...prev, ...result } : prev)
     } catch (err) { setSelected(prev => prev ? { ...prev, error: err.message || 'Could not load alternatives' } : prev) }
     finally { setSuggestLoading(false) }
   }

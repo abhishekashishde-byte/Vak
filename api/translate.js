@@ -102,11 +102,12 @@ export default async function handler(req, res) {
   const isTalkTurn = !isTalkDebrief && (rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user'))
   const isAnaTranslation = rawInstructions.includes('premium translation engine')
   const isWordRefinement = rawInstructions.includes('bilingual editor refining a translation')
+  const isLanguageDetection = rawInstructions.includes("Ana's language detector")
   const preserveLayout = isAnaTranslation && /[\r\n]/.test(text)
 
-  const model = (isAnaBriefing || isTalkDebrief) ? 'gpt-5.6-luna' : isTalkTurn ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
-  const reasoningEffort = (isAnaBriefing || isTalkDebrief) ? 'low' : isTalkTurn ? 'medium' : 'medium'
-  const deadlineMs = isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : 20000
+  const model = isTalkTurn || isAnaTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
+  const reasoningEffort = isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief ? 'low' : 'medium'
+  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 18000 : 20000
 
   let finalInstructions = rawInstructions
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
@@ -130,7 +131,8 @@ export default async function handler(req, res) {
     }
     if (isAnaBriefing) body.max_output_tokens = 900
     if (isTalkDebrief) body.max_output_tokens = 700
-    if (isWordRefinement) body.max_output_tokens = 650
+    if (isLanguageDetection) body.max_output_tokens = 90
+    if (isWordRefinement) body.max_output_tokens = 280
 
     let content = await callResponses(body, controller.signal)
     if (!content) return res.status(502).json({ error: 'Model returned no text' })
