@@ -44,6 +44,18 @@ If numerical components are supplied, sanity-check that they reconcile with the 
 The moment the user's goal is satisfied AND the result is sufficiently clear to hand back, stop the task immediately.
 If a material owner decision is still needed — payment, price acceptance, appointment choice, commitment, sensitive information, terms, or another consequential choice — ask the owner and do not falsely mark the task complete.`
 
+const LINE_BREAK_TOKEN = '⟦ANA_LINE_BREAK⟧'
+
+function encodeTranslationLayout(text) {
+  return String(text).replace(/\r\n?/g, '\n').replace(/\n/g, ` ${LINE_BREAK_TOKEN} `)
+}
+
+function restoreTranslationLayout(text) {
+  return String(text)
+    .replace(new RegExp(`\\s*${LINE_BREAK_TOKEN}\\s*`, 'g'), '\n')
+    .trim()
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -55,9 +67,9 @@ export default async function handler(req, res) {
   const isAnaBriefing = rawInstructions.includes("preparing to speak on a user's behalf")
   const isTalkDebrief = rawInstructions.includes('reviewing a live real-world conversation after speaking for the user')
   const isTalkTurn = !isTalkDebrief && (rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user'))
+  const isAnaTranslation = rawInstructions.includes('premium translation engine')
+  const preserveLayout = isAnaTranslation && /[\r\n]/.test(text)
 
-  // Interactive briefing must be fast. The heavier reasoning model is reserved for
-  // places where the user is not blocked waiting for Ana to produce the next screen.
   const model = (isAnaBriefing || isTalkDebrief) ? 'gpt-5.6-luna' : isTalkTurn ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
   const reasoningEffort = (isAnaBriefing || isTalkDebrief) ? 'low' : isTalkTurn ? 'medium' : 'medium'
   const deadlineMs = isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : 20000
@@ -65,6 +77,9 @@ export default async function handler(req, res) {
   let finalInstructions = rawInstructions
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
   if (isTalkTurn) finalInstructions += TALK_COMPLETION_PROTOCOL
+  if (preserveLayout) {
+    finalInstructions += `\n\nLAYOUT PRESERVATION — mandatory:\nThe input contains ${LINE_BREAK_TOKEN} markers representing line breaks typed by the user. Copy EVERY marker exactly, in the same order, between the corresponding translated passages. Never remove, add, translate, combine, or move these markers. Preserve blank lines by preserving consecutive markers.`
+  }
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), deadlineMs)
@@ -73,7 +88,7 @@ export default async function handler(req, res) {
     const body = {
       model,
       instructions: finalInstructions,
-      input: text,
+      input: preserveLayout ? encodeTranslationLayout(text) : text,
       reasoning: { effort: reasoningEffort },
     }
     if (isAnaBriefing) body.max_output_tokens = 900
@@ -94,8 +109,9 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data?.error?.message || 'OpenAI request failed' })
     }
 
-    const content = collectText(data)
+    let content = collectText(data)
     if (!content) return res.status(502).json({ error: 'Model returned no text' })
+    if (preserveLayout) content = restoreTranslationLayout(content)
     return res.status(200).json({ content, model })
   } catch (error) {
     if (error?.name === 'AbortError') {
