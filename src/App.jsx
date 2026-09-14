@@ -4,6 +4,7 @@ import { useTranslateDictation } from './useTranslateDictation.js'
 import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
 import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
+import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 
 const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
@@ -70,12 +71,90 @@ async function callLunaPreservingLineBreaks(text, instructions) {
   return translatedLines.join('\n')
 }
 
+const SMART_TARGET_MIN_CHARS = 12
+const SMART_TARGET_CONFIDENCE = 0.82
+
+async function detectSourceLanguage(text) {
+  const instructions = `You are Ana's language detector. Detect ONLY the dominant language of the user's supplied text. Ignore personal preferences, target-language settings, remembered languages, and any request to translate. Return valid JSON only in this shape: {"language":"German","confidence":0.98}. The language value must be exactly one of: ${TARGETS.join(', ')}, Other. Use German for ordinary Standard German. Use a German dialect label only when the text itself is clearly written in that dialect. Confidence must be between 0 and 1.`
+  const res = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: String(text).slice(0, 4500), instructions, skipPersonalLanguageMemory: true }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Language detection failed')
+  const parsed = parseJson(data.content) || {}
+  const language = TARGETS.includes(parsed.language) ? parsed.language : ''
+  const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0))
+  return { language, confidence }
+}
+
+function preferredTargetForSource(source) {
+  const memory = getPersonalLanguageMemory() || {}
+  const sourceCounts = memory.translationTargets?.[source] || {}
+  const learned = Object.entries(sourceCounts)
+    .filter(([language]) => language !== source && TARGETS.includes(language))
+    .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0]
+  if (learned?.[0]) return { target: learned[0], basis: 'usual' }
+
+  const recent = Array.isArray(memory.translationRecentTargets) ? memory.translationRecentTargets : []
+  const recentTarget = recent.find(language => language !== source && TARGETS.includes(language))
+  if (recentTarget) return { target: recentTarget, basis: 'recent' }
+
+  if (memory.ownerLanguage && memory.ownerLanguage !== source && TARGETS.includes(memory.ownerLanguage)) {
+    return { target: memory.ownerLanguage, basis: 'preference' }
+  }
+
+  const liveTarget = Array.isArray(memory.lastLiveLanguages)
+    ? memory.lastLiveLanguages.find(language => language !== source && TARGETS.includes(language))
+    : ''
+  if (liveTarget) return { target: liveTarget, basis: 'preference' }
+
+  const globalTarget = Object.entries(memory.translationTargetCounts || {})
+    .filter(([language]) => language !== source && TARGETS.includes(language))
+    .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))[0]?.[0]
+  if (globalTarget) return { target: globalTarget, basis: 'recent' }
+
+  if (source === 'German') return { target: 'English', basis: 'fallback' }
+  if (source === 'English') return { target: 'German', basis: 'fallback' }
+  return { target: source === 'German' ? 'English' : 'German', basis: 'fallback' }
+}
+
+function rememberTranslationTarget(source, target) {
+  if (!source || !target || source === target || !TARGETS.includes(target)) return
+  const memory = getPersonalLanguageMemory() || {}
+  const translationTargets = { ...(memory.translationTargets || {}) }
+  const sourceCounts = { ...(translationTargets[source] || {}) }
+  sourceCounts[target] = Number(sourceCounts[target] || 0) + 1
+  translationTargets[source] = sourceCounts
+
+  const translationTargetCounts = { ...(memory.translationTargetCounts || {}) }
+  translationTargetCounts[target] = Number(translationTargetCounts[target] || 0) + 1
+
+  const previousRecent = Array.isArray(memory.translationRecentTargets) ? memory.translationRecentTargets : []
+  const translationRecentTargets = [target, ...previousRecent.filter(language => language !== target)].slice(0, 6)
+
+  rememberPersonalLanguagePreference({ translationTargets, translationTargetCounts, translationRecentTargets })
+}
+
+function smartTargetNotice(target, basis) {
+  const suffix = basis === 'usual'
+    ? ' based on your usual choice.'
+    : basis === 'recent'
+      ? ' based on your recent choices.'
+      : basis === 'preference'
+        ? ' based on your language preference.'
+        : '.'
+  return `I thought you may have forgotten to change the target language, so I selected ${target}${suffix}`
+}
+
 export default function App() {
   const [input, setInput] = useState(() => String(loadDraft().input || ''))
   const [output, setOutput] = useState(() => String(loadDraft().output || ''))
   const [target, setTarget] = useState(() => TARGETS.includes(loadDraft().target) ? loadDraft().target : 'German')
   const [outputMode, setOutputMode] = useState(() => loadDraft().outputMode === 'device' ? 'device' : 'online')
   const [writingMode, setWritingMode] = useState(() => ['write', 'email'].includes(loadDraft().writingMode) ? 'write' : 'translate')
+  const [smartLanguageNotice, setSmartLanguageNotice] = useState('')
   const [offlineNotice, setOfflineNotice] = useState('')
   const [register, setRegister] = useState(() => { try { return localStorage.getItem(REGISTER_KEY) || 'formal' } catch { return 'formal' } })
   const [loading, setLoading] = useState(false)
@@ -145,45 +224,77 @@ export default function App() {
   const registerRules = () => register === 'formal'
     ? 'For German, use formal Sie/Ihnen/Ihr consistently. Never switch to du.'
     : 'For German, use informal du/dich/dir/dein consistently. Never switch to Sie.'
-  const glossaryInstructions = () => activeGlossary.length
-    ? `\nPERSONAL GLOSSARY — explicit user preferences override ordinary word choice:\n${activeGlossary.map(item => `- "${item.source}" → "${item.preferred}"`).join('\n')}\nPreserve preferred wording unless grammar requires inflection.`
-    : ''
+  const glossaryInstructions = (selectedTarget = target) => {
+    const terms = glossary.filter(item => item.target === selectedTarget)
+    return terms.length
+      ? `\nPERSONAL GLOSSARY — explicit user preferences override ordinary word choice:\n${terms.map(item => `- "${item.source}" → "${item.preferred}"`).join('\n')}\nPreserve preferred wording unless grammar requires inflection.`
+      : ''
+  }
 
-  const translationInstructions = () => {
+  const translationInstructions = (selectedTarget = target) => {
+    const outputTarget = selectedTarget
     let instructions
     if (writingMode === 'write') {
-      instructions = `You are Ana Write for me, a multilingual writing assistant. The user will tell you what they need to communicate and may give rough notes, fragments, incomplete sentences, facts, context, tone or purpose in any language. Understand the intent and write the final ready-to-send text in ${target}. Return ONLY the finished text with no explanation, labels or quotation marks. Choose the appropriate format from the user's intent — for example an email, message, WhatsApp text, letter, reply, request, announcement or short note. Do not force email formatting unless the request is clearly an email or formal correspondence. Preserve every factual detail, name, date, number, URL, request, commitment and intention supplied by the user. Correct spelling, punctuation and grammar. Complete incomplete thoughts when the intended meaning is clear. Make the result natural, coherent and appropriately polite. If the format clearly needs a greeting or closing and the user omitted one, add a neutral suitable one without inventing names. Never invent facts, people, dates, promises, decisions, requests, relationships or other substantive information that the user did not provide.`
-      if (isGermanTarget(target)) {
-        instructions += `\n${germanVariantRule(target)} ${registerRules()}`
+      instructions = `You are Ana Write for me, a multilingual writing assistant. The user will tell you what they need to communicate and may give rough notes, fragments, incomplete sentences, facts, context, tone or purpose in any language. Understand the intent and write the final ready-to-send text in ${outputTarget}. Return ONLY the finished text with no explanation, labels or quotation marks. Choose the appropriate format from the user's intent — for example an email, message, WhatsApp text, letter, reply, request, announcement or short note. Do not force email formatting unless the request is clearly an email or formal correspondence. Preserve every factual detail, name, date, number, URL, request, commitment and intention supplied by the user. Correct spelling, punctuation and grammar. Complete incomplete thoughts when the intended meaning is clear. Make the result natural, coherent and appropriately polite. If the format clearly needs a greeting or closing and the user omitted one, add a neutral suitable one without inventing names. Never invent facts, people, dates, promises, decisions, requests, relationships or other substantive information that the user did not provide.`
+      if (isGermanTarget(outputTarget)) {
+        instructions += `\n${germanVariantRule(outputTarget)} ${registerRules()}`
         instructions += register === 'formal'
           ? '\nWhen the requested format is clearly a German email or formal letter and a greeting or closing is missing, use an appropriate neutral professional greeting and closing such as “Guten Tag,” and “Mit freundlichen Grüßen”. Do not add email conventions to ordinary messages.'
           : '\nWhen the requested format is clearly a German email or letter and a greeting or closing is missing, use a natural friendly greeting and closing such as “Hallo,” and “Viele Grüße”. Do not add email conventions to ordinary messages.'
       }
-      if (target === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script.'
+      if (outputTarget === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script.'
     } else {
-      instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
-      if (isGermanTarget(target)) instructions += `\n${germanVariantRule(target)} ${registerRules()}`
-      if (target === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.'
+      instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${outputTarget}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
+      if (isGermanTarget(outputTarget)) instructions += `\n${germanVariantRule(outputTarget)} ${registerRules()}`
+      if (outputTarget === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.'
     }
-    return instructions + glossaryInstructions()
+    return instructions + glossaryInstructions(outputTarget)
   }
 
   const translate = async () => {
     const text = input.trim(); if (!text || loading) return
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
+    let actualTarget = target
+    let detectedSource = ''
     try {
-      const instructions = translationInstructions()
+      if (writingMode === 'translate' && text.replace(/\s/g, '').length >= SMART_TARGET_MIN_CHARS) {
+        try {
+          const detected = await detectSourceLanguage(text)
+          detectedSource = detected.language
+          if (detected.language && detected.confidence >= SMART_TARGET_CONFIDENCE && detected.language === target) {
+            const choice = preferredTargetForSource(detected.language)
+            if (choice?.target && choice.target !== target) {
+              actualTarget = choice.target
+              setTarget(actualTarget)
+              setSmartLanguageNotice(smartTargetNotice(actualTarget, choice.basis))
+            } else {
+              setSmartLanguageNotice('')
+            }
+          } else {
+            setSmartLanguageNotice('')
+          }
+        } catch {
+          setSmartLanguageNotice('')
+        }
+      } else {
+        setSmartLanguageNotice('')
+      }
+
+      const instructions = translationInstructions(actualTarget)
       const result = writingMode === 'write'
         ? await callLuna(text, instructions)
         : await callLunaPreservingLineBreaks(text, instructions)
       setOutput(result)
       setOutputMode('online')
+      if (writingMode === 'translate' && detectedSource && detectedSource !== actualTarget) {
+        rememberTranslationTarget(detectedSource, actualTarget)
+      }
     } catch (err) {
       if (writingMode === 'write') {
         const network = getNetworkState()
         setError(network.online ? (err.message || 'Could not write this for you') : 'You’re offline. Your notes are saved automatically. Reconnect to use Write for me.')
       } else {
-        const deviceResult = await tryOnDeviceTranslation(text, target)
+        const deviceResult = await tryOnDeviceTranslation(text, actualTarget)
         if (deviceResult) {
           setOutput(deviceResult)
           setOutputMode('device')
@@ -227,7 +338,7 @@ export default function App() {
     setNewSource(''); setNewPreferred('')
   }
   const copyOutput = async () => { if (!output) return; await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1400) }
-  const clear = () => { setInput(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
+  const clear = () => { setInput(''); setOutput(''); setOutputMode('online'); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
 
   return <main className="app-shell">
     <header className="topbar">
@@ -244,17 +355,18 @@ export default function App() {
     <section className="translator-card">
       <div className="toolbar">
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
-        <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
+        <select value={target} onChange={e => { setTarget(e.target.value); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
         {isGermanTarget(target) && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
-        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'write' ? 'active' : ''} onClick={() => { setWritingMode('write'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Write for me</button></div>
+        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'write' ? 'active' : ''} onClick={() => { setWritingMode('write'); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Write for me</button></div>
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
-        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
+        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); if (smartLanguageNotice) setSmartLanguageNotice('') }} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
         <article className="pane output-pane"><div className="pane-label">{writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
+    {smartLanguageNotice && <div className="smart-language-note">{smartLanguageNotice}</div>}
     {offlineNotice && <div className="ana-offline-note">{offlineNotice}</div>}
     {error && <div className="error">{error}</div>}
     <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'write' ? 'Writing…' : 'Translating…') : writingMode === 'write' ? 'Write for me' : 'Translate'}</button></div>

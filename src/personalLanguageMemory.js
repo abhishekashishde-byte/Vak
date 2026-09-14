@@ -107,6 +107,7 @@ const augmentTranslateFetch = (input, init = {}) => {
 
   try {
     const body = JSON.parse(init.body)
+    if (body.skipPersonalLanguageMemory) return { input, init }
     learnFromInstructions(body.instructions)
     const memory = personalLanguageInstructions()
     if (!memory) return { input, init }
