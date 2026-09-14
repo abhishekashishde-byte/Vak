@@ -64,7 +64,7 @@ meeting = replace(
 meeting = replace(
   meeting,
   "  const transcriptText = () => entries.map(item => `[${formatTime(item.at)}]\\nOriginal: ${item.original}\\n${item.target}: ${item.translated}`).join('\\n\\n')\n",
-  "  const readableBlocks = useMemo(() => buildReadableBlocks(entries), [entries])\n\n  const transcriptText = () => transcriptView === 'readable'\n    ? readableBlocks.map(item => `[${formatTime(item.at)}] ${item.translated}`).join('\\n\\n')\n    : entries.map(item => `[${formatTime(item.at)}]\\nOriginal: ${item.original}\\n${item.target}: ${item.translated}`).join('\\n\\n')\n",
+  "  const readableBlocks = useMemo(() => buildReadableBlocks(entries), [entries])\n\n  const transcriptText = () => transcriptView === 'readable'\n    ? readableBlocks.map(item => '[' + formatTime(item.at) + '] ' + item.translated).join('\\n\\n')\n    : entries.map(item => '[' + formatTime(item.at) + ']\\nOriginal: ' + item.original + '\\n' + item.target + ': ' + item.translated).join('\\n\\n')\n",
   'readable transcript text',
 )
 
@@ -81,7 +81,35 @@ const transcriptStart = meeting.indexOf('    <section className="meeting-transcr
 const footnoteStart = meeting.indexOf('    <p className="meeting-footnote">', transcriptStart)
 if (transcriptStart < 0 || footnoteStart < 0) throw new Error('Could not locate transcript section')
 
-const transcriptSection = `    <section className="meeting-transcript">\n      <div className="meeting-transcript-head">\n        <div><strong>Meeting transcript</strong><span>{entries.length ? (transcriptView === 'readable' ? \\`${readableBlocks.length} readable passage${readableBlocks.length === 1 ? '' : 's'} · ${entries.length} captured segments\\` : \\`${entries.length} captured segment${entries.length === 1 ? '' : 's'}\\`) : 'Nothing saved yet'}</span></div>\n        <div className="meeting-transcript-actions">\n          <div className="meeting-view-toggle" aria-label="Transcript view">\n            <button className={transcriptView === 'readable' ? 'active' : ''} onClick={() => setTranscriptView('readable')}>Readable</button>\n            <button className={transcriptView === 'detailed' ? 'active' : ''} onClick={() => setTranscriptView('detailed')}>Detailed</button>\n          </div>\n          <button onClick={copyTranscript} disabled={!entries.length}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button>\n          <button onClick={downloadTranscript} disabled={!entries.length}><Download size={15}/> Download</button>\n          <button onClick={clearTranscript} disabled={active || !entries.length}><Trash2 size={15}/> Clear</button>\n        </div>\n      </div>\n      <div className="meeting-lines">\n        {entries.length ? (transcriptView === 'readable' ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">\n          <time>{formatTime(item.at)}{item.endAt > item.at ? \\`–${formatTime(item.endAt + SEGMENT_MS)}\\` : ''}</time>\n          <div>\n            <strong>{item.translated}</strong>\n            {item.original && <details className="meeting-original"><summary>Original</summary><p>{item.original}</p></details>}\n          </div>\n        </article>) : entries.map(item => <article key={item.id}>\n          <time>{formatTime(item.at)}</time>\n          <div><strong>{item.translated}</strong><p>{item.original}</p></div>\n        </article>)) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}\n      </div>\n    </section>\n\n`
+const transcriptSection = [
+  '    <section className="meeting-transcript">',
+  '      <div className="meeting-transcript-head">',
+  '        <div><strong>Meeting transcript</strong><span>{entries.length ? (transcriptView === \'readable\' ? (readableBlocks.length + \' readable passage\' + (readableBlocks.length === 1 ? \'\' : \'s\') + \' · \' + entries.length + \' captured segments\') : (entries.length + \' captured segment\' + (entries.length === 1 ? \'\' : \'s\'))) : \'Nothing saved yet\'}</span></div>',
+  '        <div className="meeting-transcript-actions">',
+  '          <div className="meeting-view-toggle" aria-label="Transcript view">',
+  '            <button className={transcriptView === \'readable\' ? \'active\' : \'\'} onClick={() => setTranscriptView(\'readable\')}>Readable</button>',
+  '            <button className={transcriptView === \'detailed\' ? \'active\' : \'\'} onClick={() => setTranscriptView(\'detailed\')}>Detailed</button>',
+  '          </div>',
+  '          <button onClick={copyTranscript} disabled={!entries.length}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? \'Copied\' : \'Copy\'}</button>',
+  '          <button onClick={downloadTranscript} disabled={!entries.length}><Download size={15}/> Download</button>',
+  '          <button onClick={clearTranscript} disabled={active || !entries.length}><Trash2 size={15}/> Clear</button>',
+  '        </div>',
+  '      </div>',
+  '      <div className="meeting-lines">',
+  '        {entries.length ? (transcriptView === \'readable\' ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">',
+  '          <time>{formatTime(item.at)}{item.endAt > item.at ? (\'–\' + formatTime(item.endAt + SEGMENT_MS)) : \'\'}</time>',
+  '          <div>',
+  '            <strong>{item.translated}</strong>',
+  '            {item.original && <details className="meeting-original"><summary>Original</summary><p>{item.original}</p></details>}',
+  '          </div>',
+  '        </article>) : entries.map(item => <article key={item.id}>',
+  '          <time>{formatTime(item.at)}</time>',
+  '          <div><strong>{item.translated}</strong><p>{item.original}</p></div>',
+  '        </article>)) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}',
+  '      </div>',
+  '    </section>',
+  '',
+].join('\n')
 
 meeting = meeting.slice(0, transcriptStart) + transcriptSection + meeting.slice(footnoteStart)
 
