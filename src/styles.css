@@ -7,3 +7,6 @@
 /* Product UI: persistent Ana identity without marketing copy. */
 .ana-brand-mark{width:40px;height:40px;flex:0 0 auto;color:#171717}
 @media(max-width:760px){.ana-brand-mark{width:31px;height:31px}}
+
+.translate-input-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.translate-input-actions .dictate-btn{white-space:nowrap}
+@media(max-width:760px){.pane-label-row{align-items:flex-start!important}.translate-input-actions{gap:4px}.translate-input-actions .dictate-btn{padding:0 8px}.translate-input-actions .dictate-btn svg{width:13px;height:13px}}
