@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
-  const { audio, mimeType = 'audio/webm', target = 'English' } = req.body || {}
+  const { audio, mimeType = 'audio/webm', target = 'English', previousContext = '' } = req.body || {}
   if (!audio || typeof audio !== 'string') return res.status(400).json({ error: 'Missing audio' })
 
   try {
@@ -33,7 +33,11 @@ export default async function handler(req, res) {
     form.append('file', new Blob([bytes], { type: mimeType }), `ana-meeting-segment.${ext}`)
     form.append('model', 'gpt-transcribe')
     form.append('response_format', 'json')
-    form.append('prompt', 'Transcribe exactly what is spoken in this meeting segment. Preserve names, numbers, technical terms, multilingual speech and code-switching. Do not translate, summarize or add commentary.')
+    const context = String(previousContext || '').trim().slice(-1400)
+    const transcriptionPrompt = context
+      ? `Transcribe exactly what is spoken in this meeting segment. Preserve names, numbers, technical terms, multilingual speech and code-switching. Do not translate, summarize or add commentary. Previous meeting context for names and continuity only; do NOT repeat it: ${context}`
+      : 'Transcribe exactly what is spoken in this meeting segment. Preserve names, numbers, technical terms, multilingual speech and code-switching. Do not translate, summarize or add commentary.'
+    form.append('prompt', transcriptionPrompt)
 
     const transcribeResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -46,7 +50,7 @@ export default async function handler(req, res) {
     const transcript = String(transcribeData?.text || '').trim()
     if (!transcript) return res.status(200).json({ transcript: '', translation: '' })
 
-    let instructions = `You are Ana translating a live meeting transcript. Translate ONLY the supplied speech into natural ${target}. Preserve the speaker's perspective, names, numbers, dates, uncertainty, technical terminology and factual meaning. Do not answer questions, summarize, explain, censor or add commentary. If the text is already in ${target}, return it naturally without changing meaning. Return only the translated meeting text.`
+    let instructions = `You are Ana translating the CURRENT speech from a live meeting into natural ${target}. Previous meeting context may be supplied only to resolve names, terminology, pronouns and sentence continuity. Translate ONLY CURRENT SPEECH; never repeat previous context. Preserve the speaker's perspective, names, numbers, dates, uncertainty, technical terminology and factual meaning. If the current speech starts or ends mid-thought because of live chunking, translate it as a natural continuation rather than pretending it is a complete standalone sentence. Do not answer questions, summarize, explain, censor or add commentary. If the current speech is already in ${target}, return it naturally without changing meaning. Return only the translated CURRENT speech.`
     if (target === 'Hinglish') instructions += ' Hinglish means natural conversational Hindi written entirely in Roman/Latin letters. Never use Devanagari.'
     if (target === 'Swabian German (Schwäbisch)') instructions += ' Use natural readable Schwäbisch without caricature.'
     if (target === 'Bavarian German (Bairisch)') instructions += ' Use natural readable Bairisch without caricature.'
@@ -61,7 +65,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'gpt-5.6-luna',
         instructions,
-        input: transcript,
+        input: context ? `PREVIOUS CONTEXT (do not translate or repeat):\n${context}\n\nCURRENT SPEECH (translate only this):\n${transcript}` : transcript,
         reasoning: { effort: 'low' },
         max_output_tokens: 500,
       }),

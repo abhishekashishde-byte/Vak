@@ -4,7 +4,7 @@ import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from '.
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const STORAGE_KEY = 'ana-meeting-transcript-v1'
-const SEGMENT_MS = 4000
+const SEGMENT_MS = 8000
 
 const clean = value => String(value || '').trim()
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -36,6 +36,49 @@ function formatTime(ms = 0) {
   return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
+function endsReadableThought(text = '') {
+  const value = clean(text)
+  return /[.!?][\"'”’)]*$/.test(value) && !/\.\.\.[\"'”’)]*$/.test(value)
+}
+
+function buildReadableBlocks(entries = []) {
+  const blocks = []
+  let current = null
+
+  const flush = () => {
+    if (!current) return
+    current.translated = clean(current.translated)
+    current.original = clean(current.original)
+    blocks.push(current)
+    current = null
+  }
+
+  entries.forEach(item => {
+    if (!current) {
+      current = {
+        id: item.id,
+        at: item.at,
+        endAt: item.at,
+        translated: clean(item.translated),
+        original: clean(item.original),
+        count: 1,
+      }
+    } else {
+      current.endAt = item.at
+      current.translated = [current.translated, clean(item.translated)].filter(Boolean).join(' ')
+      current.original = [current.original, clean(item.original)].filter(Boolean).join(' ')
+      current.count += 1
+    }
+
+    const enoughContent = current.translated.length >= 150
+    const sentenceFeelsComplete = endsReadableThought(item.translated)
+    if ((current.count >= 2 && enoughContent && sentenceFeelsComplete) || current.count >= 3 || current.translated.length >= 430) flush()
+  })
+
+  flush()
+  return blocks
+}
+
 function preferredMimeType() {
   if (typeof MediaRecorder === 'undefined') return ''
   const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
@@ -50,12 +93,12 @@ function bufferToBase64(buffer) {
   return btoa(binary)
 }
 
-async function sendSegment(blob, target) {
+async function sendSegment(blob, target, previousContext = '') {
   const audio = bufferToBase64(await blob.arrayBuffer())
   const response = await fetch('/api/meeting-segment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio, mimeType: blob.type || 'audio/webm', target }),
+    body: JSON.stringify({ audio, mimeType: blob.type || 'audio/webm', target, previousContext }),
   })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Ana could not translate this meeting segment.')
@@ -73,6 +116,7 @@ export default function MeetingMode() {
   const [pending, setPending] = useState(0)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [transcriptView, setTranscriptView] = useState('readable')
 
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
@@ -85,6 +129,7 @@ export default function MeetingMode() {
   const targetRef = useRef(target)
   const startedAtRef = useRef(startedAt || 0)
   const segmentLoopRef = useRef(null)
+  const recentTranscriptRef = useRef([])
 
   const screenSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
   const recorderSupported = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined'
@@ -126,7 +171,9 @@ export default function MeetingMode() {
       while (queueRef.current.length) {
         const item = queueRef.current.shift()
         try {
-          const result = await sendSegment(item.blob, item.target)
+          const previousContext = recentTranscriptRef.current.slice(-3).join(' ')
+          const result = await sendSegment(item.blob, item.target, previousContext)
+          if (result.transcript) recentTranscriptRef.current = [...recentTranscriptRef.current, result.transcript].slice(-4)
           if (result.transcript || result.translation) {
             setEntries(current => [...current, {
               id: `${Date.now()}-${Math.random()}`,
@@ -235,6 +282,7 @@ export default function MeetingMode() {
     setEntries([])
     setPendingCount(0)
     queueRef.current = []
+    recentTranscriptRef.current = []
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
 
     try {
@@ -301,10 +349,15 @@ export default function MeetingMode() {
     setStartedAt(null)
     setElapsed(0)
     setStatus('idle')
+    recentTranscriptRef.current = []
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
-  const transcriptText = () => entries.map(item => `[${formatTime(item.at)}]\nOriginal: ${item.original}\n${item.target}: ${item.translated}`).join('\n\n')
+  const readableBlocks = useMemo(() => buildReadableBlocks(entries), [entries])
+
+  const transcriptText = () => transcriptView === 'readable'
+    ? readableBlocks.map(item => '[' + formatTime(item.at) + '] ' + item.translated).join('\n\n')
+    : entries.map(item => '[' + formatTime(item.at) + ']\nOriginal: ' + item.original + '\n' + item.target + ': ' + item.translated).join('\n\n')
 
   const copyTranscript = async () => {
     if (!entries.length) return
@@ -359,7 +412,7 @@ export default function MeetingMode() {
       </div>
 
       <div className="meeting-promise">
-        <span><Check size={15}/> Cost-optimized near-live translation</span>
+        <span><Check size={15}/> Near-live translation</span>
         <span><Check size={15}/> Transcript saved automatically</span>
         <span><Check size={15}/> No meeting audio stored</span>
       </div>
@@ -373,7 +426,7 @@ export default function MeetingMode() {
         <div className="meeting-now">
           <span>Latest translation</span>
           <strong>{latest?.translated || (active ? 'Ana will show the translated meeting here as people speak…' : entries.length ? 'Your last meeting transcript is saved below.' : 'Start when your meeting begins.')}</strong>
-          {latest?.original && <p>{latest.original}</p>}
+          {latest?.original && <details className="meeting-original"><summary>Show original</summary><p>{latest.original}</p></details>}
         </div>
 
         {error && <div className="error meeting-error">{error}</div>}
@@ -389,21 +442,30 @@ export default function MeetingMode() {
 
     <section className="meeting-transcript">
       <div className="meeting-transcript-head">
-        <div><strong>Saved transcript</strong><span>{entries.length ? `${entries.length} translated segment${entries.length === 1 ? '' : 's'} · saved on this device` : 'Nothing saved yet'}</span></div>
-        <div>
+        <div><strong>Meeting transcript</strong><span>{entries.length ? (transcriptView === 'readable' ? (readableBlocks.length + ' readable passage' + (readableBlocks.length === 1 ? '' : 's') + ' · ' + entries.length + ' captured segments') : (entries.length + ' captured segment' + (entries.length === 1 ? '' : 's'))) : 'Nothing saved yet'}</span></div>
+        <div className="meeting-transcript-actions">
+          <div className="meeting-view-toggle" aria-label="Transcript view">
+            <button className={transcriptView === 'readable' ? 'active' : ''} onClick={() => setTranscriptView('readable')}>Readable</button>
+            <button className={transcriptView === 'detailed' ? 'active' : ''} onClick={() => setTranscriptView('detailed')}>Detailed</button>
+          </div>
           <button onClick={copyTranscript} disabled={!entries.length}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button>
           <button onClick={downloadTranscript} disabled={!entries.length}><Download size={15}/> Download</button>
           <button onClick={clearTranscript} disabled={active || !entries.length}><Trash2 size={15}/> Clear</button>
         </div>
       </div>
       <div className="meeting-lines">
-        {entries.length ? entries.map(item => <article key={item.id}>
+        {entries.length ? (transcriptView === 'readable' ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">
+          <time>{formatTime(item.at)}{item.endAt > item.at ? ('–' + formatTime(item.endAt + SEGMENT_MS)) : ''}</time>
+          <div>
+            <strong>{item.translated}</strong>
+            {item.original && <details className="meeting-original"><summary>Original</summary><p>{item.original}</p></details>}
+          </div>
+        </article>) : entries.map(item => <article key={item.id}>
           <time>{formatTime(item.at)}</time>
           <div><strong>{item.translated}</strong><p>{item.original}</p></div>
-        </article>) : <div className="meeting-empty">Your translated meeting transcript will build here automatically.</div>}
+        </article>)) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}
       </div>
     </section>
-
     <p className="meeting-footnote"><b>Microphone / speakers</b> is the default and does not ask you to share the screen. Use <b>Computer / tab audio</b> only when you want Ana to capture meeting audio directly; browsers require a share picker for that option. Translation usually follows a few seconds behind the speaker.</p>
   </section>
 }
