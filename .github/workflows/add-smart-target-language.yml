@@ -1,0 +1,39 @@
+name: Add Ana smart target language
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-smart-target-language.yml'
+      - 'scripts/add-smart-target-language.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply smart target language
+        run: node scripts/add-smart-target-language.mjs
+
+      - name: Validate production build
+        run: |
+          npm install
+          npm run build
+
+      - name: Commit smart target language
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.jsx src/personalLanguageMemory.js src/styles.css
+          git diff --cached --quiet && exit 0
+          git commit -m 'Let Ana recover forgotten target languages'
+          git push origin main
