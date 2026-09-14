@@ -70,11 +70,14 @@ function buildReadableBlocks(entries = []) {
       current.count += 1
     }
 
-    const enoughContent = current.translated.length >= 150
-    const sentenceFeelsComplete = endsReadableThought(item.translated)
-    if ((current.count >= 2 && enoughContent && sentenceFeelsComplete) || current.count >= 3 || current.translated.length >= 430) flush()
+    // Raw audio chunks are an implementation detail. The user should see
+    // paragraph-sized thoughts, not one card for every recorder interval.
+    const completeThought = endsReadableThought(item.translated)
+    const paragraphSized = current.translated.length >= 260
+    if ((current.count >= 3 && paragraphSized && completeThought) || current.count >= 5 || current.translated.length >= 760) flush()
   })
 
+  // Keep the current in-progress thought visible as one growing passage.
   flush()
   return blocks
 }
@@ -116,7 +119,6 @@ export default function MeetingMode() {
   const [pending, setPending] = useState(0)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
-  const [transcriptView, setTranscriptView] = useState('readable')
 
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
@@ -355,9 +357,7 @@ export default function MeetingMode() {
 
   const readableBlocks = useMemo(() => buildReadableBlocks(entries), [entries])
 
-  const transcriptText = () => transcriptView === 'readable'
-    ? readableBlocks.map(item => '[' + formatTime(item.at) + '] ' + item.translated).join('\n\n')
-    : entries.map(item => '[' + formatTime(item.at) + ']\nOriginal: ' + item.original + '\n' + item.target + ': ' + item.translated).join('\n\n')
+  const transcriptText = () => readableBlocks.map(item => '[' + formatTime(item.at) + '] ' + item.translated).join('\n\n')
 
   const copyTranscript = async () => {
     if (!entries.length) return
@@ -379,7 +379,7 @@ export default function MeetingMode() {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  const latest = entries[entries.length - 1]
+  const latest = readableBlocks[readableBlocks.length - 1] || entries[entries.length - 1]
   const statusText = status === 'starting' ? 'Starting…'
     : status === 'listening' ? 'Listening'
       : status === 'paused' ? 'Paused'
@@ -442,28 +442,21 @@ export default function MeetingMode() {
 
     <section className="meeting-transcript">
       <div className="meeting-transcript-head">
-        <div><strong>Meeting transcript</strong><span>{entries.length ? (transcriptView === 'readable' ? (readableBlocks.length + ' readable passage' + (readableBlocks.length === 1 ? '' : 's') + ' · ' + entries.length + ' captured segments') : (entries.length + ' captured segment' + (entries.length === 1 ? '' : 's'))) : 'Nothing saved yet'}</span></div>
+        <div><strong>Meeting transcript</strong><span>{entries.length ? (readableBlocks.length + ' readable passage' + (readableBlocks.length === 1 ? '' : 's') + ' · saved on this device') : 'Nothing saved yet'}</span></div>
         <div className="meeting-transcript-actions">
-          <div className="meeting-view-toggle" aria-label="Transcript view">
-            <button className={transcriptView === 'readable' ? 'active' : ''} onClick={() => setTranscriptView('readable')}>Readable</button>
-            <button className={transcriptView === 'detailed' ? 'active' : ''} onClick={() => setTranscriptView('detailed')}>Detailed</button>
-          </div>
           <button onClick={copyTranscript} disabled={!entries.length}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button>
           <button onClick={downloadTranscript} disabled={!entries.length}><Download size={15}/> Download</button>
           <button onClick={clearTranscript} disabled={active || !entries.length}><Trash2 size={15}/> Clear</button>
         </div>
       </div>
       <div className="meeting-lines">
-        {entries.length ? (transcriptView === 'readable' ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">
+        {entries.length ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">
           <time>{formatTime(item.at)}{item.endAt > item.at ? ('–' + formatTime(item.endAt + SEGMENT_MS)) : ''}</time>
           <div>
             <strong>{item.translated}</strong>
-            {item.original && <details className="meeting-original"><summary>Original</summary><p>{item.original}</p></details>}
+            {item.original && <details className="meeting-original"><summary>Show original</summary><p>{item.original}</p></details>}
           </div>
-        </article>) : entries.map(item => <article key={item.id}>
-          <time>{formatTime(item.at)}</time>
-          <div><strong>{item.translated}</strong><p>{item.original}</p></div>
-        </article>)) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}
+        </article>) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}
       </div>
     </section>
     <p className="meeting-footnote"><b>Microphone / speakers</b> is the default and does not ask you to share the screen. Use <b>Computer / tab audio</b> only when you want Ana to capture meeting audio directly; browsers require a share picker for that option. Translation usually follows a few seconds behind the speaker.</p>
