@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/upgrade-translation-quality.yml'
-      - 'scripts/upgrade-translation-quality.mjs'
+      - 'scripts/upgrade-translation-quality-v2.mjs'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Apply translation upgrade
-        run: node scripts/upgrade-translation-quality.mjs
+        run: node scripts/upgrade-translation-quality-v2.mjs
       - name: Validate production build
         run: |
           npm install
