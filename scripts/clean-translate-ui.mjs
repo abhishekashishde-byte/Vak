@@ -1,0 +1,38 @@
+import fs from 'node:fs'
+
+const appPath = 'src/App.jsx'
+const cssPath = 'src/styles.css'
+
+let app = fs.readFileSync(appPath, 'utf8')
+let css = fs.readFileSync(cssPath, 'utf8')
+
+if (!app.includes("import AnaMark from './AnaMark.jsx'")) {
+  app = app.replace(
+    "import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'",
+    "import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'\nimport AnaMark from './AnaMark.jsx'",
+  )
+}
+
+app = app.replace(
+  '<div className="brand"><img src="/ana-app-icon.png" alt="Ana"/><div><strong>Ana</strong><span>Your voice, in any language</span></div></div>',
+  '<div className="brand"><AnaMark className="ana-brand-mark"/><div><strong>Ana</strong></div></div>',
+)
+
+app = app.replace(/\n\s*<section className="hero">\s*<div className="eyebrow"><Sparkles size=\{14\}\/> Meaning before words<\/div>\s*<h1>Say exactly what you mean\.<\/h1>\s*<p>Your voice, in any language\.<\/p>\s*<\/section>\s*\n/, '\n\n')
+
+if (!app.includes('<AnaMark className="ana-brand-mark"/>')) {
+  throw new Error('Ana brand mark replacement did not apply')
+}
+if (app.includes('Say exactly what you mean.')) {
+  throw new Error('Translate marketing hero is still present')
+}
+if (app.includes('<span>Your voice, in any language</span>')) {
+  throw new Error('Translate marketing tagline is still present')
+}
+
+if (!css.includes('.ana-brand-mark{')) {
+  css += '\n/* Product UI: persistent Ana identity without marketing copy. */\n.ana-brand-mark{width:40px;height:40px;flex:0 0 auto;color:#171717}\n@media(max-width:760px){.ana-brand-mark{width:31px;height:31px}}\n'
+}
+
+fs.writeFileSync(appPath, app)
+fs.writeFileSync(cssPath, css)
