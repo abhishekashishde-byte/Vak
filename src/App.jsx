@@ -75,7 +75,7 @@ export default function App() {
   const [output, setOutput] = useState(() => String(loadDraft().output || ''))
   const [target, setTarget] = useState(() => TARGETS.includes(loadDraft().target) ? loadDraft().target : 'German')
   const [outputMode, setOutputMode] = useState(() => loadDraft().outputMode === 'device' ? 'device' : 'online')
-  const [writingMode, setWritingMode] = useState(() => loadDraft().writingMode === 'email' ? 'email' : 'translate')
+  const [writingMode, setWritingMode] = useState(() => ['write', 'email'].includes(loadDraft().writingMode) ? 'write' : 'translate')
   const [offlineNotice, setOfflineNotice] = useState('')
   const [register, setRegister] = useState(() => { try { return localStorage.getItem(REGISTER_KEY) || 'formal' } catch { return 'formal' } })
   const [loading, setLoading] = useState(false)
@@ -151,13 +151,13 @@ export default function App() {
 
   const translationInstructions = () => {
     let instructions
-    if (writingMode === 'email') {
-      instructions = `You are Ana Email, a bilingual email writing assistant. Detect the source language and produce a complete, natural email in ${target}. Return ONLY the finished email body with no explanation, labels or quotation marks. Preserve every factual detail, name, date, number, URL, request, commitment and intention from the user. Correct spelling, punctuation and grammar. Repair incomplete or fragmented sentences when the intended meaning is clear. Improve flow and politeness so the result reads like a naturally written email, not a literal translation. Ensure the email has an appropriate greeting and closing. If a greeting is missing, add a neutral greeting without inventing a recipient name. If a closing is missing, add an appropriate closing but never invent the sender name. Never invent business facts, people, dates, promises, decisions, requests or missing substantive information.`
+    if (writingMode === 'write') {
+      instructions = `You are Ana Write for me, a multilingual writing assistant. The user will tell you what they need to communicate and may give rough notes, fragments, incomplete sentences, facts, context, tone or purpose in any language. Understand the intent and write the final ready-to-send text in ${target}. Return ONLY the finished text with no explanation, labels or quotation marks. Choose the appropriate format from the user's intent — for example an email, message, WhatsApp text, letter, reply, request, announcement or short note. Do not force email formatting unless the request is clearly an email or formal correspondence. Preserve every factual detail, name, date, number, URL, request, commitment and intention supplied by the user. Correct spelling, punctuation and grammar. Complete incomplete thoughts when the intended meaning is clear. Make the result natural, coherent and appropriately polite. If the format clearly needs a greeting or closing and the user omitted one, add a neutral suitable one without inventing names. Never invent facts, people, dates, promises, decisions, requests, relationships or other substantive information that the user did not provide.`
       if (isGermanTarget(target)) {
         instructions += `\n${germanVariantRule(target)} ${registerRules()}`
         instructions += register === 'formal'
-          ? '\nFor a missing German closing, normally use “Mit freundlichen Grüßen”. For a missing greeting with no recipient name, use a neutral professional greeting such as “Guten Tag,”.'
-          : '\nFor a missing German closing, normally use “Viele Grüße”. For a missing greeting with no recipient name, use a natural friendly greeting such as “Hallo,”.'
+          ? '\nWhen the requested format is clearly a German email or formal letter and a greeting or closing is missing, use an appropriate neutral professional greeting and closing such as “Guten Tag,” and “Mit freundlichen Grüßen”. Do not add email conventions to ordinary messages.'
+          : '\nWhen the requested format is clearly a German email or letter and a greeting or closing is missing, use a natural friendly greeting and closing such as “Hallo,” and “Viele Grüße”. Do not add email conventions to ordinary messages.'
       }
       if (target === 'Hinglish') instructions += '\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script.'
     } else {
@@ -173,15 +173,15 @@ export default function App() {
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     try {
       const instructions = translationInstructions()
-      const result = writingMode === 'email'
+      const result = writingMode === 'write'
         ? await callLuna(text, instructions)
         : await callLunaPreservingLineBreaks(text, instructions)
       setOutput(result)
       setOutputMode('online')
     } catch (err) {
-      if (writingMode === 'email') {
+      if (writingMode === 'write') {
         const network = getNetworkState()
-        setError(network.online ? (err.message || 'Could not prepare the email') : 'You’re offline. Your draft is saved automatically. Reconnect to use Ana Email.')
+        setError(network.online ? (err.message || 'Could not write this for you') : 'You’re offline. Your notes are saved automatically. Reconnect to use Write for me.')
       } else {
         const deviceResult = await tryOnDeviceTranslation(text, target)
         if (deviceResult) {
@@ -246,18 +246,18 @@ export default function App() {
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
         <select value={target} onChange={e => { setTarget(e.target.value); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
         {isGermanTarget(target) && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
-        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'email' ? 'active' : ''} onClick={() => { setWritingMode('email'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Email</button></div>
+        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'write' ? 'active' : ''} onClick={() => { setWritingMode('write'); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Write for me</button></div>
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
-        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'email' ? 'Email draft' : 'Original'}</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder={writingMode === 'email' ? 'Write roughly what you want to say. Incomplete sentences are okay…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
-        <article className="pane output-pane"><div className="pane-label">{writingMode === 'email' ? `${target} email` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'email' ? 'Your complete email will appear here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'email' ? 'Grammar, flow, greeting and closing are completed without inventing facts' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
+        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span>{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}</div><textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
+        <article className="pane output-pane"><div className="pane-label">{writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
     {offlineNotice && <div className="ana-offline-note">{offlineNotice}</div>}
     {error && <div className="error">{error}</div>}
-    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'email' ? 'Writing…' : 'Translating…') : writingMode === 'email' ? 'Prepare email' : 'Translate'}</button></div>
+    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'write' ? 'Writing…' : 'Translating…') : writingMode === 'write' ? 'Write for me' : 'Translate'}</button></div>
 
     {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
 
