@@ -77,7 +77,6 @@ export default function Workspace() {
     <div className="ana-mode-content">
       {mode === 'translate' && <App onOpenCamera={() => chooseMode('camera')} onOpenDocuments={() => chooseMode('scan')}/>} 
       {mode === 'scan' && <main className="app-shell"><ScanMode/></main>}
-      {mode === 'scan' && <main className="app-shell"><ScanMode/></main>}
       {mode === 'camera' && <main className="app-shell"><CameraMode/></main>}
       {['live','captions','room'].includes(mode) && <div className="ana-live-stack">
         <div className="ana-live-subnav"><button className={mode === 'live' ? 'active' : ''} onClick={() => chooseMode('live')}><Mic size={14}/>Interpreter</button><button className={mode === 'captions' ? 'active' : ''} onClick={() => chooseMode('captions')}><Captions size={14}/>Subtitles</button><button className={mode === 'room' ? 'active' : ''} onClick={() => chooseMode('room')}><UsersRound size={14}/>Room</button></div>
