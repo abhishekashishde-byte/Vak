@@ -29,6 +29,104 @@ function splitTranslation(text = '') { return String(text).split(/(\s+|[.,!?;:()
 function isWord(part = '') {
   try { return /[\p{L}\p{N}]/u.test(part) } catch { return /[A-Za-z0-9À-ž]/.test(part) }
 }
+
+function normalizeClipboardText(text = '') {
+  return String(text)
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/â†’|âžœ|âž¡|Ã¢â€ â€™|Ã¢â€ â€˜/g, '→')
+    // Outlook/legacy clipboard encodings can occasionally turn an arrow between
+    // short technical codes into “à” (for example TPàEQ). Repair only this
+    // uppercase-code pattern so genuine French “à” remains untouched.
+    .replace(/([A-ZÄÖÜ0-9]{1,12})\s*à\s*([A-ZÄÖÜ0-9]{1,12})/g, '$1 → $2')
+    .replace(/^[ \t]*[•◦▪‣∙]\s*/gm, '• ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+function clipboardHtmlToText(html = '', fallback = '') {
+  if (!html || typeof DOMParser === 'undefined') return normalizeClipboardText(fallback)
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const body = doc.body
+    body.querySelectorAll('li').forEach(li => {
+      const parent = li.parentElement
+      let prefix = '• '
+      if (parent?.tagName === 'OL') {
+        const siblings = [...parent.children].filter(el => el.tagName === 'LI')
+        prefix = String(Math.max(1, siblings.indexOf(li) + 1)) + '. '
+      }
+      li.insertBefore(doc.createTextNode(prefix), li.firstChild)
+      li.appendChild(doc.createElement('br'))
+    })
+    body.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,tr').forEach(el => el.appendChild(doc.createElement('br')))
+    body.querySelectorAll('td,th').forEach(el => el.appendChild(doc.createTextNode('\t')))
+    body.querySelectorAll('br').forEach(br => br.replaceWith(doc.createTextNode('\n')))
+    const extracted = normalizeClipboardText(body.textContent || '')
+    return extracted.trim() ? extracted : normalizeClipboardText(fallback)
+  } catch {
+    return normalizeClipboardText(fallback)
+  }
+}
+
+function textRangesByLine(text = '') {
+  let cursor = 0
+  return String(text).split('\n').map((value, index) => {
+    const start = cursor
+    const end = start + value.length
+    cursor = end + 1
+    return { index, start, end, text: value }
+  })
+}
+
+function textRangesBySentence(text = '') {
+  const source = String(text)
+  const ranges = []
+  const re = /[^.!?\n]+(?:[.!?]+(?=\s|$)|$)/g
+  let match
+  while ((match = re.exec(source))) {
+    const raw = match[0]
+    const lead = raw.length - raw.trimStart().length
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    const start = match.index + lead
+    ranges.push({ start, end: start + trimmed.length, text: trimmed })
+  }
+  return ranges
+}
+
+function buildTextAlignment(sourceText = '', targetText = '') {
+  const sourceLines = textRangesByLine(sourceText)
+  const targetLines = textRangesByLine(targetText)
+  if (sourceLines.length === targetLines.length && sourceLines.length > 1) {
+    return targetLines.map((targetLine, index) => ({
+      outputStart: targetLine.start,
+      outputEnd: targetLine.end,
+      sourceStart: sourceLines[index].start,
+      sourceEnd: sourceLines[index].end,
+      sourceText: sourceLines[index].text,
+    })).filter(item => item.sourceText.trim())
+  }
+
+  const sourceSentences = textRangesBySentence(sourceText)
+  const targetSentences = textRangesBySentence(targetText)
+  if (sourceSentences.length && targetSentences.length) {
+    return targetSentences.map((targetSentence, index) => {
+      const sourceIndex = targetSentences.length === 1
+        ? 0
+        : Math.min(sourceSentences.length - 1, Math.round(index * (sourceSentences.length - 1) / Math.max(1, targetSentences.length - 1)))
+      const sourceSentence = sourceSentences[sourceIndex]
+      return {
+        outputStart: targetSentence.start,
+        outputEnd: targetSentence.end,
+        sourceStart: sourceSentence.start,
+        sourceEnd: sourceSentence.end,
+        sourceText: sourceSentence.text,
+      }
+    })
+  }
+  return []
+}
 function loadGlossary() {
   try { return JSON.parse(localStorage.getItem(GLOSSARY_KEY) || '[]') } catch { return [] }
 }
@@ -58,7 +156,7 @@ async function callLunaPreservingLineBreaks(text, instructions) {
   if (!normalized.includes('\n')) return callLuna(normalized, instructions)
 
   const sourceLines = normalized.split('\n')
-  const structuredInstructions = `${instructions}\n\nLAYOUT IS BINDING. The source will be supplied as a JSON array where every array element is exactly one user-entered line. Translate the document with full context, but NEVER merge, split, remove, reorder or invent lines. Return ONLY valid JSON in this exact shape: {"lines":["..."]}. The output array must contain exactly ${sourceLines.length} strings in the same order. If a source line is empty, the corresponding output string MUST be empty.`
+  const structuredInstructions = `${instructions}\n\nLAYOUT IS BINDING. The source will be supplied as a JSON array where every array element is exactly one user-entered line. Translate the document with full context, but NEVER merge, split, remove, reorder or invent lines. Return ONLY valid JSON in this exact shape: {"lines":["..."]}. The output array must contain exactly ${sourceLines.length} strings in the same order. If a source line is empty, the corresponding output string MUST be empty. Preserve any leading list marker exactly — including •, -, *, →, and ordered markers such as 1. or 2. Never drop, translate or change the list marker.`
   const structuredPrompt = `SOURCE LINES JSON:\n${JSON.stringify(sourceLines)}`
   const structuredResult = parseJson(await callLuna(structuredPrompt, structuredInstructions))
 
@@ -162,6 +260,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [alignmentMap, setAlignmentMap] = useState([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [glossaryOpen, setGlossaryOpen] = useState(false)
   const [glossary, setGlossary] = useState(loadGlossary)
@@ -203,6 +302,55 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
       setError('')
     }
     toggleDictation()
+  }
+
+  const handlePaste = event => {
+    const clipboard = event.clipboardData
+    if (!clipboard) return
+    const plain = clipboard.getData('text/plain') || ''
+    const html = clipboard.getData('text/html') || ''
+    const pasted = html && /<(?:li|ol|ul|p|div|br|table|tr|td)\b/i.test(html)
+      ? clipboardHtmlToText(html, plain)
+      : normalizeClipboardText(plain)
+    if (!pasted) return
+
+    event.preventDefault()
+    const field = event.currentTarget
+    const start = field.selectionStart ?? input.length
+    const end = field.selectionEnd ?? start
+    const next = input.slice(0, start) + pasted + input.slice(end)
+    const caret = start + pasted.length
+    setInput(next)
+    setAlignmentMap([])
+    setSelected(null)
+    if (smartLanguageNotice) setSmartLanguageNotice('')
+    queueMicrotask(() => {
+      inputRef.current?.focus()
+      inputRef.current?.setSelectionRange?.(caret, caret)
+    })
+  }
+
+  const alignedSourceForOutput = (start, end) => {
+    const direct = alignmentMap.find(item => start >= item.outputStart && start <= Math.max(item.outputEnd, item.outputStart + 1))
+    if (direct) return direct
+    if (!alignmentMap.length) return null
+    return alignmentMap.reduce((best, item) => {
+      const distance = Math.abs(item.outputStart - start)
+      return !best || distance < best.distance ? { ...item, distance } : best
+    }, null)
+  }
+
+  const revealAlignedSource = segment => {
+    if (!segment || !inputRef.current) return
+    requestAnimationFrame(() => {
+      const field = inputRef.current
+      try {
+        field.setSelectionRange(segment.sourceStart, segment.sourceEnd)
+        if (window.matchMedia?.('(pointer:fine)').matches) field.focus({ preventScroll: true })
+        const scrollable = Math.max(0, field.scrollHeight - field.clientHeight)
+        if (scrollable > 0) field.scrollTop = scrollable * (segment.sourceStart / Math.max(1, input.length))
+      } catch {}
+    })
   }
 
   useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
@@ -254,7 +402,10 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   }
 
   const translate = async () => {
-    const text = input.trim(); if (!text || loading) return
+    const cleanedInput = normalizeClipboardText(input).trim()
+    const text = cleanedInput; if (!text || loading) return
+    if (cleanedInput !== input) setInput(cleanedInput)
+    setAlignmentMap([])
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     let actualTarget = target
     let detectedSource = ''
@@ -287,6 +438,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
         ? await callLuna(text, instructions)
         : await callLunaPreservingLineBreaks(text, instructions)
       setOutput(result)
+      setAlignmentMap(writingMode === 'translate' ? buildTextAlignment(text, result) : [])
       setOutputMode('online')
       if (writingMode === 'translate' && detectedSource && detectedSource !== actualTarget) {
         rememberTranslationTarget(detectedSource, actualTarget)
@@ -299,6 +451,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
         const deviceResult = await tryOnDeviceTranslation(text, actualTarget)
         if (deviceResult) {
           setOutput(deviceResult)
+          setAlignmentMap(buildTextAlignment(text, deviceResult))
           setOutputMode('device')
           setOfflineNotice('Basic on-device translation. Reconnect for Ana’s full context, glossary and tone handling.')
         } else {
@@ -311,15 +464,22 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
   const inspectWord = async (word, start, end) => {
     if (!output || suggestLoading) return
+    const aligned = alignedSourceForOutput(start, end)
+    const immediateSourceContext = aligned?.sourceText?.trim() || ''
+    if (aligned) revealAlignedSource(aligned)
+
     const cacheKey = [target, register, output, start, end].join('::')
     const cached = refinementCacheRef.current.get(cacheKey)
-    if (cached) { setSelected({ word, start, end, ...cached }); return }
-    setSelected({ word, start, end, sourceTerm: '', partOfSpeech: '', meaning: '', alternatives: [] })
+    if (cached) {
+      setSelected({ word, start, end, sourceContext: immediateSourceContext, ...cached })
+      return
+    }
+    setSelected({ word, start, end, sourceContext: immediateSourceContext, sourceTerm: '', partOfSpeech: '', meaning: '', alternatives: [] })
     setSuggestLoading(true)
     try {
       const ratio = output.length ? start / output.length : 0
       const sourcePos = Math.max(0, Math.min(input.length, Math.round(input.length * ratio)))
-      const sourceContext = input.slice(Math.max(0, sourcePos - 1200), Math.min(input.length, sourcePos + 1200))
+      const sourceContext = immediateSourceContext || input.slice(Math.max(0, sourcePos - 1200), Math.min(input.length, sourcePos + 1200))
       const targetContext = output.slice(Math.max(0, start - 450), Math.min(output.length, end + 450))
       const prompt = `SOURCE CONTEXT:\n${sourceContext}\n\nTARGET CONTEXT:\n${targetContext}\n\nSELECTED TARGET WORD:\n${word}\n\nIdentify the exact source word or shortest source phrase represented by this word. Suggest up to 4 fluent, context-correct drop-in alternatives. Keep notes very short. Return JSON only: {\"sourceTerm\":\"...\",\"partOfSpeech\":\"...\",\"meaning\":\"short meaning\",\"alternatives\":[{\"term\":\"...\",\"note\":\"...\"}]}`
       let instructions = `You are a fast bilingual editor refining a translation into ${target}. Return valid JSON only. Do not explain reasoning.`
@@ -350,7 +510,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     setNewSource(''); setNewPreferred('')
   }
   const copyOutput = async () => { if (!output) return; await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1400) }
-  const clear = () => { setInput(''); setOutput(''); setOutputMode('online'); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
+  const clear = () => { setInput(''); setOutput(''); setAlignmentMap([]); setOutputMode('online'); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
 
   return <main className="app-shell">
     <header className="topbar">
@@ -367,8 +527,8 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
-        <article className="pane input-pane"><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span><div className="translate-input-actions">{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}<button type="button" className="dictate-btn" onClick={onOpenCamera}><Camera size={14}/>Camera</button><button type="button" className="dictate-btn" onClick={onOpenDocuments}><FileText size={14}/>Document</button></div></div><textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); if (smartLanguageNotice) setSmartLanguageNotice('') }} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
-        <article className="pane output-pane"><div className="pane-label">{writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Tap a word to refine it') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
+        <article className={`pane input-pane ${input.length > 900 ? 'dense-text' : ''}`}><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span><div className="translate-input-actions">{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}<button type="button" className="dictate-btn" onClick={onOpenCamera}><Camera size={14}/>Camera</button><button type="button" className="dictate-btn" onClick={onOpenDocuments}><FileText size={14}/>Document</button></div></div><textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setAlignmentMap([]); if (smartLanguageNotice) setSmartLanguageNotice('') }} onPaste={handlePaste} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
+        <article className={`pane output-pane ${output.length > 900 ? 'dense-text' : ''}`}><div className="pane-label">{writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Click a word to see its matching source and alternatives') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
@@ -377,7 +537,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     {error && <div className="error">{error}</div>}
     <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'write' ? 'Writing…' : 'Translating…') : writingMode === 'write' ? 'Write for me' : 'Translate'}</button></div>
 
-    {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
+    {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{selected.sourceContext && <div className="source-match"><span>Corresponding source</span><p>{selected.sourceContext}</p></div>}{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
 
     {glossaryOpen && <div className="drawer-backdrop" onMouseDown={() => setGlossaryOpen(false)}><aside className="drawer" onMouseDown={e => e.stopPropagation()}><div className="drawer-head"><div><h2>Personal glossary</h2><p>{glossary.length} saved in total · showing {target} terminology.</p></div><button onClick={() => setGlossaryOpen(false)}><X size={20}/></button></div><div className="add-rule"><input value={newSource} onChange={e => setNewSource(e.target.value)} placeholder="Source term"/><span>→</span><input value={newPreferred} onChange={e => setNewPreferred(e.target.value)} placeholder={`Preferred ${target}`}/><button onClick={addGlossary}><Plus size={17}/></button></div><div className="rules">{activeGlossary.length ? activeGlossary.map(item => <div className="rule" key={item.id}><div><strong>{item.source}</strong><span>→</span><b>{item.preferred}</b></div><button onClick={() => setGlossary(prev => prev.filter(x => x.id !== item.id))}><Trash2 size={16}/></button></div>) : <div className="empty-rules">No saved terms for {target} yet.</div>}</div></aside></div>}
   </main>

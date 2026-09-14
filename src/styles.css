@@ -10,3 +10,7 @@
 
 .translate-input-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.translate-input-actions .dictate-btn{white-space:nowrap}
 @media(max-width:760px){.pane-label-row{align-items:flex-start!important}.translate-input-actions{gap:4px}.translate-input-actions .dictate-btn{padding:0 8px}.translate-input-actions .dictate-btn svg{width:13px;height:13px}}
+
+/* Pasted email/document readability + source/translation alignment. */
+.pane.dense-text textarea,.pane.dense-text .translation-text{font-size:17px;line-height:1.5}.pane textarea,.translation-text{tab-size:4}.source-match{padding:12px 15px;background:#f3eee5;border-bottom:1px solid rgba(43,39,33,.10)}.source-match span{display:block;margin-bottom:5px;color:#8b8378;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.source-match p{margin:0;color:#302c27;font-size:13px;line-height:1.45;white-space:pre-wrap}.output-area{overflow-wrap:anywhere}.pane textarea{white-space:pre-wrap}
+@media(max-width:760px){.pane.dense-text textarea,.pane.dense-text .translation-text{font-size:15px;line-height:1.4}.source-match{padding:9px 11px}.source-match p{font-size:12px}}
