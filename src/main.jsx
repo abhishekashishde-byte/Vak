@@ -6,6 +6,7 @@ import { installAnaNaturalVoice } from './naturalVoice.js'
 import { installContextualIntelligence } from './contextualIntelligence.js'
 import { installConversationPrivacyGate } from './conversationPrivacyGate.js'
 import { installCounterpartyView } from './counterpartyView.js'
+import { installGlossaryReliability } from './glossaryReliability.js'
 import { installNetworkResilience } from './networkResilience.js'
 import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installPushToTalkFallback } from './pushToTalk.js'
@@ -26,6 +27,7 @@ import './briefVoice.js'
 installNetworkResilience()
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
+installGlossaryReliability()
 installContextualIntelligence()
 installRealtimeTonePolicy()
 installTalkPolish()
