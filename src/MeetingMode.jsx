@@ -1,13 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Clipboard, Download, Headphones, Pause, Play, Square, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Clipboard, Download, Headphones, Mic, MonitorUp, Pause, Play, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
-const STORAGE_KEY = 'ana-meeting-transcript-v1'
-const SEGMENT_MS = 8000
+const STORAGE_KEY = 'ana-meeting-transcript-v2'
+
+const LANGUAGE_CODES = {
+  German: 'de',
+  'Swabian German (Schwäbisch)': 'de',
+  'Bavarian German (Bairisch)': 'de',
+  'Low German (Plattdeutsch)': 'de',
+  English: 'en',
+  Hindi: 'hi',
+  Hinglish: 'hi',
+  Bengali: 'bn',
+  Tamil: 'ta',
+  Telugu: 'te',
+  Marathi: 'mr',
+  Gujarati: 'gu',
+  Punjabi: 'pa',
+  Malayalam: 'ml',
+  Kannada: 'kn',
+  Urdu: 'ur',
+  French: 'fr',
+  Spanish: 'es',
+  Italian: 'it',
+}
 
 const clean = value => String(value || '').trim()
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+const codeFor = target => LANGUAGE_CODES[target] || 'en'
+const appendText = (base, next) => [clean(base), clean(next)].filter(Boolean).join(' ').replace(/\s+([,.;!?])/g, '$1').trim()
 
 function readSavedMeeting() {
   try {
@@ -36,339 +58,296 @@ function formatTime(ms = 0) {
   return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
-function endsReadableThought(text = '') {
-  const value = clean(text)
-  return /[.!?][\"'”’)]*$/.test(value) && !/\.\.\.[\"'”’)]*$/.test(value)
-}
-
-function buildReadableBlocks(entries = []) {
-  const blocks = []
-  let current = null
-
-  const flush = () => {
-    if (!current) return
-    current.translated = clean(current.translated)
-    current.original = clean(current.original)
-    blocks.push(current)
-    current = null
-  }
-
-  entries.forEach(item => {
-    if (!current) {
-      current = {
-        id: item.id,
-        at: item.at,
-        endAt: item.at,
-        translated: clean(item.translated),
-        original: clean(item.original),
-        count: 1,
-      }
-    } else {
-      current.endAt = item.at
-      current.translated = [current.translated, clean(item.translated)].filter(Boolean).join(' ')
-      current.original = [current.original, clean(item.original)].filter(Boolean).join(' ')
-      current.count += 1
-    }
-
-    // Raw audio chunks are an implementation detail. The user should see
-    // paragraph-sized thoughts, not one card for every recorder interval.
-    const completeThought = endsReadableThought(item.translated)
-    const paragraphSized = current.translated.length >= 260
-    if ((current.count >= 3 && paragraphSized && completeThought) || current.count >= 5 || current.translated.length >= 760) flush()
-  })
-
-  // Keep the current in-progress thought visible as one growing passage.
-  flush()
-  return blocks
-}
-
-function preferredMimeType() {
-  if (typeof MediaRecorder === 'undefined') return ''
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
-  return candidates.find(type => MediaRecorder.isTypeSupported?.(type)) || ''
-}
-
-function bufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  const size = 0x8000
-  for (let i = 0; i < bytes.length; i += size) binary += String.fromCharCode(...bytes.subarray(i, i + size))
-  return btoa(binary)
-}
-
-async function sendSegment(blob, target, previousContext = '') {
-  const audio = bufferToBase64(await blob.arrayBuffer())
-  const response = await fetch('/api/meeting-segment', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ audio, mimeType: blob.type || 'audio/webm', target, previousContext }),
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || 'Ana could not translate this meeting segment.')
-  return { transcript: clean(data.transcript), translation: clean(data.translation) }
-}
-
 export default function MeetingMode() {
-  const saved = useMemo(() => readSavedMeeting(), [])
+  const saved = readSavedMeeting()
   const [target, setTarget] = useState(initialTarget)
   const [source, setSource] = useState('microphone')
-  const [status, setStatus] = useState('idle')
-  const [entries, setEntries] = useState(() => Array.isArray(saved.entries) ? saved.entries : [])
+  const [sessionState, setSessionState] = useState('idle')
+  const [paused, setPaused] = useState(false)
   const [startedAt, setStartedAt] = useState(() => Number(saved.startedAt) || null)
   const [elapsed, setElapsed] = useState(0)
-  const [pending, setPending] = useState(0)
+  const [originalText, setOriginalText] = useState(() => clean(saved.originalText))
+  const [translatedText, setTranslatedText] = useState(() => clean(saved.translatedText))
+  const [liveOriginal, setLiveOriginal] = useState('')
+  const [liveTranslation, setLiveTranslation] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
+  const peerRef = useRef(null)
+  const dataChannelRef = useRef(null)
+  const streamRef = useRef(null)
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
-  const streamRef = useRef(null)
-  const audioStreamRef = useRef(null)
-  const recorderRef = useRef(null)
-  const queueRef = useRef([])
-  const processingRef = useRef(false)
-  const pendingRef = useRef(0)
   const targetRef = useRef(target)
-  const startedAtRef = useRef(startedAt || 0)
-  const segmentLoopRef = useRef(null)
-  const recentTranscriptRef = useRef([])
+  const originalBufferRef = useRef('')
+  const translatedBufferRef = useRef('')
+  const commitTimerRef = useRef(null)
+  const commitWaitsRef = useRef(0)
 
+  const active = ['connecting', 'listening', 'recovering'].includes(sessionState) || paused
   const screenSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
-  const recorderSupported = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined'
-  const active = ['starting', 'listening', 'paused', 'finishing'].includes(status)
-
-  useEffect(() => {
-    if (!screenSupported && source === 'screen') setSource('microphone')
-  }, [screenSupported, source])
 
   useEffect(() => {
     if (!startedAt) return
-    const timer = setInterval(() => setElapsed(Date.now() - startedAt), 1000)
+    const timer = setInterval(() => setElapsed(Math.max(0, Date.now() - startedAt)), 1000)
     setElapsed(Math.max(0, Date.now() - startedAt))
     return () => clearInterval(timer)
   }, [startedAt])
 
   useEffect(() => {
-    if (!entries.length) return
+    if (!originalText && !translatedText) return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ target, startedAt, entries, updatedAt: Date.now() }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ target, startedAt, originalText, translatedText, updatedAt: Date.now() }))
     } catch {}
-  }, [entries, target, startedAt])
+  }, [target, startedAt, originalText, translatedText])
 
   useEffect(() => () => stopMeeting(false), [])
 
-  const setPendingCount = value => {
-    pendingRef.current = Math.max(0, value)
-    setPending(pendingRef.current)
+  const setTrackEnabled = enabled => {
+    streamRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
   }
 
-  const setTracksEnabled = enabled => {
-    audioStreamRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
+  const sendRealtime = event => {
+    const channel = dataChannelRef.current
+    if (channel?.readyState === 'open') channel.send(JSON.stringify(event))
   }
 
-  const processQueue = async () => {
-    if (processingRef.current) return
-    processingRef.current = true
-    try {
-      while (queueRef.current.length) {
-        const item = queueRef.current.shift()
-        try {
-          const previousContext = recentTranscriptRef.current.slice(-3).join(' ')
-          const result = await sendSegment(item.blob, item.target, previousContext)
-          if (result.transcript) recentTranscriptRef.current = [...recentTranscriptRef.current, result.transcript].slice(-4)
-          if (result.transcript || result.translation) {
-            setEntries(current => [...current, {
-              id: `${Date.now()}-${Math.random()}`,
-              at: item.at,
-              original: result.transcript,
-              translated: result.translation || result.transcript,
-              target: item.target,
-            }])
-          }
-        } catch (err) {
-          setError(err.message || 'A meeting segment could not be translated.')
-        } finally {
-          setPendingCount(pendingRef.current - 1)
-        }
-      }
-    } finally {
-      processingRef.current = false
-      if (!activeRef.current && pendingRef.current === 0) setStatus(current => current === 'idle' ? current : 'ended')
-    }
+  const clearCommitTimer = () => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current)
+    commitTimerRef.current = null
   }
 
-  const enqueueSegment = (blob, at) => {
-    if (!blob || blob.size < 600) return
-    queueRef.current.push({ blob, at, target: targetRef.current })
-    setPendingCount(pendingRef.current + 1)
-    processQueue()
-  }
+  const commitCurrentSpeech = (force = false) => {
+    clearCommitTimer()
+    const original = clean(originalBufferRef.current)
+    const translated = clean(translatedBufferRef.current)
 
-  const recordSegment = stream => new Promise((resolve, reject) => {
-    const mimeType = preferredMimeType()
-    let recorder
-    try {
-      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-    } catch (err) {
-      reject(err)
+    if (!original && !translated) return
+
+    if (!force && original && !translated && commitWaitsRef.current < 3) {
+      commitWaitsRef.current += 1
+      commitTimerRef.current = setTimeout(() => commitCurrentSpeech(false), 650)
       return
     }
 
-    recorderRef.current = recorder
-    const chunks = []
-    let timer
-    recorder.addEventListener('dataavailable', event => { if (event.data?.size) chunks.push(event.data) })
-    recorder.addEventListener('error', event => {
-      clearTimeout(timer)
-      reject(event.error || new Error('Meeting audio capture failed.'))
-    }, { once: true })
-    recorder.addEventListener('stop', () => {
-      clearTimeout(timer)
-      if (recorderRef.current === recorder) recorderRef.current = null
-      resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' }))
-    }, { once: true })
-    recorder.start()
-    timer = setTimeout(() => {
-      if (recorder.state === 'recording') recorder.stop()
-    }, SEGMENT_MS)
-  })
+    if (original) setOriginalText(current => appendText(current, original))
+    if (translated) setTranslatedText(current => appendText(current, translated))
 
-  const segmentLoop = async stream => {
-    while (activeRef.current) {
-      if (pausedRef.current) {
-        await sleep(180)
-        continue
-      }
-      const at = Math.max(0, Date.now() - startedAtRef.current)
-      try {
-        const blob = await recordSegment(stream)
-        if (!pausedRef.current && blob?.size) enqueueSegment(blob, at)
-      } catch (err) {
-        if (activeRef.current) {
-          setError(err.message || 'Meeting audio capture stopped.')
-          stopMeeting(false)
-        }
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
+    commitWaitsRef.current = 0
+    setLiveOriginal('')
+    setLiveTranslation('')
+  }
+
+  const scheduleCommit = () => {
+    clearCommitTimer()
+    commitWaitsRef.current = 0
+    commitTimerRef.current = setTimeout(() => commitCurrentSpeech(false), 1500)
+  }
+
+  const handleRealtimeEvent = event => {
+    if (pausedRef.current) return
+
+    switch (event.type) {
+      case 'session.input_transcript.delta': {
+        const delta = String(event.delta || '')
+        if (!delta) break
+        originalBufferRef.current += delta
+        setLiveOriginal(originalBufferRef.current)
+        scheduleCommit()
         break
       }
+      case 'session.output_transcript.delta': {
+        const delta = String(event.delta || '')
+        if (!delta) break
+        translatedBufferRef.current += delta
+        setLiveTranslation(translatedBufferRef.current)
+        scheduleCommit()
+        break
+      }
+      case 'session.input_transcript.done':
+      case 'session.output_transcript.done':
+        scheduleCommit()
+        break
+      case 'session.closed':
+        if (activeRef.current) stopMeeting(true)
+        break
+      case 'error':
+      case 'session.error':
+        setError(event.error?.message || 'Live meeting translation was interrupted.')
+        break
+      default:
+        break
     }
   }
 
   const getMeetingStream = async () => {
     if (source === 'screen') {
-      if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Computer audio sharing is not supported in this browser. Use Microphone / speakers instead.')
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-      const audioTrack = display.getAudioTracks?.()[0]
+      if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Computer audio sharing is not supported in this browser.')
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      const audioTrack = stream.getAudioTracks?.()[0]
       if (!audioTrack) {
-        display.getTracks().forEach(track => track.stop())
-        throw new Error('No computer audio was shared. Choose a tab/window/screen with audio sharing enabled, or use Microphone / speakers.')
+        stream.getTracks().forEach(track => track.stop())
+        throw new Error('No computer audio was shared. Choose a tab/window/screen with audio enabled, or use Microphone / speakers.')
       }
-      streamRef.current = display
-      return new MediaStream([audioTrack])
+      return stream
     }
 
-    const mic = await navigator.mediaDevices.getUserMedia({
+    return navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     })
-    streamRef.current = mic
-    return mic
   }
 
   const startMeeting = async () => {
-    if (!recorderSupported || !navigator.mediaDevices?.getUserMedia) {
-      setError('Meeting Listen is not supported in this browser.')
+    if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
+      setError('Live Meeting is not supported in this browser.')
       return
     }
 
     setError('')
-    setStatus('starting')
-    setEntries([])
-    setPendingCount(0)
-    queueRef.current = []
-    recentTranscriptRef.current = []
+    setSessionState('connecting')
+    setPaused(false)
+    pausedRef.current = false
+    activeRef.current = true
+    originalBufferRef.current = ''
+    translatedBufferRef.current = ''
+    setLiveOriginal('')
+    setLiveTranslation('')
+    setOriginalText('')
+    setTranslatedText('')
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
 
     try {
-      const audioStream = await getMeetingStream()
-      audioStreamRef.current = audioStream
-      const now = Date.now()
-      startedAtRef.current = now
-      setStartedAt(now)
-      setElapsed(0)
-      activeRef.current = true
-      pausedRef.current = false
-      setStatus('listening')
-
-      streamRef.current?.getTracks?.().forEach(track => {
+      const stream = await getMeetingStream()
+      streamRef.current = stream
+      stream.getTracks().forEach(track => {
         track.addEventListener('ended', () => {
           if (activeRef.current) stopMeeting(true)
         }, { once: true })
       })
 
-      segmentLoopRef.current = segmentLoop(audioStream)
+      const tokenResponse = await fetch('/api/realtime-translation-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: codeFor(targetRef.current) }),
+      })
+      const tokenData = await tokenResponse.json()
+      if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime meeting translation.')
+
+      const pc = new RTCPeerConnection()
+      peerRef.current = pc
+      const audioTrack = stream.getAudioTracks()[0]
+      pc.addTrack(audioTrack, stream)
+      pc.ontrack = () => {}
+
+      pc.addEventListener('connectionstatechange', () => {
+        if (!activeRef.current) return
+        if (pc.connectionState === 'connected') setSessionState(pausedRef.current ? 'paused' : 'listening')
+        else if (['disconnected', 'connecting'].includes(pc.connectionState)) setSessionState('recovering')
+        else if (['failed', 'closed'].includes(pc.connectionState)) {
+          setError('The live meeting connection ended. Start again to continue.')
+          stopMeeting(true)
+        }
+      })
+
+      const channel = pc.createDataChannel('oai-events')
+      dataChannelRef.current = channel
+      channel.addEventListener('message', message => {
+        try { handleRealtimeEvent(JSON.parse(message.data)) } catch {}
+      })
+
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      const sdpResponse = await fetch('https://api.openai.com/v1/realtime/translations/calls', {
+        method: 'POST',
+        body: offer.sdp,
+        headers: {
+          Authorization: `Bearer ${tokenData.value}`,
+          'Content-Type': 'application/sdp',
+        },
+      })
+      const answerSdp = await sdpResponse.text()
+      if (!sdpResponse.ok) throw new Error(answerSdp || 'Could not connect live meeting translation.')
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+
+      await new Promise((resolve, reject) => {
+        if (channel.readyState === 'open') return resolve()
+        const timer = setTimeout(() => reject(new Error('Live meeting connection timed out.')), 10000)
+        channel.addEventListener('open', () => { clearTimeout(timer); resolve() }, { once: true })
+        channel.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Live meeting could not connect.')) }, { once: true })
+      })
+
+      const now = Date.now()
+      setStartedAt(now)
+      setElapsed(0)
+      setSessionState('listening')
     } catch (err) {
       setError(err.message || 'Ana could not start listening to the meeting.')
-      activeRef.current = false
-      setStatus('idle')
-      streamRef.current?.getTracks?.().forEach(track => track.stop())
-      streamRef.current = null
-      audioStreamRef.current = null
+      stopMeeting(false)
     }
   }
 
-  function stopMeeting(finishQueue = true) {
+  function stopMeeting(saveLive = true) {
     activeRef.current = false
     pausedRef.current = false
-    try {
-      if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-    } catch {}
+    clearCommitTimer()
+    if (saveLive) commitCurrentSpeech(true)
+    try { dataChannelRef.current?.close() } catch {}
+    dataChannelRef.current = null
+    try { peerRef.current?.close() } catch {}
+    peerRef.current = null
     streamRef.current?.getTracks?.().forEach(track => track.stop())
-    audioStreamRef.current?.getTracks?.().forEach(track => track.stop())
     streamRef.current = null
-    audioStreamRef.current = null
-    setStatus(finishQueue && pendingRef.current > 0 ? 'finishing' : 'ended')
+    setPaused(false)
+    setSessionState(startedAt ? 'ended' : 'idle')
   }
 
   const togglePause = () => {
     if (!activeRef.current) return
     const next = !pausedRef.current
+    if (next) commitCurrentSpeech(true)
     pausedRef.current = next
-    setTracksEnabled(!next)
-    setStatus(next ? 'paused' : 'listening')
-    try {
-      if (next && recorderRef.current?.state === 'recording') recorderRef.current.stop()
-    } catch {}
+    setPaused(next)
+    setTrackEnabled(!next)
+    setSessionState(next ? 'paused' : 'listening')
   }
 
   const changeTarget = value => {
+    if (activeRef.current) commitCurrentSpeech(true)
     targetRef.current = value
     setTarget(value)
     rememberPersonalLanguagePreference?.({ lastMeetingTarget: value })
+    if (activeRef.current) {
+      sendRealtime({
+        type: 'session.update',
+        session: { audio: { output: { language: codeFor(value) } } },
+      })
+    }
   }
 
   const clearTranscript = () => {
     if (activeRef.current) return
-    setEntries([])
+    setOriginalText('')
+    setTranslatedText('')
     setStartedAt(null)
     setElapsed(0)
-    setStatus('idle')
-    recentTranscriptRef.current = []
+    setSessionState('idle')
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
-  const readableBlocks = useMemo(() => buildReadableBlocks(entries), [entries])
-
-  const transcriptText = () => readableBlocks.map(item => '[' + formatTime(item.at) + '] ' + item.translated).join('\n\n')
-
   const copyTranscript = async () => {
-    if (!entries.length) return
-    await navigator.clipboard.writeText(transcriptText())
+    const value = clean(translatedText || originalText)
+    if (!value) return
+    await navigator.clipboard.writeText(value)
     setCopied(true)
     setTimeout(() => setCopied(false), 1400)
   }
 
   const downloadTranscript = () => {
-    if (!entries.length) return
-    const blob = new Blob([`Ana Meeting Listen\nTranslated to: ${target}\n\n${transcriptText()}\n`], { type: 'text/plain;charset=utf-8' })
+    if (!originalText && !translatedText) return
+    const text = `Ana Meeting\nTranslated to: ${target}\n\nTRANSLATION\n${translatedText || '—'}\n\nORIGINAL TRANSCRIPT\n${originalText || '—'}\n`
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -379,19 +358,19 @@ export default function MeetingMode() {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  const latest = readableBlocks[readableBlocks.length - 1] || entries[entries.length - 1]
-  const statusText = status === 'starting' ? 'Starting…'
-    : status === 'listening' ? 'Listening'
-      : status === 'paused' ? 'Paused'
-        : status === 'finishing' ? 'Finishing last lines…'
-          : status === 'ended' ? 'Meeting ended'
-            : 'Ready'
+  const statusText = sessionState === 'connecting' ? 'Connecting…'
+    : sessionState === 'recovering' ? 'Reconnecting…'
+      : paused ? 'Paused'
+        : active ? 'Ana is listening now' : sessionState === 'ended' ? 'Meeting ended' : 'Ready'
 
-  return <section className="meeting-wrap">
+  const currentOriginal = clean(liveOriginal) || (active ? 'Listening for speech…' : '')
+  const currentTranslation = clean(liveTranslation)
+
+  return <section className="meeting-wrap meeting-realtime">
     <header className="meeting-head">
-      <div className="eyebrow"><Headphones size={14}/> Meeting Listen</div>
-      <h1>Listen once. Read it in your language.</h1>
-      <p>Keep Ana open beside Teams, Zoom or any meeting. Ana translates in short rolling segments and saves the text on this device. Audio is never saved.</p>
+      <div className="eyebrow"><Headphones size={14}/> Meeting</div>
+      <h1>Hear it now. Understand it now.</h1>
+      <p>Ana shows what she hears immediately, then streams the translation as it becomes available. The transcript is saved as continuous text — never as recorder chunks.</p>
     </header>
 
     <section className="meeting-setup">
@@ -399,66 +378,69 @@ export default function MeetingMode() {
         <label>
           <span>Listen to</span>
           <select value={source} onChange={event => setSource(event.target.value)} disabled={active}>
-            <option value="microphone">Microphone / speakers — no screen sharing</option>
-            {screenSupported && <option value="screen">Computer / tab audio — opens share picker</option>}
+            <option value="microphone">Microphone / speakers</option>
+            {screenSupported && <option value="screen">Computer / tab audio</option>}
           </select>
         </label>
         <label>
           <span>Translate to</span>
-          <select value={target} onChange={event => changeTarget(event.target.value)} disabled={active}>
+          <select value={target} onChange={event => changeTarget(event.target.value)}>
             {TARGETS.map(value => <option key={value}>{value}</option>)}
           </select>
         </label>
       </div>
 
-      <div className="meeting-promise">
-        <span><Check size={15}/> Near-live translation</span>
-        <span><Check size={15}/> Transcript saved automatically</span>
-        <span><Check size={15}/> No meeting audio stored</span>
-      </div>
-
       <div className={`meeting-live-card ${active ? 'active' : ''}`}>
-        <div className="meeting-status-row">
-          <div><i className={status === 'listening' ? 'on' : ''}/><strong>{statusText}</strong></div>
-          <span>{startedAt ? formatTime(elapsed) : '00:00'}{pending ? ` · ${pending} segment${pending === 1 ? '' : 's'} processing` : ''}</span>
+        <div className="meeting-status-row meeting-live-status">
+          <div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div>
+          <span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span>
         </div>
 
-        <div className="meeting-now">
-          <span>Latest translation</span>
-          <strong>{latest?.translated || (active ? 'Ana will show the translated meeting here as people speak…' : entries.length ? 'Your last meeting transcript is saved below.' : 'Start when your meeting begins.')}</strong>
-          {latest?.original && <details className="meeting-original"><summary>Show original</summary><p>{latest.original}</p></details>}
+        <div className="meeting-realtime-stack">
+          <section className={`meeting-live-translation ${currentTranslation ? 'has-text' : ''}`}>
+            <span>Live translation · {target}</span>
+            <strong>{currentTranslation || (active && currentOriginal ? 'Translation is catching up…' : active ? 'Translation will appear here as soon as speech is understood.' : 'Start the meeting when you are ready.')}</strong>
+          </section>
+
+          <section className="meeting-live-hearing">
+            <span>What Ana hears</span>
+            <p>{currentOriginal || (originalText ? 'Ready to continue listening.' : 'The live transcription appears here immediately while people speak.')}</p>
+          </section>
         </div>
 
         {error && <div className="error meeting-error">{error}</div>}
 
         <div className="meeting-controls">
           {!active ? <button className="meeting-start" onClick={startMeeting}><Headphones size={18}/> Start listening</button> : <>
-            {status !== 'finishing' && <button className="meeting-pause" onClick={togglePause}>{status === 'paused' ? <Play size={17}/> : <Pause size={17}/>} {status === 'paused' ? 'Resume' : 'Pause'}</button>}
+            <button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button>
             <button className="meeting-stop" onClick={() => stopMeeting(true)}><Square size={16}/> End meeting</button>
           </>}
         </div>
       </div>
     </section>
 
-    <section className="meeting-transcript">
+    <section className="meeting-transcript meeting-continuous">
       <div className="meeting-transcript-head">
-        <div><strong>Meeting transcript</strong><span>{entries.length ? (readableBlocks.length + ' readable passage' + (readableBlocks.length === 1 ? '' : 's') + ' · saved on this device') : 'Nothing saved yet'}</span></div>
-        <div className="meeting-transcript-actions">
-          <button onClick={copyTranscript} disabled={!entries.length}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button>
-          <button onClick={downloadTranscript} disabled={!entries.length}><Download size={15}/> Download</button>
-          <button onClick={clearTranscript} disabled={active || !entries.length}><Trash2 size={15}/> Clear</button>
+        <div><strong>Meeting transcript</strong><span>{originalText || liveOriginal ? 'building continuously as Ana listens' : 'Nothing saved yet'}</span></div>
+        <div>
+          <button onClick={copyTranscript} disabled={!translatedText && !originalText}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy translation'}</button>
+          <button onClick={downloadTranscript} disabled={!translatedText && !originalText}><Download size={15}/> Download</button>
+          <button onClick={clearTranscript} disabled={active || (!translatedText && !originalText)}><Trash2 size={15}/> Clear</button>
         </div>
       </div>
-      <div className="meeting-lines">
-        {entries.length ? readableBlocks.map(item => <article key={item.id} className="meeting-readable-line">
-          <time>{formatTime(item.at)}{item.endAt > item.at ? ('–' + formatTime(item.endAt + SEGMENT_MS)) : ''}</time>
-          <div>
-            <strong>{item.translated}</strong>
-            {item.original && <details className="meeting-original"><summary>Show original</summary><p>{item.original}</p></details>}
-          </div>
-        </article>) : <div className="meeting-empty">Ana will turn the meeting into readable passages here as people speak.</div>}
+
+      <div className="meeting-continuous-body">
+        <section className="meeting-saved-translation">
+          <span>{target}</span>
+          <p>{appendText(translatedText, liveTranslation) || 'The translated transcript will build here continuously.'}</p>
+        </section>
+        <section className="meeting-saved-original">
+          <span>Original transcript</span>
+          <p>{appendText(originalText, liveOriginal) || 'What Ana hears will build here continuously from the first words.'}</p>
+        </section>
       </div>
     </section>
-    <p className="meeting-footnote"><b>Microphone / speakers</b> is the default and does not ask you to share the screen. Use <b>Computer / tab audio</b> only when you want Ana to capture meeting audio directly; browsers require a share picker for that option. Translation usually follows a few seconds behind the speaker.</p>
+
+    <p className="meeting-footnote">Ana uses a realtime audio connection for the live transcription and translation. Audio itself is not saved by this meeting view; only the text transcript is kept on this device.</p>
   </section>
 }
