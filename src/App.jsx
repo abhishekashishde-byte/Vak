@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
 import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
+import AnaMark from './AnaMark.jsx'
 
 const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
@@ -342,15 +343,9 @@ export default function App() {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><img src="/ana-app-icon.png" alt="Ana"/><div><strong>Ana</strong><span>Your voice, in any language</span></div></div>
+      <div className="brand"><AnaMark className="ana-brand-mark"/><div><strong>Ana</strong></div></div>
       <div className="header-actions"><button className="ghost" onClick={() => setGlossaryOpen(true)}>Glossary <span className="badge">{activeGlossary.length}</span></button><button className="ghost icon-only" title="Sign out" onClick={() => supabase?.auth.signOut()}><LogOut size={16}/></button></div>
     </header>
-
-    <section className="hero">
-      <div className="eyebrow"><Sparkles size={14}/> Meaning before words</div>
-      <h1>Say exactly what you mean.</h1>
-      <p>Your voice, in any language.</p>
-    </section>
 
     <section className="translator-card">
       <div className="toolbar">

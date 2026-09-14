@@ -3,3 +3,7 @@
 @media(max-width:760px){.pane-label-row{padding-right:9px}.dictate-btn{padding:4px 8px;font-size:10px;gap:4px}.dictate-btn svg{width:12px;height:12px}.pane-foot span:last-child{max-width:55%;text-align:right}}
 
 .smart-language-note{margin:10px auto 0;width:fit-content;max-width:min(760px,100%);padding:8px 12px;border:1px solid rgba(44,40,34,.13);background:rgba(255,255,255,.58);color:#696258;border-radius:9px;font-size:11px;line-height:1.4;text-align:center}.smart-language-note:before{content:'✦';margin-right:6px;color:#8b8377}@media(max-width:760px){.smart-language-note{margin-top:6px;padding:6px 9px;font-size:9px;max-width:96%}}
+
+/* Product UI: persistent Ana identity without marketing copy. */
+.ana-brand-mark{width:40px;height:40px;flex:0 0 auto;color:#171717}
+@media(max-width:760px){.ana-brand-mark{width:31px;height:31px}}
