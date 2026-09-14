@@ -51,6 +51,24 @@ async function callLuna(text, instructions) {
   if (!res.ok) throw new Error(data.error || 'Translation failed')
   return String(data.content || '').trim()
 }
+async function callLunaPreservingLineBreaks(text, instructions) {
+  const normalized = String(text || '').replace(/\r\n?/g, '\n')
+  if (!normalized.includes('\n')) return callLuna(normalized, instructions)
+
+  const sourceLines = normalized.split('\n')
+  const structuredInstructions = `${instructions}\n\nLAYOUT IS BINDING. The source will be supplied as a JSON array where every array element is exactly one user-entered line. Translate the document with full context, but NEVER merge, split, remove, reorder or invent lines. Return ONLY valid JSON in this exact shape: {"lines":["..."]}. The output array must contain exactly ${sourceLines.length} strings in the same order. If a source line is empty, the corresponding output string MUST be empty.`
+  const structuredPrompt = `SOURCE LINES JSON:\n${JSON.stringify(sourceLines)}`
+  const structuredResult = parseJson(await callLuna(structuredPrompt, structuredInstructions))
+
+  if (Array.isArray(structuredResult?.lines) && structuredResult.lines.length === sourceLines.length) {
+    return structuredResult.lines.map((line, index) => sourceLines[index] === '' ? '' : String(line ?? '')).join('\n')
+  }
+
+  // Rare safety fallback: translate each visible line independently so the user's
+  // Enter presses are still preserved exactly even if structured output is malformed.
+  const translatedLines = await Promise.all(sourceLines.map(line => line.trim() ? callLuna(line, instructions) : Promise.resolve('')))
+  return translatedLines.join('\n')
+}
 
 export default function App() {
   const [input, setInput] = useState(() => String(loadDraft().input || ''))
@@ -134,11 +152,11 @@ export default function App() {
     const text = input.trim(); if (!text || loading) return
     setLoading(true); setError(''); setOfflineNotice(''); setSelected(null); setCopied(false)
     try {
-      let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
+      let instructions = `You are Ana, a premium translation engine. Detect the source language and translate into ${target}. Return ONLY the finished translation with no explanation, labels or quotation marks. Preserve paragraph breaks, line breaks, bullets, names, dates, numbers, URLs, greetings and signatures. Translate idiomatically and naturally, not word-for-word. Preserve the user's tone, intent and level of formality.`
       if (isGermanTarget(target)) instructions += `\n${germanVariantRule(target)} ${registerRules()}`
       if (target === 'Hinglish') instructions += `\nHinglish means natural spoken Hindi written entirely in the Latin/Roman alphabet. Do NOT use Devanagari/Hindi script. Write the way a Hindi speaker would naturally say it. Keep names, brands, numbers and unavoidable English terms naturally. Do not translate into English.`
       instructions += glossaryInstructions()
-      setOutput(await callLuna(text, instructions))
+      setOutput(await callLunaPreservingLineBreaks(text, instructions))
       setOutputMode('online')
     } catch (err) {
       const deviceResult = await tryOnDeviceTranslation(text, target)
