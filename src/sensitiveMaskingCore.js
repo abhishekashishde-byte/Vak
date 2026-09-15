@@ -1,5 +1,5 @@
 const TOKEN_RE = /\[\[ANA_PRIVATE_(\d+)\]\]/g
-const SENSITIVE_HINT_RE = /@|\+\d|\b[A-Z]{2}\d{2}|\b\d{3}-\d{2}-\d{4}\b|(?:\d[ -]*?){13}|\b(?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax|patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer|aktenzeichen)\b/i
+const SENSITIVE_HINT_RE = /@|\+\d|\b[A-Z]{2}\d{2}|\b(?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax|patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer|aktenzeichen|ssn|social security|sozialversicherungsnummer|credit card|debit card|payment card|kartennummer|kreditkarten)\b/i
 
 function luhnValid(candidate = '') {
   const digits = String(candidate).replace(/\D/g, '')
@@ -16,6 +16,18 @@ function luhnValid(candidate = '') {
     alternate = !alternate
   }
   return sum % 10 === 0
+}
+
+function ibanValid(candidate = '') {
+  const compact = String(candidate).replace(/\s/g, '').toUpperCase()
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(compact) || compact.length > 34) return false
+  const rearranged = compact.slice(4) + compact.slice(0, 4)
+  let remainder = 0
+  for (const char of rearranged) {
+    const chunk = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char
+    for (const digit of chunk) remainder = (remainder * 10 + Number(digit)) % 97
+  }
+  return remainder === 1
 }
 
 function placeholder(index) {
@@ -40,9 +52,9 @@ function replaceWhole(text, regex, type, state, validator) {
   })
 }
 
-function replaceLabelled(text, regex, type, state) {
+function replaceLabelled(text, regex, type, state, validator) {
   return text.replace(regex, (match, prefix, value) => {
-    if (!value) return match
+    if (!value || (validator && !validator(value))) return match
     return `${prefix}${addReplacement(state, value, type)}`
   })
 }
@@ -58,19 +70,20 @@ export function maskSensitiveText(value = '', startAt = 0) {
   if (!text || !mayContainSensitiveText(text)) return { text, items: [] }
 
   text = replaceWhole(text, /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, 'email', state)
-  text = replaceWhole(text, /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/gi, 'iban', state, match => {
-    const compact = match.replace(/\s/g, '')
-    return compact.length >= 15 && compact.length <= 34
-  })
-  text = replaceWhole(text, /\b\d{3}-\d{2}-\d{4}\b/g, 'ssn', state)
+  text = replaceWhole(text, /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/gi, 'iban', state, ibanValid)
   text = replaceWhole(text, /\+\d(?:[\s().-]*\d){6,14}\b/g, 'phone', state, match => {
     const count = match.replace(/\D/g, '').length
     return count >= 7 && count <= 15
   })
-  text = replaceWhole(text, /\b(?:\d[ -]*?){13,19}\b/g, 'payment-card', state, luhnValid)
 
   const labelledId = /((?:(?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax)\s*(?:id|number|no\.?|#)|(?:patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer)(?:nummer|nr\.?|[- ]?id)|aktenzeichen)\s*[:#=-]?\s*)([A-Z0-9][A-Z0-9./_-]{4,30})/gi
   text = replaceLabelled(text, labelledId, 'labelled-id', state)
+
+  const labelledSsn = /((?:ssn|social security(?: number)?|sozialversicherungsnummer)\s*[:#=-]?\s*)(\d{3}-\d{2}-\d{4})/gi
+  text = replaceLabelled(text, labelledSsn, 'ssn', state)
+
+  const labelledCard = /((?:(?:credit|debit|payment)\s*card(?:\s*(?:number|no\.?|#))?|kreditkarten(?:nummer|nr\.?)|kartennummer)\s*[:#=-]?\s*)((?:\d[ -]*?){13,19})/gi
+  text = replaceLabelled(text, labelledCard, 'payment-card', state, luhnValid)
 
   return { text, items: state.items }
 }
