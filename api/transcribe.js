@@ -27,6 +27,7 @@ function safeMeetingAudioUrl(value = '') {
 
 function cleanContext(value = '') {
   return String(value)
+    .replace(/SAP terms, transaction codes, material master, inspection plans and project names may occur\.?/gi, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -78,7 +79,7 @@ export default async function handler(req, res) {
     }
 
     const context = cleanContext(contextHints)
-    const initialDomain = resolveDomain(context, req.body?.domain)
+    const initialDomain = resolveDomain('', req.body?.domain)
     const specialistHint = transcriptionDomainPrompt(initialDomain)
     const keywords = domainKeywords(initialDomain, { includeUniversal: true, limit: 30 })
     const keywordHint = keywords.length ? `Possible specialist vocabulary includes: ${keywords.join(', ')}.` : ''
