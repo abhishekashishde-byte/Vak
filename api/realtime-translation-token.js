@@ -1,3 +1,5 @@
+import { publicDomain, resolveDomain } from './_domain.js'
+
 const ALLOWED_LANGUAGES = new Set([
   'de', 'en', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it',
 ])
@@ -8,6 +10,7 @@ export default async function handler(req, res) {
 
   const requested = String(req.body?.targetLanguage || 'en').trim().toLowerCase()
   const targetLanguage = ALLOWED_LANGUAGES.has(requested) ? requested : 'en'
+  const domainResolution = resolveDomain('', req.body?.domain)
 
   try {
     const response = await fetch('https://api.openai.com/v1/realtime/translations/client_secrets', {
@@ -34,7 +37,7 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data?.error?.message || 'Could not create live translation session' })
     }
 
-    return res.status(200).json(data)
+    return res.status(200).json({ ...data, domain: publicDomain(domainResolution) })
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Could not create live translation session' })
   }
