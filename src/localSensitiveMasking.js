@@ -6,25 +6,20 @@ let nativeFetch = null
 
 function maskRequestBody(body) {
   if (!body || typeof body !== 'object' || body.skipSensitiveMasking === true) return { body, items: [] }
-  const settings = getPrivacySettings()
-  if (settings.maskSensitiveBeforeCloud === false) return { body, items: [] }
+  if (typeof body.text !== 'string' || !body.text) return { body, items: [] }
 
-  const next = { ...body }
-  const combinedItems = []
-  const fields = ['text', 'instructions']
+  const masked = maskSensitiveText(body.text)
+  if (!masked.items.length) return { body, items: [] }
 
-  for (const field of fields) {
-    if (typeof next[field] !== 'string' || !next[field]) continue
-    const masked = maskSensitiveText(next[field], combinedItems.length)
-    next[field] = masked.text
-    combinedItems.push(...masked.items)
+  const instruction = '\n\nPRIVACY PLACEHOLDERS: The user text may contain tokens such as [[ANA_PRIVATE_1]]. Treat every such token as an opaque value. Preserve each token EXACTLY, character-for-character, in the correct semantic position. Never translate, expand, explain, omit, reorder or alter a privacy token.'
+  return {
+    body: {
+      ...body,
+      text: masked.text,
+      instructions: `${String(body.instructions || '')}${instruction}`.trim(),
+    },
+    items: masked.items,
   }
-
-  if (!combinedItems.length) return { body, items: [] }
-
-  const instruction = '\n\nPRIVACY PLACEHOLDERS: The request may contain tokens such as [[ANA_PRIVATE_1]]. Treat every such token as an opaque value. Preserve each token EXACTLY, character-for-character, in the correct semantic position. Never translate, expand, explain, omit, reorder or alter a privacy token.'
-  next.instructions = `${String(next.instructions || '')}${instruction}`.trim()
-  return { body: next, items: combinedItems }
 }
 
 async function restoreResponse(response, items) {
@@ -57,6 +52,10 @@ export function installLocalSensitiveMasking() {
 
   window.fetch = async (input, init = {}) => {
     if (!isTranslateRequest(input, init)) return nativeFetch(input, init)
+
+    const settings = getPrivacySettings()
+    if (settings.maskSensitiveBeforeCloud === false) return nativeFetch(input, init)
+
     try {
       const parsed = JSON.parse(init.body)
       const masked = maskRequestBody(parsed)
