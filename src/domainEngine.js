@@ -49,6 +49,13 @@ const LEXICON = {
   ],
 }
 
+const AUTO_TRANSCRIPTION_CORE = [
+  'T-code', 'SAP', 'MIGO', 'SPRO', 'Wareneingang', 'Warenausgang', 'Prüfplan', 'Stückliste',
+  'Anamnese', 'Vorerkrankungen', 'Kinderwunsch', 'Schilddrüse', 'Blutverdünner', 'Diagnose', 'Medikament', 'Dosierung',
+  'DSGVO', 'Kündigung', 'Haftung', 'Gewährleistung', 'Vollmacht', 'Vertrag',
+  'Kostenstelle', 'Umsatzsteuer', 'Bilanz', 'Abschreibung', 'Cash Flow', 'VAT',
+]
+
 let evidence = []
 let current = readState()
 let realtimeBuffer = ''
@@ -208,20 +215,75 @@ function observeRealtimeEvent(raw) {
 
   const complete = String(event.transcript || event.text || '').trim()
   if (complete && (type.includes('done') || type.includes('completed'))) {
-    if (realtimeBuffer) complete.startsWith(realtimeBuffer) ? null : realtimeBuffer += ` ${complete}`
-    else realtimeBuffer = complete
+    if (realtimeBuffer) {
+      if (!complete.startsWith(realtimeBuffer)) realtimeBuffer += ` ${complete}`
+    } else {
+      realtimeBuffer = complete
+    }
     flushRealtimeBuffer('realtime')
     return
   }
 
-  const delta = String(event.delta || '').trim()
-  if (!delta) return
-  realtimeBuffer += `${realtimeBuffer && !/^\s/.test(String(event.delta || '')) ? ' ' : ''}${delta}`
+  const rawDelta = String(event.delta || '')
+  if (!rawDelta.trim()) return
+  realtimeBuffer += rawDelta
   if (realtimeBuffer.length >= 180) flushRealtimeBuffer('realtime')
   else {
     if (realtimeTimer) clearTimeout(realtimeTimer)
     realtimeTimer = setTimeout(() => flushRealtimeBuffer('realtime'), 1600)
   }
+}
+
+function clientKeywords() {
+  const values = []
+  const seen = new Set()
+  const add = value => {
+    const text = String(value || '').trim()
+    const key = text.toLocaleLowerCase()
+    if (!text || seen.has(key) || values.length >= 40) return
+    seen.add(key)
+    values.push(text)
+  }
+  if (current.active !== 'general' && LEXICON[current.active]) LEXICON[current.active].forEach(([term]) => add(term))
+  if (current.secondary && LEXICON[current.secondary]) LEXICON[current.secondary].forEach(([term]) => add(term))
+  AUTO_TRANSCRIPTION_CORE.forEach(add)
+  return values
+}
+
+function clientTranscriptionPrompt() {
+  const active = current.active !== 'general' ? domainLabel(current.active) : 'general/mixed'
+  const secondary = current.secondary ? ` with secondary ${domainLabel(current.secondary)} context` : ''
+  return `Preserve specialist terminology exactly when clearly heard. Current context is ${active}${secondary}. In Auto mode the subject may change during the conversation, so do not force later speech into an earlier domain. Be especially careful with T-codes, SAP object names, medical terminology, legal terminology, finance/accounting terminology, names, numbers and technical identifiers.`
+}
+
+function augmentOutboundRealtime(raw) {
+  if (typeof raw !== 'string') return raw
+  let event
+  try { event = JSON.parse(raw) } catch { return raw }
+  if (event?.type !== 'session.update' || !event.session || typeof event.session !== 'object') return raw
+
+  if (typeof event.session.instructions === 'string' && event.session.instructions.trim()) {
+    observeDomainText(event.session.instructions, 'session')
+  }
+
+  const transcription = event.session?.audio?.input?.transcription
+  if (transcription && typeof transcription === 'object') {
+    const prompt = clientTranscriptionPrompt()
+    transcription.prompt = [String(transcription.prompt || '').trim(), prompt].filter(Boolean).join(' ')
+    const existing = Array.isArray(transcription.keywords) ? transcription.keywords : []
+    const merged = []
+    const seen = new Set()
+    for (const value of [...existing, ...clientKeywords()]) {
+      const text = String(value || '').trim()
+      const key = text.toLocaleLowerCase()
+      if (!text || seen.has(key) || merged.length >= 40) continue
+      seen.add(key)
+      merged.push(text)
+    }
+    if (merged.length) transcription.keywords = merged
+  }
+
+  return JSON.stringify(event)
 }
 
 function installRealtimeObserver() {
@@ -232,6 +294,10 @@ function installRealtimeObserver() {
   proto.createDataChannel = function (...args) {
     const channel = nativeCreateDataChannel.apply(this, args)
     try { channel.addEventListener('message', event => observeRealtimeEvent(event.data)) } catch {}
+    try {
+      const nativeSend = channel.send.bind(channel)
+      channel.send = data => nativeSend(augmentOutboundRealtime(data))
+    } catch {}
     return channel
   }
 }
