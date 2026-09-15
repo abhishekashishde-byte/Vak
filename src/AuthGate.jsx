@@ -12,41 +12,47 @@ export default function AuthGate() {
     if (!authConfigured || !supabase) return
 
     let active = true
+    let initialising = true
     let persistenceUserId = ''
+    let persistencePromise = Promise.resolve()
 
     const startPersistence = user => {
-      if (!user?.id || persistenceUserId === user.id) return
+      if (!user?.id) return Promise.resolve()
+      if (persistenceUserId === user.id) return persistencePromise
       persistenceUserId = user.id
-      hydrateAndStartAccountPersistence(user).catch(error => {
+      persistencePromise = hydrateAndStartAccountPersistence(user).catch(error => {
         console.warn('[Ana persistence] startup failed', error?.message || error)
       })
+      return persistencePromise
     }
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return
       const nextSession = data.session || null
       setSession(nextSession)
-      setReady(true)
-      if (nextSession?.user) startPersistence(nextSession.user)
+      if (nextSession?.user) await startPersistence(nextSession.user)
       else stopAccountPersistence()
+      if (!active) return
+      initialising = false
+      setReady(true)
     })
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return
-
-      // Auth emits events for token refreshes and user-metadata updates too.
-      // Never put Ana back into the loading screen for those events: doing so
-      // unmounts the workspace and makes the UI look like it refreshes constantly.
       setSession(nextSession || null)
-      setReady(true)
 
       if (event === 'SIGNED_OUT' || !nextSession?.user) {
         persistenceUserId = ''
+        persistencePromise = Promise.resolve()
         stopAccountPersistence()
+        if (!initialising) setReady(true)
         return
       }
 
+      // Auth also emits token-refresh and metadata events. Start/sustain persistence,
+      // but never put an already-open workspace back into a loading state.
       startPersistence(nextSession.user)
+      if (!initialising) setReady(true)
     })
 
     return () => {
