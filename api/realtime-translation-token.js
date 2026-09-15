@@ -20,6 +20,9 @@ export default async function handler(req, res) {
         session: {
           model: 'gpt-realtime-translate',
           audio: {
+            input: {
+              transcription: { model: 'gpt-realtime-whisper' },
+            },
             output: { language: targetLanguage },
           },
         },
