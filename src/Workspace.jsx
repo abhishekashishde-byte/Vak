@@ -6,7 +6,7 @@ import TalkForMe from './TalkForMeRealtime.jsx'
 import TalkPermissionBoundary from './TalkPermissionBoundary.jsx'
 import RoomMode from './RoomMode.jsx'
 import CaptionsMode from './CaptionsMode.jsx'
-import MeetingMode from './MeetingMode.jsx'
+import MeetingWorkspace from './MeetingWorkspace.jsx'
 import CameraMode from './CameraMode.jsx'
 import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
@@ -38,9 +38,17 @@ function isFirstVisit() {
   try { return localStorage.getItem('ana-onboarding-v2') !== 'seen' } catch { return false }
 }
 
+function initialWorkspaceMode() {
+  if (typeof window === 'undefined') return 'translate'
+  try {
+    const requested = new URLSearchParams(window.location.search).get('mode')
+    return MODE_PARENT[requested] ? requested : 'translate'
+  } catch { return 'translate' }
+}
+
 export default function Workspace() {
   const firstVisit = isFirstVisit()
-  const [mode, setMode] = useState('translate')
+  const [mode, setMode] = useState(initialWorkspaceMode)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [learnOpen, setLearnOpen] = useState(firstVisit)
@@ -83,7 +91,7 @@ export default function Workspace() {
         {mode === 'live' && <main className="app-shell"><LiveMode/></main>}{mode === 'captions' && <main className="app-shell"><CaptionsMode/></main>}{mode === 'room' && <main className="app-shell"><RoomMode/></main>}
       </div>}
       {mode === 'talk' && <main className="app-shell"><TalkPermissionBoundary><TalkForMe/></TalkPermissionBoundary></main>}
-      {mode === 'meeting' && <main className="app-shell"><MeetingMode/></main>}
+      {mode === 'meeting' && <main className="app-shell"><MeetingWorkspace/></main>}
     </div>
 
     {pickerOpen && <div className="ana-mode-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPickerOpen(false) }}>

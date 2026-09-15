@@ -103,12 +103,17 @@ export default async function handler(req, res) {
   const isAnaTranslation = rawInstructions.includes('premium translation engine')
   const isWordRefinement = rawInstructions.includes('bilingual editor refining a translation')
   const isLanguageDetection = rawInstructions.includes("Ana's language detector")
+  const isMeetingNotes = rawInstructions.includes('ANA_MEETING_NOTES')
+  const isMeetingEnrichment = rawInstructions.includes('ANA_MEETING_ENRICHMENT')
+  const isMeetingQa = rawInstructions.includes('ANA_MEETING_QA')
+  const isMeetingOutput = rawInstructions.includes('ANA_MEETING_OUTPUT')
+  const isMeetingIntelligence = isMeetingNotes || isMeetingEnrichment || isMeetingQa || isMeetingOutput
   const isStructuredLayoutRequest = rawInstructions.includes('LAYOUT IS BINDING.')
   const preserveLayout = isAnaTranslation && !isStructuredLayoutRequest && /[\r\n]/.test(text)
 
   const model = isTalkTurn || isAnaTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
-  const reasoningEffort = isAnaTranslation ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief ? 'low' : 'medium')
-  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : 20000
+  const reasoningEffort = isAnaTranslation ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
+  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : 20000
 
   let finalInstructions = rawInstructions
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
@@ -134,6 +139,10 @@ export default async function handler(req, res) {
     if (isTalkDebrief) body.max_output_tokens = 700
     if (isLanguageDetection) body.max_output_tokens = 90
     if (isWordRefinement) body.max_output_tokens = 280
+    if (isMeetingNotes) body.max_output_tokens = 2200
+    if (isMeetingEnrichment) body.max_output_tokens = 3400
+    if (isMeetingQa) body.max_output_tokens = 1000
+    if (isMeetingOutput) body.max_output_tokens = 1800
     if (isAnaTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
 
     let content = await callResponses(body, controller.signal)
