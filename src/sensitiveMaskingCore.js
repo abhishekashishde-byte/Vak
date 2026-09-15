@@ -63,7 +63,7 @@ export function maskSensitiveText(value = '', startAt = 0) {
   })
   text = replaceWhole(text, /\b(?:\d[ -]*?){13,19}\b/g, 'payment-card', state, luhnValid)
 
-  const labelledId = /((?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax)\s*(?:id|number|no\.?|#)|(?:patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer)(?:nummer|nr\.?|[- ]?id)|aktenzeichen)\s*[:#=-]?\s*([A-Z0-9][A-Z0-9./_-]{4,30})/gi
+  const labelledId = /((?:(?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax)\s*(?:id|number|no\.?|#)|(?:patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer)(?:nummer|nr\.?|[- ]?id)|aktenzeichen)\s*[:#=-]?\s*)([A-Z0-9][A-Z0-9./_-]{4,30})/gi
   text = replaceLabelled(text, labelledId, 'labelled-id', state)
 
   return { text, items: state.items }
