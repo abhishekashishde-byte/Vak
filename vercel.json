@@ -2,6 +2,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/google-callback", "destination": "/api/auth-notify?action=google-callback" }
+  ],
   "functions": {
     "api/translate.js": { "maxDuration": 30 },
     "api/transcribe.js": { "maxDuration": 300 },
