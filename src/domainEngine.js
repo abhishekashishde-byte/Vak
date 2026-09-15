@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'ana-domain-context-v1'
 const EVENT_NAME = 'ana-domain-changed'
 const FETCH_PATCH_FLAG = '__anaDomainFetchInstalled'
+const RTC_PATCH_FLAG = '__anaDomainRtcInstalled'
 
 export const DOMAIN_OPTIONS = [
   { id: 'auto', label: 'Auto' },
@@ -50,6 +51,8 @@ const LEXICON = {
 
 let evidence = []
 let current = readState()
+let realtimeBuffer = ''
+let realtimeTimer = null
 
 function readState() {
   if (typeof localStorage === 'undefined') return { mode: 'auto', active: 'general', secondary: '', confidence: 0.35 }
@@ -150,6 +153,7 @@ export function applyServerDomain(domain, reason = 'server') {
 export function setDomainMode(mode) {
   const value = VALID.has(mode) ? mode : 'auto'
   evidence = []
+  realtimeBuffer = ''
   current = value === 'auto'
     ? { mode: 'auto', active: current.active || 'general', secondary: '', confidence: current.active === 'general' ? 0.35 : 0.55 }
     : { mode: value, active: value, secondary: '', confidence: 1 }
@@ -185,9 +189,57 @@ function evidenceFromBody(body) {
   return ''
 }
 
+function flushRealtimeBuffer(reason = 'realtime') {
+  if (realtimeTimer) clearTimeout(realtimeTimer)
+  realtimeTimer = null
+  const value = realtimeBuffer.trim()
+  if (value) observeDomainText(value, reason)
+  realtimeBuffer = ''
+}
+
+function observeRealtimeEvent(raw) {
+  if (current.mode !== 'auto') return
+  let event
+  try { event = typeof raw === 'string' ? JSON.parse(raw) : raw } catch { return }
+  if (!event || typeof event !== 'object') return
+  const type = String(event.type || '')
+  const isSourceTranscript = type.includes('input_transcript') || type.includes('input_audio_transcription')
+  if (!isSourceTranscript) return
+
+  const complete = String(event.transcript || event.text || '').trim()
+  if (complete && (type.includes('done') || type.includes('completed'))) {
+    if (realtimeBuffer) complete.startsWith(realtimeBuffer) ? null : realtimeBuffer += ` ${complete}`
+    else realtimeBuffer = complete
+    flushRealtimeBuffer('realtime')
+    return
+  }
+
+  const delta = String(event.delta || '').trim()
+  if (!delta) return
+  realtimeBuffer += `${realtimeBuffer && !/^\s/.test(String(event.delta || '')) ? ' ' : ''}${delta}`
+  if (realtimeBuffer.length >= 180) flushRealtimeBuffer('realtime')
+  else {
+    if (realtimeTimer) clearTimeout(realtimeTimer)
+    realtimeTimer = setTimeout(() => flushRealtimeBuffer('realtime'), 1600)
+  }
+}
+
+function installRealtimeObserver() {
+  if (typeof window === 'undefined' || window[RTC_PATCH_FLAG] || !window.RTCPeerConnection?.prototype?.createDataChannel) return
+  window[RTC_PATCH_FLAG] = true
+  const proto = window.RTCPeerConnection.prototype
+  const nativeCreateDataChannel = proto.createDataChannel
+  proto.createDataChannel = function (...args) {
+    const channel = nativeCreateDataChannel.apply(this, args)
+    try { channel.addEventListener('message', event => observeRealtimeEvent(event.data)) } catch {}
+    return channel
+  }
+}
+
 export function installDomainFetchInterceptor() {
   if (typeof window === 'undefined' || window[FETCH_PATCH_FLAG]) return
   window[FETCH_PATCH_FLAG] = true
+  installRealtimeObserver()
   const nativeFetch = window.fetch.bind(window)
 
   window.fetch = async (input, init = {}) => {
