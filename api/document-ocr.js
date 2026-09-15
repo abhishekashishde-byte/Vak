@@ -1,3 +1,5 @@
+import { profileLabel, publicDomain, resolveDomain } from './_domain.js'
+
 function collectText(data) {
   return (data.output || [])
     .filter(item => item.type === 'message')
@@ -37,7 +39,7 @@ function promptForPurpose(purpose) {
   const base = `Return JSON only in this shape:\n{"blocks":[{"type":"heading|paragraph|cell","text":"exact visible text","x":0,"y":0,"width":0,"height":0,"confidence":"high|medium|low","handwritten":false}]}\n\nCoordinate rules:\n- x, y, width and height are integers from 0 to 1000 relative to the supplied image.\n- x/y use the TOP-LEFT corner.\n- Keep boxes tight around their own text.\n\nReading rules:\n- Copy names, numbers, dates, times, prices, currency symbols, reference numbers, punctuation and warning symbols exactly as visible.\n- Mark handwritten=true when the block is handwritten rather than printed.\n- confidence=high means the text is clearly legible; medium means some characters are uncertain; low means material characters or words are genuinely difficult to read.\n- For uncertain handwriting or blurred text, preserve only characters you can actually see. Never repair a name, number, date, price or word by guessing.\n- Do not translate.\n- If text is genuinely unreadable, omit it instead of inventing it.\n- Do not let boxes overlap unless the source visibly overlaps.`
 
   if (purpose === 'camera') {
-    return `Read the visible text in this real-world image carefully. It may be a sign, menu, label, letter, form, poster, package, notice, timetable, receipt or other scene. Locate text by where it actually appears in the image.\n\n${base}\n\nVisual-scene rules:\n- Keep separate signs, menu items, labels, price lines and form fields as separate blocks when they occupy separate visual areas.\n- Group wrapped lines only when they clearly form one sentence, paragraph or one menu/item entry.\n- Preserve the natural top-to-bottom / left-to-right visual grouping without merging unrelated nearby text.\n- Ignore logos or decorative graphics unless they contain readable words relevant to the visible message.\n- Do not infer obscured words from context, branding or common phrases. Accuracy beats completeness.`
+    return `Read the visible text in this real-world image carefully. It may be a sign, menu, label, letter, form, poster, package, notice, timetable, receipt or other scene. Locate text by where it actually appears in the image.\n\n${base}\n\nVisual-scene rules:\n- Keep separate signs, menu items, labels, price lines and form fields as separate blocks when they occupy separate visual areas.\n- Group wrapped lines only when they clearly form one sentence, paragraph or one menu/item entry.\n- Preserve the natural top-to-bottom / left-to-right visual grouping without merging unrelated nearby text.\n- Preserve obvious visual hierarchy: large headings should remain their own heading blocks; ordinary labels and form questions should not be merged into headings.\n- Ignore logos or decorative graphics unless they contain readable words relevant to the visible message.\n- Do not infer obscured words from context, branding or common phrases. Accuracy beats completeness.`
   }
 
   return `Read this scanned PDF page carefully and return its visible textual layout.\n\n${base}\n\nDocument-layout rules:\n- Preserve the page's real reading structure. For a true multi-column page, keep each text block inside its own column instead of merging text across columns.\n- Preserve separate table cells, form labels and filled form values as separate blocks.\n- Group ordinary wrapped paragraph lines only when they clearly belong to the same paragraph.\n- Keep headings separate.\n- Do not include logos, decorative marks, borders, photographs or signatures without readable text.`
@@ -55,7 +57,12 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: purpose === 'camera' ? 'This photo is too large to read safely.' : 'This scanned page is too large to read safely.' })
   }
 
-  const prompt = promptForPurpose(purpose)
+  const requestedDomain = req.body?.domain
+  const preDomain = resolveDomain('', requestedDomain)
+  const manualDomainHint = preDomain.mode !== 'auto' && preDomain.active !== 'general'
+    ? `The user explicitly marked this as ${profileLabel(preDomain.active)} context. This is only a recognition hint: copy the visible wording exactly and do not replace it with a synonym.`
+    : ''
+  const prompt = [promptForPurpose(purpose), manualDomainHint].filter(Boolean).join('\n\n')
 
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -65,7 +72,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.6-luna',
+        model: purpose === 'camera' ? 'gpt-5.6-sol' : 'gpt-5.6-luna',
         instructions: 'You are a precise visual OCR and layout extraction system. Accuracy beats completeness. Never infer text that is not visibly present. Return valid JSON only.',
         input: [{
           role: 'user',
@@ -74,7 +81,7 @@ export default async function handler(req, res) {
             { type: 'input_image', image_url: imageData, detail: 'high' },
           ],
         }],
-        reasoning: { effort: 'low' },
+        reasoning: { effort: purpose === 'camera' ? 'medium' : 'low' },
       }),
     })
 
@@ -89,7 +96,8 @@ export default async function handler(req, res) {
 
     const lowConfidenceCount = blocks.filter(block => block.confidence === 'low').length
     const handwrittenCount = blocks.filter(block => block.handwritten).length
-    return res.status(200).json({ blocks, lowConfidenceCount, handwrittenCount })
+    const detectedDomain = resolveDomain(blocks.map(block => block.text).join(' '), requestedDomain)
+    return res.status(200).json({ blocks, lowConfidenceCount, handwrittenCount, domain: publicDomain(detectedDomain) })
   } catch (error) {
     return res.status(500).json({ error: error?.message || (purpose === 'camera' ? 'Could not read this image.' : 'Could not read this scanned page.') })
   }
