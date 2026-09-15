@@ -35,6 +35,15 @@ test('does not mask an invalid IBAN-shaped technical value', () => {
   assert.equal(masked.text, original)
 })
 
+test('masks a labelled synthetic account identifier but keeps its label and punctuation', () => {
+  const original = 'Account number: TEST-ACC-001'
+  const masked = maskSensitiveText(original)
+
+  assert.equal(masked.items.length, 1)
+  assert.match(masked.text, /^Account number: \[\[ANA_PRIVATE_1\]\]$/)
+  assert.equal(restoreSensitiveText(masked.text, masked.items), original)
+})
+
 test('supports unique placeholder numbering across separately masked fields', () => {
   const first = maskSensitiveText('demo@example.test', 0)
   const second = maskSensitiveText('other@example.test', first.items.length)
