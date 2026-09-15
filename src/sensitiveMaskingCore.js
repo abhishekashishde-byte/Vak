@@ -1,4 +1,5 @@
 const TOKEN_RE = /\[\[ANA_PRIVATE_(\d+)\]\]/g
+const SENSITIVE_HINT_RE = /@|\+\d|\b[A-Z]{2}\d{2}|\b\d{3}-\d{2}-\d{4}\b|(?:\d[ -]*?){13}|\b(?:patient|case|account|policy|customer|contract|passport|claim|insurance|member|tax|patienten|fall|konto|policen|kunden|vertrags|pass|schaden|versicherten|steuer|aktenzeichen)\b/i
 
 function luhnValid(candidate = '') {
   const digits = String(candidate).replace(/\D/g, '')
@@ -46,10 +47,15 @@ function replaceLabelled(text, regex, type, state) {
   })
 }
 
+export function mayContainSensitiveText(value = '') {
+  const text = String(value || '')
+  return text.length >= 7 && SENSITIVE_HINT_RE.test(text)
+}
+
 export function maskSensitiveText(value = '', startAt = 0) {
   const state = { items: [], reverse: new Map(), startAt: Number(startAt || 0) }
   let text = String(value || '')
-  if (!text) return { text, items: [] }
+  if (!text || !mayContainSensitiveText(text)) return { text, items: [] }
 
   text = replaceWhole(text, /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, 'email', state)
   text = replaceWhole(text, /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/gi, 'iban', state, match => {
