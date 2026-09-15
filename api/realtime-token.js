@@ -17,6 +17,9 @@ async function createTranslationToken(req, res, apiKey) {
         session: {
           model: 'gpt-realtime-translate',
           audio: {
+            input: {
+              transcription: { model: 'gpt-realtime-whisper' },
+            },
             output: { language: targetLanguage },
           },
         },
