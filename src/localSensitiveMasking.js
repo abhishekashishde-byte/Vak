@@ -30,7 +30,7 @@ function addReplacement(state, value, type) {
   if (!exact) return exact
   const existing = state.reverse.get(exact)
   if (existing) return existing
-  const token = placeholder(state.items.length + 1)
+  const token = placeholder(state.startAt + state.items.length + 1)
   state.items.push({ token, value: exact, type })
   state.reverse.set(exact, token)
   return token
@@ -50,8 +50,8 @@ function replaceLabelled(text, regex, type, state) {
   })
 }
 
-export function maskSensitiveText(value = '') {
-  const state = { items: [], reverse: new Map() }
+export function maskSensitiveText(value = '', startAt = 0) {
+  const state = { items: [], reverse: new Map(), startAt: Number(startAt || 0) }
   let text = String(value || '')
   if (!text) return { text, items: [] }
 
@@ -90,24 +90,16 @@ function maskRequestBody(body) {
 
   for (const field of fields) {
     if (typeof next[field] !== 'string' || !next[field]) continue
-    const masked = maskSensitiveText(next[field])
+    const masked = maskSensitiveText(next[field], combinedItems.length)
     next[field] = masked.text
     combinedItems.push(...masked.items)
   }
 
   if (!combinedItems.length) return { body, items: [] }
 
-  const unique = []
-  const seenTokens = new Set()
-  for (const item of combinedItems) {
-    if (seenTokens.has(item.token)) continue
-    seenTokens.add(item.token)
-    unique.push(item)
-  }
-
   const instruction = '\n\nPRIVACY PLACEHOLDERS: The request may contain tokens such as [[ANA_PRIVATE_1]]. Treat every such token as an opaque value. Preserve each token EXACTLY, character-for-character, in the correct semantic position. Never translate, expand, explain, omit, reorder or alter a privacy token.'
   next.instructions = `${String(next.instructions || '')}${instruction}`.trim()
-  return { body: next, items: unique }
+  return { body: next, items: combinedItems }
 }
 
 async function restoreResponse(response, items) {
