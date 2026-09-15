@@ -12,25 +12,41 @@ export default function AuthGate() {
     if (!authConfigured || !supabase) return
 
     let active = true
+    let persistenceUserId = ''
 
-    const applySession = async nextSession => {
-      if (!active) return
-      setReady(false)
-      setSession(nextSession || null)
-      try {
-        if (nextSession?.user) await hydrateAndStartAccountPersistence(nextSession.user)
-        else stopAccountPersistence()
-      } catch (error) {
+    const startPersistence = user => {
+      if (!user?.id || persistenceUserId === user.id) return
+      persistenceUserId = user.id
+      hydrateAndStartAccountPersistence(user).catch(error => {
         console.warn('[Ana persistence] startup failed', error?.message || error)
-      } finally {
-        if (active) setReady(true)
-      }
+      })
     }
 
-    supabase.auth.getSession().then(({ data }) => applySession(data.session || null))
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      const nextSession = data.session || null
+      setSession(nextSession)
+      setReady(true)
+      if (nextSession?.user) startPersistence(nextSession.user)
+      else stopAccountPersistence()
+    })
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setTimeout(() => applySession(nextSession || null), 0)
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!active) return
+
+      // Auth emits events for token refreshes and user-metadata updates too.
+      // Never put Ana back into the loading screen for those events: doing so
+      // unmounts the workspace and makes the UI look like it refreshes constantly.
+      setSession(nextSession || null)
+      setReady(true)
+
+      if (event === 'SIGNED_OUT' || !nextSession?.user) {
+        persistenceUserId = ''
+        stopAccountPersistence()
+        return
+      }
+
+      startPersistence(nextSession.user)
     })
 
     return () => {
