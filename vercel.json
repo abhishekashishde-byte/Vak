@@ -2,6 +2,14 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/zoom/connect", "destination": "/api/zoom?action=connect" },
+    { "source": "/api/zoom/callback", "destination": "/api/zoom?action=callback" },
+    { "source": "/api/zoom/status", "destination": "/api/zoom?action=status" },
+    { "source": "/api/zoom/meetings", "destination": "/api/zoom?action=meetings" },
+    { "source": "/api/zoom/disconnect", "destination": "/api/zoom?action=disconnect" },
+    { "source": "/api/realtime-translation-token", "destination": "/api/realtime-token?mode=translation" }
+  ],
   "functions": {
     "api/translate.js": { "maxDuration": 30 },
     "api/meeting-segment.js": { "maxDuration": 30 },
