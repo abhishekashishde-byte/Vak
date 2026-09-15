@@ -4,6 +4,7 @@ const GLOSSARY_KEY = 'ana-glossary-v1'
 const MEETING_HISTORY_KEY = 'ana-meeting-history-v1'
 const GLOSSARY_LIMIT = 100
 const MEETING_LIMIT = 200
+const MEETING_RETENTION_MS = 60 * 24 * 60 * 60 * 1000
 
 let activeUserId = ''
 let watcher = null
@@ -66,6 +67,8 @@ const cleanMeeting = raw => {
   const id = String(raw.id || raw.client_id || makeClientId('meeting'))
   const startedAt = toMillis(raw.startedAt ?? raw.started_at)
   const endedAt = toMillis(raw.endedAt ?? raw.ended_at)
+  const retentionReference = endedAt || startedAt
+  if (retentionReference && retentionReference < Date.now() - MEETING_RETENTION_MS) return null
   const notes = raw.notes && typeof raw.notes === 'object' ? raw.notes : null
   return {
     id,
@@ -244,7 +247,9 @@ function startWatcher(user) {
       await syncGlossary(user, glossary)
     }
 
-    const meetings = cleanMeetings(readJson(MEETING_HISTORY_KEY, []))
+    const rawMeetings = readJson(MEETING_HISTORY_KEY, [])
+    const meetings = cleanMeetings(rawMeetings)
+    if (Array.isArray(rawMeetings) && meetings.length !== rawMeetings.length) writeJson(MEETING_HISTORY_KEY, meetings)
     const meetingSignature = stableStringify(meetings)
     if (meetingSignature !== lastMeetingSignature) {
       lastMeetingSignature = meetingSignature
