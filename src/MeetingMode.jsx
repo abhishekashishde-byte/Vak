@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Clipboard, Download, Headphones, History, Mic, MonitorUp, Pause, Play, Sparkles, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
+import ZoomMeetingConnector from './ZoomMeetingConnector.jsx'
 import './meeting-notes.css'
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
@@ -497,6 +498,8 @@ export default function MeetingMode() {
       <h1>Hear it now. Understand it now.</h1>
       <p>One live screen: the translation stays on top and everything Ana hears builds continuously underneath it.</p>
     </header>
+
+    <ZoomMeetingConnector disabled={active} onUseMeeting={() => { setSource(screenSupported ? 'screen' : 'microphone'); setError('') }} />
 
     <section className="meeting-setup">
       <div className="meeting-toolbar">
