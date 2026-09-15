@@ -11,6 +11,7 @@ import { installNetworkResilience } from './networkResilience.js'
 import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installPushToTalkFallback } from './pushToTalk.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
+import { installSmartGlossaryLearning } from './smartGlossaryLearning.js'
 import { installTalkPolish } from './talkPolish.js'
 import './styles.css'
 import './translateResponsive.css'
@@ -28,6 +29,7 @@ installNetworkResilience()
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
 installGlossaryReliability()
+installSmartGlossaryLearning()
 installContextualIntelligence()
 installRealtimeTonePolicy()
 installTalkPolish()
