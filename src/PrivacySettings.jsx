@@ -48,6 +48,15 @@ export default function PrivacySettings({ open, onClose }) {
       </section>
 
       <section className="privacy-setting-section">
+        <div className="privacy-section-title"><ShieldCheck size={18}/><div><strong>Cloud data protection</strong><span>Reduce exposure of common identifiers before text is sent to Ana's cloud translation service.</span></div></div>
+        <label className="privacy-toggle-row">
+          <div><strong>Mask sensitive values before cloud processing</strong><span>Ana locally replaces high-confidence emails, IBANs, payment-card numbers, international phone numbers and labelled account/case/patient IDs with temporary placeholders, then restores them in the result.</span></div>
+          <input type="checkbox" checked={settings.maskSensitiveBeforeCloud !== false} onChange={e => change({ maskSensitiveBeforeCloud: e.target.checked })}/><i/>
+        </label>
+        <p className="privacy-setting-note">This is a best-effort protection layer, not a guarantee that every kind of personal or confidential information will be detected.</p>
+      </section>
+
+      <section className="privacy-setting-section">
         <div className="privacy-section-title"><ShieldCheck size={18}/><div><strong>Voice conversation transparency</strong><span>Control when Ana requires a disclosure before Live or Talk for Me begins.</span></div></div>
         <label className="privacy-select-row"><span>Show disclosure</span><select value={settings.disclosureMode || 'always'} onChange={e => change({ disclosureMode: e.target.value })}><option value="always">Before every voice conversation</option><option value="sensitive">Sensitive conversations only</option></select></label>
         <label className="privacy-toggle-row">
