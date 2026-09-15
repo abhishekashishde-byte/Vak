@@ -1,3 +1,5 @@
+import { domainPrompt, publicDomain, resolveDomain } from './_domain.js'
+
 function collectText(data) {
   return (data.output || [])
     .filter(item => item.type === 'message')
@@ -108,14 +110,21 @@ export default async function handler(req, res) {
   const isMeetingQa = rawInstructions.includes('ANA_MEETING_QA')
   const isMeetingOutput = rawInstructions.includes('ANA_MEETING_OUTPUT')
   const isMeetingIntelligence = isMeetingNotes || isMeetingEnrichment || isMeetingQa || isMeetingOutput
+  const isVisualOrDocumentTranslation = rawInstructions.includes('visible text from a real-world image') || rawInstructions.includes('positioned PDF text blocks') || rawInstructions.includes('translation guide for a PDF') || rawInstructions.includes('layout-rescue pass on a translated PDF')
   const isStructuredLayoutRequest = rawInstructions.includes('LAYOUT IS BINDING.')
   const preserveLayout = isAnaTranslation && !isStructuredLayoutRequest && /[\r\n]/.test(text)
 
-  const model = isTalkTurn || isAnaTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
+  const domainResolution = isLanguageDetection
+    ? resolveDomain('', { mode: 'general' })
+    : resolveDomain(text, req.body?.domain)
+  const domainInstructions = isLanguageDetection ? '' : domainPrompt(domainResolution)
+
+  const model = isTalkTurn || isAnaTranslation || isVisualOrDocumentTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
   const reasoningEffort = isAnaTranslation ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
-  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : 20000
+  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
 
   let finalInstructions = rawInstructions
+  if (domainInstructions) finalInstructions += `\n\n${domainInstructions}`
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
   if (isTalkTurn) finalInstructions += TALK_COMPLETION_PROTOCOL
   if (isWordRefinement) {
@@ -143,13 +152,11 @@ export default async function handler(req, res) {
     if (isMeetingEnrichment) body.max_output_tokens = 3400
     if (isMeetingQa) body.max_output_tokens = 1000
     if (isMeetingOutput) body.max_output_tokens = 1800
-    if (isAnaTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
+    if (isAnaTranslation || isVisualOrDocumentTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
 
     let content = await callResponses(body, controller.signal)
     if (!content) return res.status(502).json({ error: 'Model returned no text' })
 
-    // The old UI silently ignored an "Always" save when sourceTerm was missing.
-    // Retry once here so the UI receives a complete source → preferred mapping.
     if (isWordRefinement && !validRefinementPayload(content)) {
       content = await callResponses({
         ...body,
@@ -161,7 +168,7 @@ export default async function handler(req, res) {
     }
 
     if (preserveLayout) content = restoreTranslationLayout(content)
-    return res.status(200).json({ content, model })
+    return res.status(200).json({ content, model, domain: publicDomain(domainResolution) })
   } catch (error) {
     if (error?.name === 'AbortError') {
       return res.status(503).json({ error: isAnaBriefing ? 'Ana took too long to prepare this conversation. Please try once more.' : 'Ana took too long to respond. Please try again.' })

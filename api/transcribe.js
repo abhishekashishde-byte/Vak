@@ -1,3 +1,5 @@
+import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from './_domain.js'
+
 function extensionFor(mime = '') {
   if (mime.includes('mp4') || mime.includes('m4a')) return 'm4a'
   if (mime.includes('ogg')) return 'ogg'
@@ -25,6 +27,7 @@ function safeMeetingAudioUrl(value = '') {
 
 function cleanContext(value = '') {
   return String(value)
+    .replace(/SAP terms, transaction codes, material master, inspection plans and project names may occur\.?/gi, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -76,15 +79,24 @@ export default async function handler(req, res) {
     }
 
     const context = cleanContext(contextHints)
+    const initialDomain = resolveDomain('', req.body?.domain)
+    const specialistHint = transcriptionDomainPrompt(initialDomain)
+    const keywords = domainKeywords(initialDomain, { includeUniversal: true, limit: 30 })
+    const keywordHint = keywords.length ? `Possible specialist vocabulary includes: ${keywords.join(', ')}.` : ''
     const prompt = isMeeting
       ? [
-          'This is a business meeting transcript. Transcribe faithfully and completely; do not translate, summarize, clean up, or omit speech.',
-          'Speech may code-switch naturally between English, German, Hindi and Hinglish. Preserve the code-switching and English technical terms exactly when heard.',
-          'Be especially careful with SAP terminology, transaction names, material and inspection-plan terminology, acronyms, people names, numbers and dates.',
+          'This is a meeting transcript. Transcribe faithfully and completely; do not translate, summarize, clean up, or omit speech.',
+          'Speech may code-switch naturally between English, German, Hindi and Hinglish. Preserve the code-switching and technical terms exactly when heard.',
+          specialistHint,
+          keywordHint,
           'When audio is unclear, be conservative rather than inventing a plausible sentence.',
           context ? `Meeting vocabulary and context hints: ${context}` : '',
         ].filter(Boolean).join(' ')
-      : 'Transcribe exactly what the user says. Preserve multilingual speech and code-switching, including Hindi spoken with English words, German, English and names. Do not translate or summarize.'
+      : [
+          'Transcribe exactly what the user says. Preserve multilingual speech and code-switching, including Hindi spoken with English words, German, English and names. Do not translate or summarize.',
+          specialistHint,
+          keywordHint,
+        ].filter(Boolean).join(' ')
 
     const form = new FormData()
     const ext = extensionFor(resolvedMime)
@@ -105,7 +117,8 @@ export default async function handler(req, res) {
 
     const text = String(data?.text || '').trim()
     if (!text) return res.status(502).json({ error: 'No speech was detected' })
-    return res.status(200).json({ text, model: 'gpt-transcribe' })
+    const finalDomain = resolveDomain(text, req.body?.domain)
+    return res.status(200).json({ text, model: 'gpt-transcribe', domain: publicDomain(finalDomain) })
   } catch (error) {
     const status = Number(error?.status || 0)
     if (status) return res.status(status).json({ error: error?.message || 'Transcription failed' })

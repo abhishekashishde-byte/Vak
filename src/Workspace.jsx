@@ -12,6 +12,8 @@ import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
 import NetworkStatus from './NetworkStatus.jsx'
 import LearnCenter from './LearnCenter.jsx'
+import DomainControl from './DomainControl.jsx'
+import { installDomainFetchInterceptor } from './domainEngine.js'
 import './live.css'
 import './talk.css'
 import './talk-consent.css'
@@ -23,6 +25,9 @@ import './scan.css'
 import './ana-identity.css'
 import './workspace.css'
 import './learn.css'
+import './domain.css'
+
+installDomainFetchInterceptor()
 
 const MAIN_MODES = [
   { id: 'translate', label: 'Translate', description: 'Text, voice, camera, photos and documents', icon: Languages },
@@ -77,6 +82,7 @@ export default function Workspace() {
         <ChevronDown size={16}/>
       </button>
       <div className="ana-mode-actions">
+        <DomainControl/>
         <button className="ana-help-quick" type="button" onClick={openLearn} title="Learn how to use Ana" aria-label="Learn how to use Ana"><CircleHelp size={17}/><span>Learn</span></button>
         <button className="ana-privacy-quick" type="button" onClick={() => setSettingsOpen(true)} title="Privacy & memory" aria-label="Privacy and memory settings"><ShieldCheck size={17}/></button>
       </div>
