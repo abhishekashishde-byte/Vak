@@ -195,11 +195,10 @@ class AnaKeyboardView @JvmOverloads constructor(
     private fun layoutKeys(): List<PlacedKey> {
         if (width <= 0 || height <= 0) return emptyList()
         val rows = rows()
-        val outer = dp(5f)
-        val gap = dp(3f)
+        val outer = dp(4f)
+        val gap = dp(4f)
         val rowGap = dp(4f)
-        val previewReserve = if (KeyboardPrefs.keyPopupEnabled(context)) dp(39f) else dp(5f)
-        val usableHeight = height - outer * 2 - previewReserve - rowGap * (rows.size - 1)
+        val usableHeight = height - outer * 2 - rowGap * (rows.size - 1)
         val rowHeight = max(dp(38f), usableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
@@ -210,7 +209,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         rows.forEachIndexed { rowIndex, row ->
             val inset = when {
                 symbols -> 0f
-                rowIndex == aRow -> dp(18f)
+                rowIndex == aRow -> dp(14f)
                 else -> 0f
             }
             val leftBound = outer + inset
@@ -218,7 +217,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             val totalFlex = row.sumOf { it.flex.toDouble() }.toFloat()
             val availableWidth = rightBound - leftBound - gap * (row.size - 1)
             var x = leftBound
-            val top = outer + previewReserve + rowIndex * (rowHeight + rowGap)
+            val top = outer + rowIndex * (rowHeight + rowGap)
 
             row.forEach { key ->
                 val keyWidth = availableWidth * (key.flex / totalFlex)
@@ -265,7 +264,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         val widthNeeded = (cell * options.size).coerceAtMost(width - dp(8f))
         val desiredLeft = item.rect.centerX() - widthNeeded / 2f
         val left = desiredLeft.coerceIn(dp(4f), width - widthNeeded - dp(4f))
-        val bottom = item.rect.top + dp(7f)
+        val desiredBottom = item.rect.top + dp(7f)
+        val bottom = max(dp(60f), desiredBottom)
         val top = max(dp(2f), bottom - dp(58f))
         return AlternatePopup(options, RectF(left, top, left + widthNeeded, bottom))
     }
@@ -411,7 +411,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         val previewHeight = dp(60f)
         val desiredLeft = item.rect.centerX() - previewWidth / 2f
         val left = desiredLeft.coerceIn(dp(3f), width - previewWidth - dp(3f))
-        val bottom = item.rect.top + dp(7f)
+        val desiredBottom = item.rect.top + dp(7f)
+        val bottom = max(previewHeight + dp(2f), desiredBottom)
         val top = max(dp(2f), bottom - previewHeight)
         val popup = RectF(left, top, left + previewWidth, bottom)
 
@@ -451,14 +452,14 @@ class AnaKeyboardView @JvmOverloads constructor(
         val verticalTolerance = dp(3f)
         val rowCandidates = placed.filter { y >= it.rect.top - verticalTolerance && y <= it.rect.bottom + verticalTolerance }
         val nearest = rowCandidates.minByOrNull { abs(it.rect.centerX() - x) } ?: return null
-        val horizontalTolerance = dp(6f)
+        val horizontalTolerance = dp(5f)
         return nearest.takeIf { x >= it.rect.left - horizontalTolerance && x <= it.rect.right + horizontalTolerance }
     }
 
     private fun glideKeyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { item ->
         if (!item.key.letter) return@firstOrNull false
         val center = RectF(item.rect)
-        center.inset(item.rect.width() * 0.26f, item.rect.height() * 0.20f)
+        center.inset(item.rect.width() * 0.24f, item.rect.height() * 0.18f)
         center.contains(x, y)
     }
 
@@ -498,8 +499,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (gliding || symbols || !KeyboardPrefs.glideTypingEnabled(context) || active?.key?.letter != true) return
         val elapsed = event.eventTime - downAt
         val distance = hypot(event.x - downX, event.y - downY)
-        val threshold = max(dp(30f), touchSlop * 3f)
-        if (elapsed < 85L || distance < threshold || potentialGlideLetters.size < 2) return
+        val threshold = max(dp(45f), touchSlop * 4f)
+        if (elapsed < 120L || distance < threshold || potentialGlideLetters.size < 3) return
 
         gliding = true
         repeatHandler.removeCallbacks(repeatBackspace)
@@ -608,7 +609,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                     if (glidePoints.lastOrNull() != (event.x to event.y)) glidePoints += event.x to event.y
                     val sequence = glideLetters.joinToString("")
                     fadeTrail()
-                    if (sequence.length >= 2) listener?.onGlide(sequence)
+                    if (sequence.length >= 3) listener?.onGlide(sequence)
                     performClick()
                     clearPressState()
                     invalidate()
