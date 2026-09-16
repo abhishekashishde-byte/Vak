@@ -52,6 +52,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private val suggestionButtons = mutableListOf<TextView>()
 
     private val executor = Executors.newSingleThreadExecutor()
+    private val smartSentenceExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
@@ -68,11 +69,18 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var pendingGlideToken = 0
     private var pendingDelimitedWord: String? = null
     private var lastAutoCorrection: AutoCorrectionRecord? = null
+    private var lastSentenceCorrection: SentenceCorrectionRecord? = null
+    private var smartSentenceToken = 0
+    private var lastSmartSentenceChecked = ""
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
 
     private data class AutoCorrectionRecord(val original: String, val corrected: String)
+    private data class SentenceCorrectionRecord(val original: String, val corrected: String, val trailing: String)
+    private data class SentenceCandidate(val text: String, val suffix: String, val trailing: String)
+
+    private val smartSentenceRunnable = Runnable { runSmartSentenceCorrection() }
 
     private val glideFallbackRunnable = Runnable {
         val raw = pendingGlide ?: return@Runnable
@@ -274,6 +282,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         lastSpaceTap = 0L
         pendingDelimitedWord = null
         lastAutoCorrection = null
+        lastSentenceCorrection = null
+        lastSmartSentenceChecked = ""
+        smartSentenceToken++
+        mainHandler.removeCallbacks(smartSentenceRunnable)
         cancelPendingGlide()
         clearSuggestions()
         if (::keyboard.isInitialized) {
@@ -474,6 +486,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             "EMOJI" -> showEmojiPanel()
             "CLIPBOARD" -> showClipboardPanel()
             "BACKSPACE" -> {
+                smartSentenceToken++
+                mainHandler.removeCallbacks(smartSentenceRunnable)
+                if (undoLastSentenceCorrection()) return
                 if (undoLastAutoCorrection()) return
                 val selected = connection.getSelectedText(0)?.toString().orEmpty()
                 if (selected.isNotEmpty()) connection.commitText("", 1)
@@ -497,7 +512,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 if (typed.any { it.isLetter() }) {
                     showTypedWordCandidate()
                     requestSuggestionsSoon()
-                } else clearSuggestions()
+                    scheduleSmartSentenceCorrection()
+                } else {
+                    clearSuggestions()
+                    if (punctuation) scheduleSmartSentenceCorrection()
+                }
             }
         }
     }
@@ -530,6 +549,106 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             return
         }
         mainHandler.postDelayed(suggestionRunnable, 130)
+    }
+
+    private fun scheduleSmartSentenceCorrection() {
+        smartSentenceToken++
+        mainHandler.removeCallbacks(smartSentenceRunnable)
+        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
+        mainHandler.postDelayed(smartSentenceRunnable, 1200)
+    }
+
+    private fun currentSentenceCandidate(): SentenceCandidate? {
+        val connection = currentInputConnection ?: return null
+        val before = connection.getTextBeforeCursor(700, 0)?.toString().orEmpty()
+        if (before.isBlank()) return null
+
+        val trailing = Regex("\\s*$").find(before)?.value.orEmpty()
+        val content = if (trailing.isEmpty()) before else before.dropLast(trailing.length)
+        if (content.length < 14) return null
+
+        val scan = if (content.lastOrNull() in listOf('.', '!', '?')) content.dropLast(1) else content
+        val boundaries = listOf(scan.lastIndexOf(". "), scan.lastIndexOf("! "), scan.lastIndexOf("? "), scan.lastIndexOf('\n'))
+        val boundary = boundaries.maxOrNull() ?: -1
+        var start = when {
+            boundary < 0 -> 0
+            scan.getOrNull(boundary) == '\n' -> boundary + 1
+            else -> boundary + 2
+        }
+        while (start < content.length && content[start].isWhitespace()) start++
+        if (start >= content.length) return null
+
+        val sentence = content.substring(start)
+        val wordCount = Regex("[\\p{L}']+").findAll(sentence).count()
+        if (wordCount < 4 || sentence.length < 14) return null
+        val suffix = before.substring(start)
+        return SentenceCandidate(sentence, suffix, trailing)
+    }
+
+    private fun runSmartSentenceCorrection() {
+        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
+        val baseUrl = KeyboardPrefs.baseUrl(this)
+        if (baseUrl.isBlank()) return
+        val candidate = currentSentenceCandidate() ?: return
+        if (candidate.text == lastSmartSentenceChecked) return
+        lastSmartSentenceChecked = candidate.text
+        val connection = currentInputConnection ?: return
+        val token = smartSentenceToken
+        val languageHint = KeyboardPrefs.inputLanguage(this)
+
+        smartSentenceExecutor.execute {
+            try {
+                val corrected = AnaApi.correctSentence(baseUrl, candidate.text, languageHint).trim()
+                mainHandler.post {
+                    if (token != smartSentenceToken || currentInputConnection !== connection) return@post
+                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isPasswordField()) return@post
+                    if (!isSafeSentenceCorrection(candidate.text, corrected)) return@post
+                    val tail = connection.getTextBeforeCursor(candidate.suffix.length, 0)?.toString().orEmpty()
+                    if (tail != candidate.suffix) return@post
+
+                    connection.deleteSurroundingText(candidate.suffix.length, 0)
+                    val replacement = corrected + candidate.trailing
+                    connection.commitText(replacement, 1)
+                    lastSentenceCorrection = SentenceCorrectionRecord(candidate.text, corrected, candidate.trailing)
+                    lastSmartSentenceChecked = corrected
+                    clearSuggestions()
+                    refreshShiftFromEditor()
+                    showStatus("Sentence corrected")
+                }
+            } catch (_: Exception) {
+                // Optional cloud correction must never interrupt typing.
+            }
+        }
+    }
+
+    private fun isSafeSentenceCorrection(original: String, corrected: String): Boolean {
+        if (corrected.isBlank() || corrected == original) return false
+        val originalNumbers = Regex("\\d+(?:[.,]\\d+)?").findAll(original).map { it.value }.toList()
+        val correctedNumbers = Regex("\\d+(?:[.,]\\d+)?").findAll(corrected).map { it.value }.toList()
+        if (originalNumbers != correctedNumbers) return false
+
+        val originalWords = Regex("[\\p{L}']+").findAll(original).count()
+        val correctedWords = Regex("[\\p{L}']+").findAll(corrected).count()
+        if (kotlin.math.abs(originalWords - correctedWords) > maxOf(2, originalWords / 3)) return false
+        if (kotlin.math.abs(original.length - corrected.length) > maxOf(30, original.length / 2)) return false
+        return true
+    }
+
+    private fun undoLastSentenceCorrection(): Boolean {
+        val record = lastSentenceCorrection ?: return false
+        val connection = currentInputConnection ?: return false
+        val tail = record.corrected + record.trailing
+        val current = connection.getTextBeforeCursor(tail.length, 0)?.toString().orEmpty()
+        if (current != tail) {
+            lastSentenceCorrection = null
+            return false
+        }
+        connection.deleteSurroundingText(tail.length, 0)
+        connection.commitText(record.original + record.trailing, 1)
+        lastSmartSentenceChecked = record.original
+        lastSentenceCorrection = null
+        showStatus("Sentence correction undone")
+        return true
     }
 
     private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
@@ -578,6 +697,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         clearSuggestions()
         if (!capsLock) keyboard.setShifted(false)
         refreshShiftFromEditor()
+        scheduleSmartSentenceCorrection()
     }
 
     private fun clearSuggestions() {
@@ -682,6 +802,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         clearSuggestions()
         refreshShiftFromEditor()
+        scheduleSmartSentenceCorrection()
     }
 
     private fun replaceDelimitedWordNearCursor(original: String, suggestion: String): Boolean {
@@ -1020,6 +1141,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         speechRecognizer = null
         suggestionEngine.close()
         executor.shutdownNow()
+        smartSentenceExecutor.shutdownNow()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

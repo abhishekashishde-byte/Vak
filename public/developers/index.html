@@ -22,7 +22,7 @@
 
     <section class="section"><div class="section-head"><div><div class="kicker">API v1</div><h2>Three building blocks.</h2></div><p>Use one independently or combine them. A meeting product may only need transcription + translation; a service app may use Talk for Me as a voice-agent layer.</p></div><div class="endpoints"><article class="endpoint"><span class="method">POST</span><div class="path">/api/v1/translate</div><h3>Translate</h3><p>Meaning-first text translation for product interfaces, messages, documents and backend workflows.</p><ul><li>Auto-detect or source hint</li><li>Target language</li><li>Optional context</li></ul></article><article class="endpoint"><span class="method">POST</span><div class="path">/api/v1/transcribe</div><h3>Transcribe</h3><p>Convert short base64 audio segments to text while preserving multilingual speech and code-switching.</p><ul><li>Up to 8 MB per segment</li><li>Optional language hint</li><li>No translation forced</li></ul></article><article class="endpoint"><span class="method">POST</span><div class="path">/api/v1/talk-session</div><h3>Talk for Me</h3><p>Create a short-lived realtime session configured around an owner goal and Ana’s critical-decision tools.</p><ul><li>Owner goal + constraints</li><li>Two languages</li><li>Owner escalation contract</li></ul></article></div></section>
 
-    <section class="section"><div class="section-head"><div><div class="kicker">Quick start</div><h2>Call Ana from your backend.</h2></div><p>All v1 endpoints accept <code>Authorization: Bearer YOUR_ANA_PLATFORM_KEY</code>. The code below is intentionally server-side.</p></div><div class="code-block"><button data-copy>Copy</button><pre>const response = await fetch('https://vak-gray.vercel.app/api/v1/translate', {
+    <section class="section"><div class="section-head"><div><div class="kicker">Quick start</div><h2>Call Ana from your backend.</h2></div><p>All v1 endpoints accept <code>Authorization: Bearer YOUR_ANA_PLATFORM_KEY</code>. The code below is intentionally server-side.</p></div><div class="code-block"><button data-copy>Copy</button><pre>const response = await fetch('https://ana-translate.vercel.app/api/v1/translate', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${process.env.ANA_PLATFORM_KEY}`,
@@ -35,7 +35,7 @@
   })
 })
 
-const { translation } = await response.json()</pre></div><div class="code-block"><button data-copy>Copy</button><pre>const session = await fetch('https://vak-gray.vercel.app/api/v1/talk-session', {
+const { translation } = await response.json()</pre></div><div class="code-block"><button data-copy>Copy</button><pre>const session = await fetch('https://ana-translate.vercel.app/api/v1/talk-session', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${process.env.ANA_PLATFORM_KEY}`,

@@ -255,6 +255,9 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
+        root.addView(switchRow("Smart sentence correction", "After a short pause, Ana can correct grammar and contextual typing mistakes across the whole sentence. This sends that sentence to your Ana server; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
+            KeyboardPrefs.setSmartSentenceCorrectionEnabled(this, it)
+        })
         root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
             KeyboardPrefs.setWordSuggestionsEnabled(this, it)
         })
@@ -297,7 +300,7 @@ class MainActivity : Activity() {
         })
 
         root.addView(section("Writing Tool"))
-        root.addView(infoCard("Write", "Type or dictate what you want to say, then tap Write in the keyboard toolbar. Ana drafts the finished message in the current typing language."))
+        root.addView(infoCard("Write", "Type or dictate what you want to say, then tap Write. Ana drafts the finished message in the currently selected Translate-to language."))
     }
 
     private fun renderLayoutKeys() {

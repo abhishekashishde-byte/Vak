@@ -27,6 +27,7 @@ object KeyboardPrefs {
     private const val KEY_BACKGROUND_TINT = "background_tint_percent"
     private const val KEY_WORD_SUGGESTIONS = "word_suggestions"
     private const val KEY_AUTO_CORRECTION = "auto_correction"
+    private const val KEY_SMART_SENTENCE_CORRECTION = "smart_sentence_correction"
     private const val KEY_CLIPBOARD_HISTORY = "clipboard_history"
     private const val KEY_GLIDE_TYPING = "glide_typing"
     private const val KEY_GLIDE_TRAIL = "glide_trail"
@@ -178,6 +179,9 @@ object KeyboardPrefs {
 
     fun autoCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_CORRECTION, true)
     fun setAutoCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_CORRECTION, enabled).apply()
+
+    fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, false)
+    fun setSmartSentenceCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_SMART_SENTENCE_CORRECTION, enabled).apply()
 
     fun glideTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_GLIDE_TYPING, true)
     fun setGlideTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TYPING, enabled).apply()

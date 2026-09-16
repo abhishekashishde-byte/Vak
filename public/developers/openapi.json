@@ -6,7 +6,7 @@
     "description": "Private-beta APIs for meaning-first translation, speech transcription and Talk for Me realtime sessions. Call these endpoints from a trusted backend; do not expose partner API keys in browser or mobile bundles."
   },
   "servers": [
-    { "url": "https://vak-gray.vercel.app" }
+    { "url": "https://ana-translate.vercel.app" }
   ],
   "security": [
     { "AnaPlatformKey": [] }
