@@ -76,7 +76,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.35f)
             ),
             listOf(
-                KeySpec("#+=", "MORE", 1.25f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.05f),
+                KeySpec("=", "=", 1.25f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.05f),
                 KeySpec("space", "SPACE", 3.8f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
             )
         )
