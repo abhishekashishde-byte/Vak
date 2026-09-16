@@ -194,7 +194,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         contentHost.addView(clipboardPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(contentHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
 
-        // Blank safety row keeps the lowest keys above the system navigation edge.
         root.addView(View(this).apply {
             setBackgroundColor(keyboardShellColor())
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
@@ -375,7 +374,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun clearSuggestions() {
-        if (::suggestionButtons.isInitialized) {
+        if (suggestionButtons.isNotEmpty()) {
             suggestionButtons.forEach { it.text = ""; it.alpha = 0f }
         }
         lastSuggestedWord = ""
