@@ -77,7 +77,7 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }, LayoutParams(0, dp(40), 1f))
-        addView(TextView(context), LayoutParams(dp(72), dp(40)))
+        addView(topButton("GIF") { listener?.onGifRequested() }, LayoutParams(dp(72), dp(40)))
     }
 
     private fun emojiButton(emoji: String): Button = Button(context).apply {
