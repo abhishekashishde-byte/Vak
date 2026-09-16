@@ -12,11 +12,16 @@ class LocalSuggestionEngine(
     private val onResult: (word: String, suggestions: List<String>, looksLikeTypo: Boolean) -> Unit
 ) : SpellCheckerSession.SpellCheckerSessionListener {
 
+    private data class Pending(
+        val word: String,
+        val local: CoreLexicon.Result
+    )
+
     private val manager = context.getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE) as TextServicesManager
     private var session: SpellCheckerSession? = null
     private var badge = ""
     private var sequence = 0
-    private val requests = mutableMapOf<Int, String>()
+    private val requests = mutableMapOf<Int, Pending>()
 
     fun setLanguage(inputBadge: String) {
         if (badge == inputBadge && session != null) return
@@ -31,34 +36,55 @@ class LocalSuggestionEngine(
         session = manager.newSpellCheckerSession(null, locale, this, true)
     }
 
+    fun localResult(word: String): CoreLexicon.Result =
+        CoreLexicon.suggestions(word, if (badge.isBlank()) "EN" else badge)
+
+    fun decodeGlide(sequence: String): String? =
+        CoreLexicon.decodeGlide(sequence, if (badge.isBlank()) "EN" else badge)
+
     fun request(word: String) {
         val clean = word.trim()
         if (clean.length < 2) {
             onResult(clean, emptyList(), false)
             return
         }
+
+        val local = localResult(clean)
+        if (local.suggestions.isNotEmpty()) {
+            onResult(clean, local.suggestions, local.highConfidenceTypo)
+        }
+
         if (session == null) setLanguage(if (badge.isBlank()) "EN" else badge)
         val currentSession = session ?: run {
-            onResult(clean, emptyList(), false)
+            if (local.suggestions.isEmpty()) onResult(clean, emptyList(), false)
             return
         }
+
         val id = ++sequence
-        requests[id] = clean
+        requests[id] = Pending(clean, local)
         currentSession.getSuggestions(TextInfo(clean, 0, id), 5)
     }
 
     override fun onGetSuggestions(results: Array<SuggestionsInfo>) {
         results.forEach { info ->
-            val word = requests.remove(info.sequence) ?: return@forEach
-            val suggestions = mutableListOf<String>()
+            val pending = requests.remove(info.sequence) ?: return@forEach
+            val platform = mutableListOf<String>()
             for (i in 0 until info.suggestionsCount) {
                 val value = info.getSuggestionAt(i)?.trim().orEmpty()
-                if (value.isNotEmpty() && suggestions.none { existing -> existing.equals(value, ignoreCase = true) }) {
-                    suggestions.add(value)
+                if (value.isNotEmpty() && platform.none { existing -> existing.equals(value, ignoreCase = true) }) {
+                    platform.add(value)
                 }
             }
-            val typo = info.suggestionsAttributes and SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
-            onResult(word, suggestions, typo)
+            val platformTypo = info.suggestionsAttributes and SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
+            val merged = (platform + pending.local.suggestions)
+                .filterNot { it.equals(pending.word, ignoreCase = true) }
+                .distinctBy { it.lowercase() }
+                .take(5)
+            onResult(
+                pending.word,
+                merged,
+                platformTypo || pending.local.highConfidenceTypo
+            )
         }
     }
 
