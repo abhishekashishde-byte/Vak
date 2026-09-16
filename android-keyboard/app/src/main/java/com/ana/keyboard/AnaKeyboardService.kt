@@ -2,14 +2,17 @@ package com.ana.keyboard
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.text.InputType
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -24,42 +27,55 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var keyboard: AnaKeyboardView
     private lateinit var status: TextView
     private lateinit var targetButton: Button
+    private var inputLanguageButton: Button? = null
     private val aiButtons = mutableListOf<Button>()
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var capsLock = false
     private var lastShiftTap = 0L
+    private var lastSpaceTap = 0L
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onCreateInputView(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(26, 26, 26))
+            setBackgroundColor(keyboardShellColor())
         }
 
-        val toolbarScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), dp(4), dp(5), dp(3))
-        }
+        if (KeyboardPrefs.toolbarEnabled(this)) {
+            val toolbarScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+            }
+            val toolbar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(5), dp(4), dp(5), dp(3))
+            }
 
-        targetButton = actionButton(KeyboardPrefs.targetBadge(this)) {
-            KeyboardPrefs.cycleTarget(this)
-            targetButton.text = KeyboardPrefs.targetBadge(this)
-            showStatus("Translate target: ${KeyboardPrefs.target(this)}")
-        }.also { toolbar.addView(it) }
+            inputLanguageButton = actionButton(KeyboardPrefs.inputBadge(this)) {
+                KeyboardPrefs.cycleInputLanguage(this)
+                inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
+                keyboard.refreshPreferences()
+                showStatus("Typing: ${KeyboardPrefs.inputLanguage(this)}")
+            }.also { toolbar.addView(it) }
 
-        toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
-        toolbar.addView(actionButton("Fix") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
-        toolbar.addView(actionButton("Tone") { runAnaAction(AnaApi.Action.TONE) }.also { aiButtons += it })
-        toolbar.addView(actionButton("Shorter") { runAnaAction(AnaApi.Action.SHORTER) }.also { aiButtons += it })
-        toolbarScroll.addView(toolbar)
-        root.addView(toolbarScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+            targetButton = actionButton("→ ${KeyboardPrefs.targetBadge(this)}") {
+                KeyboardPrefs.cycleTarget(this)
+                targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
+                showStatus("Translate target: ${KeyboardPrefs.target(this)}")
+            }.also { toolbar.addView(it) }
+
+            toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Fix") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Tone") { runAnaAction(AnaApi.Action.TONE) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Shorter") { runAnaAction(AnaApi.Action.SHORTER) }.also { aiButtons += it })
+            toolbarScroll.addView(toolbar)
+            root.addView(toolbarScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        } else {
+            targetButton = Button(this).apply { visibility = View.GONE }
+        }
 
         status = TextView(this).apply {
             text = "Ana"
@@ -67,16 +83,34 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), 0, dp(10), 0)
-            setBackgroundColor(Color.rgb(35, 35, 35))
+            setBackgroundColor(Color.argb(225, 35, 35, 35))
         }
         root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)))
 
         keyboard = AnaKeyboardView(this).apply {
             listener = this@AnaKeyboardService
         }
-        root.addView(keyboard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(252)))
+        root.addView(keyboard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
+        loadBackgroundImage()
         updateAiAvailability()
         return root
+    }
+
+    override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(info, restarting)
+        if (::keyboard.isInitialized) {
+            keyboard.refreshPreferences()
+            loadBackgroundImage()
+            inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
+            if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
+        }
+    }
+
+    private fun keyboardShellColor(): Int = when (KeyboardPrefs.theme(this)) {
+        "light" -> Color.rgb(225, 228, 232)
+        "midnight" -> Color.BLACK
+        "gold" -> Color.rgb(17, 17, 17)
+        else -> Color.rgb(26, 26, 26)
     }
 
     private fun actionButton(label: String, onClick: () -> Unit): Button = Button(this).apply {
@@ -84,7 +118,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         isAllCaps = false
         textSize = 13f
         setTextColor(Color.WHITE)
-        backgroundTintList = ColorStateList.valueOf(Color.rgb(55, 55, 55))
+        backgroundTintList = ColorStateList.valueOf(if (KeyboardPrefs.theme(this@AnaKeyboardService) == "gold") Color.rgb(85, 71, 38) else Color.rgb(55, 55, 55))
         minWidth = 0
         minimumWidth = 0
         setPadding(dp(13), 0, dp(13), 0)
@@ -97,6 +131,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         capsLock = false
+        lastSpaceTap = 0L
         if (::keyboard.isInitialized) {
             keyboard.setSymbols(false)
             refreshShiftFromEditor()
@@ -106,7 +141,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     override fun onPressFeedback(view: View) {
         if (KeyboardPrefs.hapticEnabled(this)) {
-            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            vibrator.vibrate(VibrationEffect.createOneShot(KeyboardPrefs.hapticStrengthMs(this).toLong(), VibrationEffect.DEFAULT_AMPLITUDE))
         }
         if (KeyboardPrefs.soundEnabled(this)) {
             (getSystemService(Context.AUDIO_SERVICE) as AudioManager)
@@ -130,18 +166,34 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 else connection.deleteSurroundingText(1, 0)
                 refreshShiftFromEditor()
             }
-            "SPACE" -> {
-                connection.commitText(" ", 1)
-                refreshShiftFromEditor()
-            }
+            "SPACE" -> handleSpace()
             "ENTER" -> handleEnter()
             else -> {
-                var text = code
-                if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) text = code.uppercase()
-                connection.commitText(text, 1)
-                if (!capsLock && keyboard.isShifted() && text.any { it.isLetter() }) keyboard.setShifted(false)
+                var typed = code
+                if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) typed = code.uppercase()
+                val punctuation = typed in setOf(",", ".", "?", "!", ":", ";")
+                if (punctuation && KeyboardPrefs.autoSpaceAfterPunctuation(this)) connection.commitText("$typed ", 1)
+                else connection.commitText(typed, 1)
+                if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
             }
         }
+    }
+
+    private fun handleSpace() {
+        val connection = currentInputConnection ?: return
+        val now = SystemClock.elapsedRealtime()
+        val before = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
+        val canPeriod = KeyboardPrefs.doubleSpacePeriodEnabled(this) && now - lastSpaceTap < 420 &&
+            before.length >= 2 && before.last() == ' ' && !before[before.length - 2].isWhitespace()
+        if (canPeriod) {
+            connection.deleteSurroundingText(1, 0)
+            connection.commitText(". ", 1)
+            lastSpaceTap = 0L
+        } else {
+            connection.commitText(" ", 1)
+            lastSpaceTap = now
+        }
+        refreshShiftFromEditor()
     }
 
     private fun handleShift() {
@@ -170,9 +222,34 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun refreshShiftFromEditor() {
         if (!::keyboard.isInitialized || keyboard.isSymbols() || capsLock) return
+        if (!KeyboardPrefs.autoCapitalisationEnabled(this)) {
+            keyboard.setShifted(false)
+            return
+        }
         val connection = currentInputConnection ?: return
         val inputType = currentInputEditorInfo?.inputType ?: InputType.TYPE_CLASS_TEXT
         keyboard.setShifted(connection.getCursorCapsMode(inputType) != 0)
+    }
+
+    private fun loadBackgroundImage() {
+        if (!::keyboard.isInitialized) return
+        val stored = KeyboardPrefs.backgroundUri(this)
+        if (stored.isBlank()) {
+            keyboard.setBackgroundBitmap(null)
+            return
+        }
+        try {
+            val uri = Uri.parse(stored)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1200) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val bitmap = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            keyboard.setBackgroundBitmap(bitmap)
+        } catch (_: Exception) {
+            keyboard.setBackgroundBitmap(null)
+        }
     }
 
     private fun isPasswordField(): Boolean {
@@ -192,7 +269,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (!::status.isInitialized) return
         val password = isPasswordField()
         aiButtons.forEach { it.isEnabled = !password }
-        targetButton.isEnabled = !password
+        if (::targetButton.isInitialized) targetButton.isEnabled = !password
         if (password) status.text = "Ana AI disabled in password fields"
         else status.text = "Ana • normal typing stays local"
     }
@@ -218,7 +295,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) {
-            showStatus("Open Ana Keyboard app and set your Ana address")
+            showStatus("Open Ana Keyboard settings and set your Ana address")
             return
         }
         val source = actionText()
@@ -270,7 +347,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun setAiBusy(busy: Boolean) {
         aiButtons.forEach { it.isEnabled = !busy }
-        targetButton.isEnabled = !busy
+        if (::targetButton.isInitialized) targetButton.isEnabled = !busy
     }
 
     private fun showStatus(message: String) {
