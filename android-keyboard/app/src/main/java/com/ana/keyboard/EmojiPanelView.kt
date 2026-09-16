@@ -39,7 +39,7 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
     init {
         orientation = VERTICAL
         setBackgroundColor(Color.rgb(26, 26, 26))
-        addView(buildTopBar(), LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        addView(buildTopBar(), LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
 
         val scroll = ScrollView(context).apply {
             isFillViewport = true
@@ -55,10 +55,10 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
                 gravity = Gravity.CENTER
             }
             rowItems.forEach { emoji ->
-                row.addView(emojiButton(emoji), LayoutParams(0, dp(50), 1f))
+                row.addView(emojiButton(emoji), LayoutParams(0, dp(48), 1f))
             }
             repeat(8 - rowItems.size) {
-                row.addView(TextView(context), LayoutParams(0, dp(50), 1f))
+                row.addView(TextView(context), LayoutParams(0, dp(48), 1f))
             }
             content.addView(row)
         }
@@ -69,15 +69,15 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
     private fun buildTopBar(): LinearLayout = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(6), dp(4), dp(6), dp(4))
-        addView(topButton("ABC") { listener?.onBackToLetters() }, LayoutParams(0, dp(42), 1f))
+        setPadding(dp(8), dp(4), dp(8), dp(4))
+        addView(topButton("ABC") { listener?.onBackToLetters() }, LayoutParams(dp(72), dp(40)))
         addView(TextView(context).apply {
-            text = "Smileys"
+            text = "Emoji"
             textSize = 16f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-        }, LayoutParams(0, dp(42), 2f))
-        addView(topButton("GIF") { listener?.onGifRequested() }, LayoutParams(0, dp(42), 1f))
+        }, LayoutParams(0, dp(40), 1f))
+        addView(TextView(context), LayoutParams(dp(72), dp(40)))
     }
 
     private fun emojiButton(emoji: String): Button = Button(context).apply {
@@ -99,7 +99,7 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
         minWidth = 0
         minimumWidth = 0
         setTextColor(Color.WHITE)
-        setBackgroundColor(Color.rgb(55, 55, 55))
+        setBackgroundColor(Color.rgb(48, 48, 50))
         setOnClickListener { onClick() }
     }
 }
