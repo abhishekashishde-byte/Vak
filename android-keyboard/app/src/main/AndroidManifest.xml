@@ -32,6 +32,10 @@
             android:name=".MicrophonePermissionActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".GifPickerActivity"
+            android:exported="false" />
+
         <service
             android:name=".AnaKeyboardService"
             android:exported="true"
