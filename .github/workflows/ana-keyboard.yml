@@ -35,8 +35,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p android-keyboard/app/src/main/assets
-          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt | head -n 30000 > android-keyboard/app/src/main/assets/en_freq.txt
-          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/de/de_50k.txt | head -n 30000 > android-keyboard/app/src/main/assets/de_freq.txt
+          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt -o /tmp/en_50k.txt
+          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/de/de_50k.txt -o /tmp/de_50k.txt
+          head -n 30000 /tmp/en_50k.txt > android-keyboard/app/src/main/assets/en_freq.txt
+          head -n 30000 /tmp/de_50k.txt > android-keyboard/app/src/main/assets/de_freq.txt
           test -s android-keyboard/app/src/main/assets/en_freq.txt
           test -s android-keyboard/app/src/main/assets/de_freq.txt
 
