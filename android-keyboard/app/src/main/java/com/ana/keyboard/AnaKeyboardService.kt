@@ -250,10 +250,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         contentHost.addView(clipboardPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         contentHost.addView(translationPicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         contentHost.addView(inputLanguagePicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        root.addView(contentHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
+        root.addView(
+            contentHost,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(KeyboardSizing.keyboardHeightDp(this)))
+        )
 
-        root.addView(View(this).apply { setBackgroundColor(keyboardShellColor()) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
+        root.addView(
+            View(this).apply { setBackgroundColor(keyboardShellColor()) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(KeyboardSizing.bottomSpacerDp(this)))
+        )
 
         loadBackgroundImage()
         suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
@@ -463,6 +468,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 if (selected.isNotEmpty()) connection.commitText("", 1)
                 else connection.deleteSurroundingText(1, 0)
                 refreshShiftFromEditor()
+                showTypedWordCandidate()
                 requestSuggestionsSoon()
             }
             "SPACE" -> handleSpace()
@@ -477,7 +483,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 if (punctuation && KeyboardPrefs.autoSpaceAfterPunctuation(this)) connection.commitText("$typed ", 1)
                 else connection.commitText(typed, 1)
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
-                if (typed.any { it.isLetter() }) requestSuggestionsSoon() else clearSuggestions()
+                if (typed.any { it.isLetter() }) {
+                    showTypedWordCandidate()
+                    requestSuggestionsSoon()
+                } else clearSuggestions()
             }
         }
     }
@@ -488,13 +497,28 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         return Regex("([\\p{L}']{2,})$").find(before)?.value
     }
 
+    private fun showTypedWordCandidate() {
+        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField() || suggestionButtons.isEmpty()) return
+        val word = currentWord()
+        if (word.isNullOrBlank()) {
+            clearSuggestions()
+            return
+        }
+        suggestionButtons[0].text = word
+        suggestionButtons[0].alpha = 1f
+        for (index in 1 until suggestionButtons.size) {
+            suggestionButtons[index].text = ""
+            suggestionButtons[index].alpha = 0f
+        }
+    }
+
     private fun requestSuggestionsSoon() {
         mainHandler.removeCallbacks(suggestionRunnable)
         if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
             clearSuggestions()
             return
         }
-        mainHandler.postDelayed(suggestionRunnable, 145)
+        mainHandler.postDelayed(suggestionRunnable, 130)
     }
 
     private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
@@ -514,13 +538,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val clean = suggestions
             .filterNot { it.equals(word, ignoreCase = true) }
             .distinctBy { it.lowercase() }
-            .take(3)
+            .take(2)
 
         lastSuggestedWord = word
         lastLooksLikeTypo = looksLikeTypo
         bestCorrection = clean.firstOrNull()
+
+        val display = listOf(word) + clean
         suggestionButtons.forEachIndexed { index, button ->
-            button.text = clean.getOrNull(index).orEmpty()
+            button.text = display.getOrNull(index).orEmpty()
             button.alpha = if (button.text.isNullOrEmpty()) 0f else 1f
         }
     }
@@ -556,6 +582,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun applySuggestion(suggestion: String) {
         val connection = currentInputConnection ?: return
         val word = currentWord() ?: return
+
+        if (suggestion.equals(word, ignoreCase = true)) {
+            KeyboardPrefs.addPersonalWord(this, word)
+            suggestionEngine.refreshUserData()
+            clearSuggestions()
+            showStatus("$word added to your dictionary")
+            return
+        }
+
         val replacement = adjustCase(word, suggestion)
         connection.deleteSurroundingText(word.length, 0)
         connection.commitText(replacement, 1)
