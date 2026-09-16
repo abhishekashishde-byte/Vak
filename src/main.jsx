@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import AuthGate from './AuthGate.jsx'
 import { installAccountPreferenceSync } from './accountPreferences.js'
 import { installAnaNaturalVoice } from './naturalVoice.js'
+import { installBrowserExtensionBridge } from './browserExtensionBridge.js'
 import { installContextualIntelligence } from './contextualIntelligence.js'
 import { installConversationPrivacyGate } from './conversationPrivacyGate.js'
 import { installCounterpartyView } from './counterpartyView.js'
@@ -26,6 +27,7 @@ import './talkPolish.css'
 import './networkStatus.css'
 import './briefVoice.js'
 
+installBrowserExtensionBridge()
 installNetworkResilience()
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
