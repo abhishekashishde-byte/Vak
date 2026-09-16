@@ -164,16 +164,16 @@ class AnaKeyboardView @JvmOverloads constructor(
         val (r1, r2, r3Letters) = letterRows()
         val result = mutableListOf<List<KeySpec>>()
         if (KeyboardPrefs.numberRowEnabled(context)) {
-            result += "1234567890".map { KeySpec(it.toString()) }
+            result.add("1234567890".map { KeySpec(it.toString()) })
         }
-        result += r1.map { KeySpec(it.toString(), it.lowercase(), letter = true) }
-        result += r2.map { KeySpec(it.toString(), it.lowercase(), letter = true) }
-        result += buildList {
+        result.add(r1.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
+        result.add(r2.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
+        result.add(buildList {
             add(KeySpec(if (shifted) "⇧" else "↑", "SHIFT", 1.48f))
             addAll(r3Letters.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
             add(KeySpec("⌫", "BACKSPACE", 1.48f))
-        }
-        result += buildList {
+        })
+        result.add(buildList {
             add(KeySpec("?123", "SYMBOLS", 1.38f))
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.82f))
             add(KeySpec("", "EMOJI", 0.98f))
@@ -186,7 +186,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             )
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.82f))
             add(KeySpec("↵", "ENTER", 1.30f))
-        }
+        })
         return result
     }
 
@@ -608,8 +608,6 @@ class AnaKeyboardView @JvmOverloads constructor(
                         if (popup.selectedIndex >= 0) listener?.onKey(popup.options[popup.selectedIndex])
                         else listener?.onKey(selected.key.code)
                     } else if (selected.key.code != "BACKSPACE" || !backspaceRepeated) {
-                        // Preserve the key chosen on ACTION_DOWN. This prevents tiny finger drift
-                        // during fast typing from silently changing the intended character.
                         listener?.onKey(selected.key.code)
                     }
                     performClick()
