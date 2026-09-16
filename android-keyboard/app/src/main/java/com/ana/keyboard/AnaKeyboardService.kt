@@ -22,6 +22,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.text.InputType
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -73,6 +74,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var smartSentenceToken = 0
     private var lastSmartSentenceChecked = ""
     @Volatile private var smartSentenceInFlight = false
+    private var shortcutCache: Map<String, String> = emptyMap()
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
@@ -246,6 +248,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 override fun onLanguageSelected(name: String) {
                     KeyboardPrefs.setInputLanguage(this@AnaKeyboardService, name)
                     suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this@AnaKeyboardService))
+                    shortcutCache = KeyboardPrefs.textShortcuts(this@AnaKeyboardService)
                     keyboard.refreshPreferences()
                     showLetterKeyboard()
                     showStatus("Typing: $name")
@@ -272,6 +275,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         loadBackgroundImage()
         suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        shortcutCache = KeyboardPrefs.textShortcuts(this)
         clearSuggestions()
         updateAiAvailability()
         return root
@@ -306,6 +310,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
             suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
             suggestionEngine.refreshUserData()
+            shortcutCache = KeyboardPrefs.textShortcuts(this)
             requestSuggestionsSoon()
             mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
         }
@@ -468,6 +473,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onKey(code: String) {
+        if (code == "CURSOR_LEFT" || code == "CURSOR_RIGHT") {
+            smartSentenceToken++
+            mainHandler.removeCallbacks(smartSentenceRunnable)
+            moveCursor(if (code == "CURSOR_RIGHT") 1 else -1)
+            return
+        }
         if (pendingGlide != null) flushPendingGlideFast()
         // Any new key cancels an older sentence check/result. Space or punctuation
         // will schedule a fresh check after the key is committed.
@@ -601,7 +612,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val connection = currentInputConnection ?: return
         val token = smartSentenceToken
         val languageHint = KeyboardPrefs.inputLanguage(this)
-        showStatus("Checking sentence…")
+        showStatus("ANA AI • checking sentence")
         smartSentenceInFlight = true
 
         smartSentenceExecutor.execute {
@@ -786,6 +797,16 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun handleSpace() {
         val connection = currentInputConnection ?: return
+        if (expandTextShortcut(connection)) {
+            connection.commitText(" ", 1)
+            lastSpaceTap = SystemClock.elapsedRealtime()
+            pendingDelimitedWord = null
+            lastAutoCorrection = null
+            clearSuggestions()
+            refreshShiftFromEditor()
+            showStatus("LOCAL • shortcut expanded")
+            return
+        }
         val wordBeforeSpace = currentWord()
         var corrected = false
 
@@ -859,6 +880,26 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         showStatus("${record.original} learned")
         requestSuggestionsSoon()
         return true
+    }
+
+    private fun expandTextShortcut(connection: InputConnection): Boolean {
+        if (isPasswordField() || shortcutCache.isEmpty()) return false
+        val before = connection.getTextBeforeCursor(80, 0)?.toString().orEmpty()
+        val trigger = Regex("([^\\s]{1,24})$").find(before)?.groupValues?.getOrNull(1) ?: return false
+        val expansion = shortcutCache[trigger] ?: return false
+        if (expansion.isBlank()) return false
+        connection.deleteSurroundingText(trigger.length, 0)
+        connection.commitText(expansion, 1)
+        return true
+    }
+
+    private fun moveCursor(direction: Int) {
+        val connection = currentInputConnection ?: return
+        connection.finishComposingText()
+        val keyCode = if (direction > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+        clearSuggestions()
     }
 
     private fun handleShift() {
@@ -1095,10 +1136,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val target = KeyboardPrefs.target(this)
         setAiBusy(true)
         val busyMessage = when (action) {
-            AnaApi.Action.WRITE -> "Ana is writing in $target…"
-            AnaApi.Action.FIX -> "Ana is correcting to $target…"
-            AnaApi.Action.TRANSLATE -> "Ana is translating to $target…"
-            else -> "Ana is working…"
+            AnaApi.Action.WRITE -> "ANA AI • writing in $target…"
+            AnaApi.Action.FIX -> "ANA AI • correcting to $target…"
+            AnaApi.Action.TRANSLATE -> "ANA AI • translating to $target…"
+            else -> "ANA AI • working…"
         }
         showStatus(busyMessage)
 
@@ -1146,7 +1187,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (::targetButton.isInitialized) targetButton.isEnabled = !busy
     }
 
-    private fun defaultStatus(): String = "Ana • local typing · AI when enabled"
+    private fun defaultStatus(): String = "LOCAL • typing stays on device"
 
     private fun showStatus(message: String) {
         if (!::status.isInitialized) return

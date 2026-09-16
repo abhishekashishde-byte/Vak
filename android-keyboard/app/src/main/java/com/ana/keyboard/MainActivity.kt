@@ -150,9 +150,9 @@ class MainActivity : Activity() {
         root.addView(menuRow("Themes", themeSummary()) { renderTheme() })
         root.addView(menuRow("Typing", "Auto-correction, smart sentence correction and suggestions") { renderTyping() })
         root.addView(menuRow("Rich input", "Voice typing, clipboard and Writing Tool") { renderRichInput() })
-        root.addView(menuRow("Layout & keys", "Keyboard size, number row, punctuation and toolbar") { renderLayoutKeys() })
+        root.addView(menuRow("Layout & keys", "Keyboard size, one-handed mode, adaptive touch and keys") { renderLayoutKeys() })
         root.addView(menuRow("Sound & vibration", "Key click and vibration strength") { renderSoundVibration() })
-        root.addView(menuRow("Dictionary & corrections", "Personal words and learned corrections") { renderDictionary() })
+        root.addView(menuRow("Dictionary & corrections", "Personal words, shortcuts and learned corrections") { renderDictionary() })
         root.addView(menuRow("Privacy & Ana", "Ana connection and local typing protection") { renderPrivacy() })
 
         root.addView(section("Setup"))
@@ -255,7 +255,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
-        root.addView(switchRow("Smart sentence correction", "Automatically check the current sentence after you pause. Fixes grammar, completeness and contextual typing mistakes. The sentence is sent to your Ana server; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
+        root.addView(switchRow("Smart sentence correction", "Off by default for privacy. If you enable it, Ana sends only the current sentence to your Ana server after a pause; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
             KeyboardPrefs.setSmartSentenceCorrectionEnabled(this, it)
         })
         root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
@@ -313,6 +313,34 @@ class MainActivity : Activity() {
                 renderLayoutKeys()
             })
         }
+
+        root.addView(section("One-handed mode"))
+        root.addView(choiceRow("Off", "Full-width keyboard", KeyboardPrefs.oneHandedMode(this) == "off") {
+            KeyboardPrefs.setOneHandedMode(this, "off")
+            renderLayoutKeys()
+        })
+        root.addView(choiceRow("Left", "Shrink keys toward the left edge", KeyboardPrefs.oneHandedMode(this) == "left") {
+            KeyboardPrefs.setOneHandedMode(this, "left")
+            renderLayoutKeys()
+        })
+        root.addView(choiceRow("Right", "Shrink keys toward the right edge", KeyboardPrefs.oneHandedMode(this) == "right") {
+            KeyboardPrefs.setOneHandedMode(this, "right")
+            renderLayoutKeys()
+        })
+
+        root.addView(section("Adaptive touch"))
+        root.addView(switchRow("Learn my touch pattern", "Ana quietly adjusts invisible letter hitboxes to your usual thumb drift. Raw touch coordinates are not stored.", KeyboardPrefs.adaptiveTouchEnabled(this)) {
+            KeyboardPrefs.setAdaptiveTouchEnabled(this, it)
+        })
+        root.addView(infoCard("Local calibration", "Only small per-key offset averages and counts are stored on this device. The visible key layout never moves."))
+        root.addView(actionCard("Reset touch calibration") {
+            KeyboardPrefs.clearTouchCalibration(this)
+            activePreview?.refreshFromSettings()
+            Toast.makeText(this, "Touch calibration reset", Toast.LENGTH_SHORT).show()
+        })
+
+        root.addView(section("Spacebar"))
+        root.addView(infoCard("Cursor control", "Slide left or right across the spacebar to move the text cursor without inserting a space."))
 
         root.addView(section("Keys"))
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) {
@@ -387,6 +415,50 @@ class MainActivity : Activity() {
             }
         }
 
+        root.addView(section("Text shortcuts"))
+        root.addView(infoCard("Expand as you type", "Create private local shortcuts such as @@ for an email address. Type the shortcut, then press Space."))
+        val shortcutTrigger = EditText(this).apply {
+            hint = "Shortcut, e.g. @@"
+            setHintTextColor(Color.GRAY)
+            setTextColor(textColor)
+            isSingleLine = true
+            background = rounded(card2, 14)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        val shortcutExpansion = EditText(this).apply {
+            hint = "Expansion"
+            setHintTextColor(Color.GRAY)
+            setTextColor(textColor)
+            isSingleLine = true
+            background = rounded(card2, 14)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        root.addView(shortcutTrigger, marginParams(dp(4)).apply { height = dp(50) })
+        root.addView(shortcutExpansion, marginParams(dp(4)).apply { height = dp(50) })
+        root.addView(actionCard("Add shortcut") {
+            val trigger = shortcutTrigger.text.toString().trim()
+            val expansion = shortcutExpansion.text.toString().trim()
+            when {
+                trigger.isBlank() || expansion.isBlank() -> Toast.makeText(this, "Enter both shortcut and expansion", Toast.LENGTH_SHORT).show()
+                trigger.any { it.isWhitespace() } -> Toast.makeText(this, "Shortcut cannot contain spaces", Toast.LENGTH_SHORT).show()
+                else -> {
+                    KeyboardPrefs.setTextShortcut(this, trigger, expansion, badge)
+                    renderDictionary()
+                }
+            }
+        })
+        val shortcuts = KeyboardPrefs.textShortcuts(this, badge)
+        if (shortcuts.isEmpty()) {
+            root.addView(infoCard("No shortcuts yet", "Shortcuts are stored locally for the selected typing language."))
+        } else {
+            shortcuts.toSortedMap().forEach { (trigger, expansion) ->
+                root.addView(removableRow("$trigger  →  $expansion", "Local text shortcut") {
+                    KeyboardPrefs.removeTextShortcut(this, trigger, badge)
+                    renderDictionary()
+                })
+            }
+        }
+
         root.addView(section("Learned corrections"))
         val learned = KeyboardPrefs.learnedCorrections(this, badge)
         if (learned.isEmpty()) {
@@ -431,8 +503,9 @@ class MainActivity : Activity() {
         })
 
         root.addView(section("Privacy"))
-        root.addView(infoCard("Normal typing stays local", "Ordinary keystrokes, local correction and glide decoding are not sent to Ana."))
-        root.addView(infoCard("AI only on explicit action", "Text is sent only when you tap Write or Translate."))
+        root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, word correction, personal dictionary, shortcuts and adaptive touch calibration stay on this device."))
+        root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart sentence check."))
+        root.addView(infoCard("Smart sentence AI is opt-in", "Automatic cloud sentence correction is off by default. Turn it on under Typing only if you want it."))
         root.addView(infoCard("Password fields", "Ana AI, voice, suggestions and clipboard are disabled in password fields."))
     }
 

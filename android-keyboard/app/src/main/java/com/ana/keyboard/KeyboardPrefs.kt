@@ -35,6 +35,10 @@ object KeyboardPrefs {
     private const val KEY_PERSONAL_DICTIONARY_PREFIX = "personal_dictionary_"
     private const val KEY_LEARNED_CORRECTIONS_PREFIX = "learned_corrections_"
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
+    private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
+    private const val KEY_ONE_HANDED_MODE = "one_handed_mode"
+    private const val KEY_ADAPTIVE_TOUCH = "adaptive_touch"
+    private const val KEY_TOUCH_CALIBRATION_PREFIX = "touch_calibration_"
 
     data class TranslationTarget(val name: String, val badge: String)
 
@@ -180,7 +184,7 @@ object KeyboardPrefs {
     fun autoCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_CORRECTION, true)
     fun setAutoCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_CORRECTION, enabled).apply()
 
-    fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, true)
+    fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, false)
     fun setSmartSentenceCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_SMART_SENTENCE_CORRECTION, enabled).apply()
 
     fun glideTypingEnabled(context: Context): Boolean = false // Temporarily paused: typing stability takes priority.
@@ -259,6 +263,90 @@ object KeyboardPrefs {
 
     fun clearLearnedCorrections(context: Context, badge: String = inputBadge(context)) =
         prefs(context).edit().remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge).apply()
+
+    fun textShortcuts(context: Context, badge: String = inputBadge(context)): Map<String, String> {
+        val raw = prefs(context).getString(KEY_SHORTCUTS_PREFIX + badge, "{}") ?: "{}"
+        return try {
+            val json = JSONObject(raw)
+            buildMap {
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val trigger = keys.next().trim()
+                    val expansion = json.optString(trigger).trim()
+                    if (trigger.isNotBlank() && expansion.isNotBlank()) put(trigger, expansion)
+                }
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun setTextShortcut(context: Context, trigger: String, expansion: String, badge: String = inputBadge(context)) {
+        val key = trigger.trim().take(24)
+        val value = expansion.trim().take(500)
+        if (key.isBlank() || value.isBlank() || key.any { it.isWhitespace() }) return
+        val json = JSONObject()
+        textShortcuts(context, badge).forEach { (existing, replacement) -> json.put(existing, replacement) }
+        json.put(key, value)
+        prefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+    }
+
+    fun removeTextShortcut(context: Context, trigger: String, badge: String = inputBadge(context)) {
+        val json = JSONObject()
+        textShortcuts(context, badge).filterKeys { it != trigger }.forEach { (key, value) -> json.put(key, value) }
+        prefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+    }
+
+    fun oneHandedMode(context: Context): String {
+        val value = prefs(context).getString(KEY_ONE_HANDED_MODE, "off") ?: "off"
+        return value.takeIf { it in setOf("off", "left", "right") } ?: "off"
+    }
+
+    fun setOneHandedMode(context: Context, value: String) {
+        val safe = value.takeIf { it in setOf("off", "left", "right") } ?: "off"
+        prefs(context).edit().putString(KEY_ONE_HANDED_MODE, safe).apply()
+    }
+
+    fun adaptiveTouchEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ADAPTIVE_TOUCH, true)
+    fun setAdaptiveTouchEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_ADAPTIVE_TOUCH, enabled).apply()
+
+    data class TouchCalibration(val dx: Float, val dy: Float, val count: Int)
+
+    fun touchCalibration(context: Context, badge: String = inputBadge(context)): Map<String, TouchCalibration> {
+        val raw = prefs(context).getString(KEY_TOUCH_CALIBRATION_PREFIX + badge, "{}") ?: "{}"
+        return try {
+            val json = JSONObject(raw)
+            buildMap {
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val item = json.optJSONObject(key) ?: continue
+                    val dx = item.optDouble("dx", 0.0).toFloat().coerceIn(-0.10f, 0.10f)
+                    val dy = item.optDouble("dy", 0.0).toFloat().coerceIn(-0.10f, 0.10f)
+                    val count = item.optInt("count", 0).coerceIn(0, 100000)
+                    if (key.length == 1 && count > 0) put(key.lowercase(), TouchCalibration(dx, dy, count))
+                }
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveTouchCalibration(context: Context, values: Map<String, TouchCalibration>, badge: String = inputBadge(context)) {
+        val json = JSONObject()
+        values.forEach { (key, value) ->
+            if (key.length != 1 || value.count <= 0) return@forEach
+            json.put(key.lowercase(), JSONObject().apply {
+                put("dx", value.dx.coerceIn(-0.10f, 0.10f).toDouble())
+                put("dy", value.dy.coerceIn(-0.10f, 0.10f).toDouble())
+                put("count", value.count.coerceIn(1, 100000))
+            })
+        }
+        prefs(context).edit().putString(KEY_TOUCH_CALIBRATION_PREFIX + badge, json.toString()).apply()
+    }
+
+    fun clearTouchCalibration(context: Context, badge: String = inputBadge(context)) =
+        prefs(context).edit().remove(KEY_TOUCH_CALIBRATION_PREFIX + badge).apply()
 
     fun clipboardHistory(context: Context): List<String> {
         val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"

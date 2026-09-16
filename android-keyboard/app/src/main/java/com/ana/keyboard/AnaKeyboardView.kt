@@ -64,6 +64,12 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var alternatePopup: AlternatePopup? = null
     private var backspaceRepeated = false
     private var cachedPalette: Palette? = null
+    private var adaptiveTouch = KeyboardPrefs.adaptiveTouchEnabled(context)
+    private var calibrationBadge = KeyboardPrefs.inputBadge(context)
+    private var touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
+    private var calibrationDirty = 0
+    private var spaceCursorMoved = false
+    private var spaceCursorAnchorX = 0f
 
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -141,8 +147,12 @@ class AnaKeyboardView @JvmOverloads constructor(
     }
 
     fun refreshPreferences() {
+        persistTouchCalibration()
         placed = emptyList()
         cachedPalette = null
+        adaptiveTouch = KeyboardPrefs.adaptiveTouchEnabled(context)
+        calibrationBadge = KeyboardPrefs.inputBadge(context)
+        touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
         clearPressState()
         invalidate()
     }
@@ -205,6 +215,15 @@ class AnaKeyboardView @JvmOverloads constructor(
         val rowHeight = max(dp(36f), usableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
+        val oneHanded = KeyboardPrefs.oneHandedMode(context)
+        val fullWidth = width - outer * 2
+        val activeWidth = if (oneHanded == "off") fullWidth else fullWidth * 0.78f
+        val baseLeft = when (oneHanded) {
+            "right" -> width - outer - activeWidth
+            else -> outer
+        }
+        val baseRight = baseLeft + activeWidth
+
         val numberOffset = if (!symbols && KeyboardPrefs.numberRowEnabled(context)) 1 else 0
         val qRow = if (symbols) -1 else numberOffset
         val aRow = if (symbols) -1 else qRow + 1
@@ -215,8 +234,8 @@ class AnaKeyboardView @JvmOverloads constructor(
                 rowIndex == aRow -> dp(22f)
                 else -> 0f
             }
-            val leftBound = outer + inset
-            val rightBound = width - outer - inset
+            val leftBound = baseLeft + inset
+            val rightBound = baseRight - inset
             val totalFlex = row.sumOf { it.flex.toDouble() }.toFloat()
             val availableWidth = rightBound - leftBound - gap * (row.size - 1)
             var x = leftBound
@@ -477,13 +496,62 @@ class AnaKeyboardView @JvmOverloads constructor(
         }
     }
 
+    private fun calibrationFor(item: PlacedKey): KeyboardPrefs.TouchCalibration? {
+        if (!adaptiveTouch || !item.key.letter) return null
+        return touchCalibration[item.key.code.lowercase()]?.takeIf { it.count >= 6 }
+    }
+
+    private fun shiftX(item: PlacedKey): Float = (calibrationFor(item)?.dx ?: 0f) * item.rect.width()
+    private fun shiftY(item: PlacedKey): Float = (calibrationFor(item)?.dy ?: 0f) * item.rect.height()
+
+    private fun calibratedContains(item: PlacedKey, x: Float, y: Float, toleranceX: Float = 0f, toleranceY: Float = 0f): Boolean {
+        val sx = shiftX(item)
+        val sy = shiftY(item)
+        return x >= item.rect.left + sx - toleranceX && x <= item.rect.right + sx + toleranceX &&
+            y >= item.rect.top + sy - toleranceY && y <= item.rect.bottom + sy + toleranceY
+    }
+
     private fun keyAt(x: Float, y: Float): PlacedKey? {
-        placed.firstOrNull { it.rect.contains(x, y) }?.let { return it }
+        val direct = placed.filter { calibratedContains(it, x, y) }
+        if (direct.isNotEmpty()) {
+            return direct.minByOrNull { item ->
+                val nx = (x - (item.rect.centerX() + shiftX(item))) / item.rect.width().coerceAtLeast(1f)
+                val ny = (y - (item.rect.centerY() + shiftY(item))) / item.rect.height().coerceAtLeast(1f)
+                nx * nx + ny * ny
+            }
+        }
         val verticalTolerance = dp(3f)
-        val rowCandidates = placed.filter { y >= it.rect.top - verticalTolerance && y <= it.rect.bottom + verticalTolerance }
-        val nearest = rowCandidates.minByOrNull { abs(it.rect.centerX() - x) } ?: return null
+        val rowCandidates = placed.filter { calibratedContains(it, x, y, 0f, verticalTolerance) }
+        val nearest = rowCandidates.minByOrNull { abs((it.rect.centerX() + shiftX(it)) - x) } ?: return null
         val horizontalTolerance = dp(6f)
-        return nearest.takeIf { x >= it.rect.left - horizontalTolerance && x <= it.rect.right + horizontalTolerance }
+        return nearest.takeIf { calibratedContains(it, x, y, horizontalTolerance, verticalTolerance) }
+    }
+
+    private fun recordSuccessfulTouch(item: PlacedKey, upX: Float, upY: Float) {
+        if (!adaptiveTouch || !item.key.letter || symbols) return
+        if (!item.rect.contains(downX, downY)) return // avoid reinforcing a previously shifted miss
+        if (hypot(upX - downX, upY - downY) > max(dp(14f), touchSlop * 1.8f)) return
+        val width = item.rect.width().coerceAtLeast(1f)
+        val height = item.rect.height().coerceAtLeast(1f)
+        val sampleDx = ((downX - item.rect.centerX()) / width).coerceIn(-0.20f, 0.20f)
+        val sampleDy = ((downY - item.rect.centerY()) / height).coerceIn(-0.20f, 0.20f)
+        val key = item.key.code.lowercase()
+        val old = touchCalibration[key] ?: KeyboardPrefs.TouchCalibration(0f, 0f, 0)
+        val alpha = if (old.count < 18) 0.16f else 0.045f
+        val next = KeyboardPrefs.TouchCalibration(
+            dx = (old.dx * (1f - alpha) + sampleDx * alpha).coerceIn(-0.10f, 0.10f),
+            dy = (old.dy * (1f - alpha) + sampleDy * alpha).coerceIn(-0.10f, 0.10f),
+            count = (old.count + 1).coerceAtMost(100000)
+        )
+        touchCalibration[key] = next
+        calibrationDirty++
+        if (calibrationDirty >= 16) persistTouchCalibration()
+    }
+
+    private fun persistTouchCalibration() {
+        if (calibrationDirty <= 0) return
+        KeyboardPrefs.saveTouchCalibration(context, touchCalibration, calibrationBadge)
+        calibrationDirty = 0
     }
 
     private fun glideKeyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { item ->
@@ -587,6 +655,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         potentialGlideLetters.clear()
         glidePoints.clear()
         glideLetters.clear()
+        spaceCursorMoved = false
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -603,6 +672,8 @@ class AnaKeyboardView @JvmOverloads constructor(
                 potentialGlideLetters.clear()
                 glidePoints.clear()
                 glideLetters.clear()
+                spaceCursorMoved = false
+                spaceCursorAnchorX = event.x
 
                 active?.let { item ->
                     listener?.onPressFeedback(this)
@@ -615,6 +686,19 @@ class AnaKeyboardView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (active?.key?.code == "SPACE") {
+                    val step = dp(17f)
+                    val rawSteps = ((event.x - spaceCursorAnchorX) / step).toInt().coerceIn(-6, 6)
+                    if (rawSteps != 0) {
+                        val code = if (rawSteps > 0) "CURSOR_RIGHT" else "CURSOR_LEFT"
+                        repeat(kotlin.math.abs(rawSteps)) { listener?.onKey(code) }
+                        spaceCursorAnchorX += rawSteps * step
+                        spaceCursorMoved = true
+                        longPressHandler.removeCallbacks(showAlternates)
+                    }
+                    return true
+                }
+
                 if (alternatePopup != null) {
                     updateAlternateSelection(event.x, event.y)
                     return true
@@ -658,8 +742,11 @@ class AnaKeyboardView @JvmOverloads constructor(
                     if (popup != null) {
                         if (popup.selectedIndex >= 0) listener?.onKey(popup.options[popup.selectedIndex])
                         else listener?.onKey(selected.key.code)
+                    } else if (selected.key.code == "SPACE" && spaceCursorMoved) {
+                        // A horizontal spacebar drag is cursor control, not a Space keypress.
                     } else if (selected.key.code != "BACKSPACE" || !backspaceRepeated) {
                         listener?.onKey(selected.key.code)
+                        recordSuccessfulTouch(selected, event.x, event.y)
                     }
                     performClick()
                 }
@@ -686,6 +773,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         repeatHandler.removeCallbacksAndMessages(null)
         longPressHandler.removeCallbacksAndMessages(null)
         trailAnimator?.cancel()
+        persistTouchCalibration()
         super.onDetachedFromWindow()
     }
 }

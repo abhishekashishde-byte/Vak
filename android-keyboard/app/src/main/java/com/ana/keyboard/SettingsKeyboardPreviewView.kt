@@ -15,7 +15,7 @@ import android.widget.TextView
 
 class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), AnaKeyboardView.Listener {
     private val output = TextView(context).apply {
-        text = "Tap keys or glide to test your setup"
+        text = "Tap keys to test your setup"
         textSize = 17f
         setTextColor(Color.WHITE)
         setHintTextColor(Color.GRAY)
@@ -103,6 +103,7 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
                 updateOutput()
             }
             "SPACE" -> handleSpace()
+            "CURSOR_LEFT", "CURSOR_RIGHT" -> Unit
             "ENTER" -> appendText("\n")
             "EMOJI" -> appendText("🙂")
             else -> {
@@ -156,7 +157,7 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
     }
 
     private fun updateOutput() {
-        output.text = if (text.isEmpty()) "Tap keys or glide to test your setup" else text.toString()
+        output.text = if (text.isEmpty()) "Tap keys to test your setup" else text.toString()
     }
 
     private fun loadBackground() {
