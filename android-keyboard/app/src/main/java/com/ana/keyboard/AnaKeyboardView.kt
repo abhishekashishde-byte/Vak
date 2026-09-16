@@ -25,9 +25,16 @@ class AnaKeyboardView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
+    data class GlidePoint(val x: Float, val y: Float)
+    data class GlideTrace(
+        val sequence: String,
+        val points: List<GlidePoint>,
+        val keyCenters: Map<Char, GlidePoint>
+    )
+
     interface Listener {
         fun onKey(code: String)
-        fun onGlide(sequence: String)
+        fun onGlide(trace: GlideTrace)
         fun onPressFeedback(view: View)
     }
 
@@ -65,7 +72,6 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var downY = 0f
     private var downAt = 0L
     private var gliding = false
-    private val potentialGlidePoints = mutableListOf<Pair<Float, Float>>()
     private val potentialGlideLetters = mutableListOf<String>()
     private val glidePoints = mutableListOf<Pair<Float, Float>>()
     private val glideLetters = mutableListOf<String>()
@@ -154,9 +160,9 @@ class AnaKeyboardView @JvmOverloads constructor(
                     KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.42f)
                 ),
                 listOf(
-                    KeySpec("", "EMOJI", 1.0f),
-                    KeySpec(",", ",", 0.82f),
-                    KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", 4.7f),
+                    KeySpec("", "EMOJI", 0.92f),
+                    KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 0.90f),
+                    KeySpec("", "SPACE", 4.2f),
                     KeySpec(".", ".", 0.82f),
                     KeySpec("↵", "ENTER", 1.30f)
                 )
@@ -176,18 +182,13 @@ class AnaKeyboardView @JvmOverloads constructor(
             add(KeySpec("⌫", "BACKSPACE", 1.48f))
         })
         result.add(buildList {
-            add(KeySpec("?123", "SYMBOLS", 1.38f))
-            if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.82f))
-            add(KeySpec("", "EMOJI", 0.98f))
-            add(
-                KeySpec(
-                    KeyboardPrefs.inputBadge(context),
-                    "SPACE",
-                    if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 4.65f else 5.25f
-                )
-            )
-            if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.82f))
-            add(KeySpec("↵", "ENTER", 1.30f))
+            add(KeySpec("?123", "SYMBOLS", 1.34f))
+            if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.75f))
+            add(KeySpec("", "EMOJI", 0.86f))
+            add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 0.86f))
+            add(KeySpec("", "SPACE", 3.85f))
+            if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.75f))
+            add(KeySpec("↵", "ENTER", 1.25f))
         })
         return result
     }
@@ -264,9 +265,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         val widthNeeded = (cell * options.size).coerceAtMost(width - dp(8f))
         val desiredLeft = item.rect.centerX() - widthNeeded / 2f
         val left = desiredLeft.coerceIn(dp(4f), width - widthNeeded - dp(4f))
-        val desiredBottom = item.rect.top + dp(7f)
-        val bottom = max(dp(60f), desiredBottom)
-        val top = max(dp(2f), bottom - dp(58f))
+        val bottom = max(dp(58f), item.rect.top + dp(5f))
+        val top = max(dp(2f), bottom - dp(56f))
         return AlternatePopup(options, RectF(left, top, left + widthNeeded, bottom))
     }
 
@@ -283,24 +283,39 @@ class AnaKeyboardView @JvmOverloads constructor(
         cachedPalette?.let { return it }
         val value = when (KeyboardPrefs.theme(context)) {
             "light" -> Palette(
-                Color.rgb(225, 228, 232), Color.argb(238, 250, 250, 250), Color.argb(238, 205, 209, 215),
+                Color.rgb(225, 228, 232), Color.rgb(250, 250, 250), Color.rgb(205, 209, 215),
                 Color.rgb(183, 189, 198), Color.rgb(25, 25, 25), Color.rgb(65, 115, 245)
             )
             "midnight" -> Palette(
-                Color.BLACK, Color.argb(220, 28, 28, 30), Color.argb(230, 43, 43, 46),
+                Color.BLACK, Color.rgb(28, 28, 30), Color.rgb(43, 43, 46),
                 Color.rgb(76, 78, 83), Color.WHITE, Color.rgb(100, 170, 255)
             )
             "gold" -> Palette(
-                Color.rgb(17, 17, 17), Color.argb(225, 48, 48, 48), Color.argb(235, 63, 59, 46),
+                Color.rgb(17, 17, 17), Color.rgb(48, 48, 48), Color.rgb(63, 59, 46),
                 Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(230, 181, 65)
             )
             else -> Palette(
-                Color.rgb(26, 26, 26), Color.argb(228, 54, 54, 54), Color.argb(235, 66, 66, 66),
+                Color.rgb(26, 26, 26), Color.rgb(54, 54, 54), Color.rgb(66, 66, 66),
                 Color.rgb(86, 88, 92), Color.WHITE, Color.rgb(100, 170, 255)
             )
         }
         cachedPalette = value
         return value
+    }
+
+    private fun keyColor(base: Int, special: Boolean, pressed: Boolean, colors: Palette): Int {
+        val color = when {
+            pressed -> colors.pressedKey
+            special -> colors.specialKey
+            else -> colors.normalKey
+        }
+        if (backgroundBitmap == null) return color
+        val alpha = when {
+            pressed -> 205
+            special -> 165
+            else -> 142
+        }
+        return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -314,11 +329,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             val pressed = !gliding && active?.key == item.key && active?.row == item.row
             val special = item.key.code.length > 1 && item.key.code != "SPACE"
             keyPaint.style = Paint.Style.FILL
-            keyPaint.color = when {
-                pressed -> colors.pressedKey
-                special -> colors.specialKey
-                else -> colors.normalKey
-            }
+            keyPaint.color = keyColor(colors.normalKey, special, pressed, colors)
             val rect = if (pressed) {
                 RectF(item.rect.left - dp(1f), item.rect.top - dp(1f), item.rect.right + dp(1f), item.rect.bottom + dp(1f))
             } else item.rect
@@ -401,18 +412,17 @@ class AnaKeyboardView @JvmOverloads constructor(
         }
         trailPaint.color = colors.accent
         trailPaint.alpha = alpha
-        trailPaint.strokeWidth = dp(4.5f)
+        trailPaint.strokeWidth = dp(4.2f)
         canvas.drawPath(path, trailPaint)
         trailPaint.alpha = 255
     }
 
     private fun drawKeyPreview(canvas: Canvas, item: PlacedKey, colors: Palette) {
         val previewWidth = max(dp(56f), item.rect.width() * 1.30f)
-        val previewHeight = dp(60f)
+        val previewHeight = dp(58f)
         val desiredLeft = item.rect.centerX() - previewWidth / 2f
         val left = desiredLeft.coerceIn(dp(3f), width - previewWidth - dp(3f))
-        val desiredBottom = item.rect.top + dp(7f)
-        val bottom = max(previewHeight + dp(2f), desiredBottom)
+        val bottom = max(dp(58f), item.rect.top + dp(5f))
         val top = max(dp(2f), bottom - previewHeight)
         val popup = RectF(left, top, left + previewWidth, bottom)
 
@@ -420,7 +430,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         keyPaint.color = colors.pressedKey
         canvas.drawRoundRect(popup, dp(13f), dp(13f), keyPaint)
 
-        textPaint.textSize = dp(33f)
+        textPaint.textSize = dp(32f)
         textPaint.color = colors.text
         val baseline = popup.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(displayLabel(item.key), popup.centerX(), baseline, textPaint)
@@ -452,30 +462,27 @@ class AnaKeyboardView @JvmOverloads constructor(
         val verticalTolerance = dp(3f)
         val rowCandidates = placed.filter { y >= it.rect.top - verticalTolerance && y <= it.rect.bottom + verticalTolerance }
         val nearest = rowCandidates.minByOrNull { abs(it.rect.centerX() - x) } ?: return null
-        val horizontalTolerance = dp(5f)
+        val horizontalTolerance = dp(6f)
         return nearest.takeIf { x >= it.rect.left - horizontalTolerance && x <= it.rect.right + horizontalTolerance }
     }
 
     private fun glideKeyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { item ->
         if (!item.key.letter) return@firstOrNull false
         val center = RectF(item.rect)
-        center.inset(item.rect.width() * 0.24f, item.rect.height() * 0.18f)
+        center.inset(item.rect.width() * 0.22f, item.rect.height() * 0.16f)
         center.contains(x, y)
     }
 
-    private fun appendPotentialGlide(item: PlacedKey?, x: Float, y: Float) {
+    private fun appendPotentialGlide(item: PlacedKey?) {
         val code = item?.key?.takeIf { it.letter }?.code ?: return
-        if (potentialGlideLetters.lastOrNull() != code) {
-            potentialGlideLetters += code
-            potentialGlidePoints += x to y
-        }
+        if (potentialGlideLetters.lastOrNull() != code) potentialGlideLetters += code
     }
 
     private fun appendGlide(item: PlacedKey?, x: Float, y: Float) {
-        val code = item?.key?.takeIf { it.letter }?.code ?: return
-        if (glideLetters.lastOrNull() != code) glideLetters += code
+        val code = item?.key?.takeIf { it.letter }?.code
+        if (code != null && glideLetters.lastOrNull() != code) glideLetters += code
         val last = glidePoints.lastOrNull()
-        if (last == null || hypot(x - last.first, y - last.second) >= dp(4f)) glidePoints += x to y
+        if (last == null || hypot(x - last.first, y - last.second) >= dp(3.5f)) glidePoints += x to y
     }
 
     private fun updateAlternateSelection(x: Float, y: Float) {
@@ -499,8 +506,9 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (gliding || symbols || !KeyboardPrefs.glideTypingEnabled(context) || active?.key?.letter != true) return
         val elapsed = event.eventTime - downAt
         val distance = hypot(event.x - downX, event.y - downY)
-        val threshold = max(dp(45f), touchSlop * 4f)
-        if (elapsed < 120L || distance < threshold || potentialGlideLetters.size < 3) return
+        val threshold = max(dp(42f), touchSlop * 4f)
+        val enoughLetters = potentialGlideLetters.size >= 3 || (potentialGlideLetters.size >= 2 && distance >= dp(68f))
+        if (elapsed < 110L || distance < threshold || !enoughLetters) return
 
         gliding = true
         repeatHandler.removeCallbacks(repeatBackspace)
@@ -509,11 +517,24 @@ class AnaKeyboardView @JvmOverloads constructor(
         glideLetters.clear()
         glideLetters.addAll(potentialGlideLetters)
         glidePoints.clear()
-        glidePoints.add(downX to downY)
-        potentialGlidePoints.forEach { point ->
-            if (glidePoints.lastOrNull() != point) glidePoints += point
-        }
+        glidePoints += downX to downY
+        glidePoints += event.x to event.y
         invalidate()
+    }
+
+    private fun buildGlideTrace(sequence: String): GlideTrace {
+        val safeWidth = width.coerceAtLeast(1).toFloat()
+        val safeHeight = height.coerceAtLeast(1).toFloat()
+        val points = glidePoints
+            .filterIndexed { index, _ -> index == 0 || index == glidePoints.lastIndex || index % 2 == 0 }
+            .take(64)
+            .map { GlidePoint(it.first / safeWidth, it.second / safeHeight) }
+        val centers = placed
+            .filter { it.key.letter }
+            .associate { item ->
+                item.key.code.first() to GlidePoint(item.rect.centerX() / safeWidth, item.rect.centerY() / safeHeight)
+            }
+        return GlideTrace(sequence, points, centers)
     }
 
     private fun fadeTrail() {
@@ -521,7 +542,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         fadingTrail = glidePoints.toList()
         trailAlpha = 200
         trailAnimator = ValueAnimator.ofInt(200, 0).apply {
-            duration = 180
+            duration = 170
             addUpdateListener {
                 trailAlpha = it.animatedValue as Int
                 invalidate()
@@ -543,7 +564,6 @@ class AnaKeyboardView @JvmOverloads constructor(
         alternatePopup = null
         backspaceRepeated = false
         gliding = false
-        potentialGlidePoints.clear()
         potentialGlideLetters.clear()
         glidePoints.clear()
         glideLetters.clear()
@@ -560,16 +580,13 @@ class AnaKeyboardView @JvmOverloads constructor(
                 alternatePopup = null
                 backspaceRepeated = false
                 gliding = false
-                potentialGlidePoints.clear()
                 potentialGlideLetters.clear()
                 glidePoints.clear()
                 glideLetters.clear()
 
                 active?.let { item ->
                     listener?.onPressFeedback(this)
-                    if (item.key.letter && KeyboardPrefs.glideTypingEnabled(context) && !symbols) {
-                        appendPotentialGlide(item, event.x, event.y)
-                    }
+                    if (item.key.letter && KeyboardPrefs.glideTypingEnabled(context) && !symbols) appendPotentialGlide(item)
                     if (item.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 370)
                     else scheduleLongPress(item)
                 }
@@ -584,12 +601,10 @@ class AnaKeyboardView @JvmOverloads constructor(
                 }
 
                 val distance = hypot(event.x - downX, event.y - downY)
-                if (!gliding && distance > touchSlop * 1.5f) {
-                    longPressHandler.removeCallbacks(showAlternates)
-                }
+                if (!gliding && distance > touchSlop * 1.5f) longPressHandler.removeCallbacks(showAlternates)
 
                 if (active?.key?.letter == true && KeyboardPrefs.glideTypingEnabled(context) && !symbols) {
-                    appendPotentialGlide(glideKeyAt(event.x, event.y), event.x, event.y)
+                    appendPotentialGlide(glideKeyAt(event.x, event.y))
                     startGlideIfIntentional(event)
                 }
 
@@ -606,10 +621,10 @@ class AnaKeyboardView @JvmOverloads constructor(
 
                 if (gliding) {
                     appendGlide(glideKeyAt(event.x, event.y), event.x, event.y)
-                    if (glidePoints.lastOrNull() != (event.x to event.y)) glidePoints += event.x to event.y
                     val sequence = glideLetters.joinToString("")
+                    val trace = buildGlideTrace(sequence)
                     fadeTrail()
-                    if (sequence.length >= 3) listener?.onGlide(sequence)
+                    if (sequence.length >= 2) listener?.onGlide(trace)
                     performClick()
                     clearPressState()
                     invalidate()
