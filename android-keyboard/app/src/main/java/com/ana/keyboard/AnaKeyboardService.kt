@@ -1,5 +1,6 @@
 package com.ana.keyboard
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
@@ -27,20 +28,50 @@ import java.util.concurrent.Executors
 class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var keyboard: AnaKeyboardView
     private lateinit var emojiPanel: EmojiPanelView
+    private lateinit var clipboardPanel: ClipboardPanelView
     private lateinit var contentHost: FrameLayout
     private lateinit var status: TextView
     private lateinit var targetButton: Button
+    private lateinit var suggestionStrip: LinearLayout
+    private lateinit var suggestionEngine: LocalSuggestionEngine
     private var inputLanguageButton: Button? = null
     private val aiButtons = mutableListOf<Button>()
+    private val suggestionButtons = mutableListOf<TextView>()
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var capsLock = false
     private var lastShiftTap = 0L
     private var lastSpaceTap = 0L
+    private var lastSuggestedWord = ""
+    private var bestCorrection: String? = null
+    private var lastLooksLikeTypo = false
+
+    private val suggestionRunnable = Runnable {
+        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
+            clearSuggestions()
+            return@Runnable
+        }
+        val word = currentWord()
+        if (word.isNullOrBlank()) {
+            clearSuggestions()
+            return@Runnable
+        }
+        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        suggestionEngine.request(word)
+    }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    override fun onCreate() {
+        super.onCreate()
+        suggestionEngine = LocalSuggestionEngine(this) { word, suggestions, typo ->
+            mainHandler.post { handleSuggestionResult(word, suggestions, typo) }
+        }
+    }
+
     override fun onCreateInputView(): View {
+        aiButtons.clear()
+        suggestionButtons.clear()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(keyboardShellColor())
@@ -61,6 +92,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 KeyboardPrefs.cycleInputLanguage(this)
                 inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
                 keyboard.refreshPreferences()
+                suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+                requestSuggestionsSoon()
                 showStatus("Typing: ${KeyboardPrefs.inputLanguage(this)}")
             }.also { toolbar.addView(it) }
 
@@ -70,6 +103,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 showStatus("Translate target: ${KeyboardPrefs.target(this)}")
             }.also { toolbar.addView(it) }
 
+            toolbar.addView(actionButton("📋") { showClipboardPanel() })
             toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Fix") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
             toolbar.addView(actionButton("Tone") { runAnaAction(AnaApi.Action.TONE) }.also { aiButtons += it })
@@ -80,15 +114,38 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             targetButton = Button(this).apply { visibility = View.GONE }
         }
 
+        suggestionStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(2), dp(4), dp(2))
+            setBackgroundColor(Color.argb(238, 31, 31, 31))
+        }
+        repeat(3) {
+            val cell = TextView(this).apply {
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(dp(5), 0, dp(5), 0)
+                setOnClickListener {
+                    val suggestion = text.toString().trim()
+                    if (suggestion.isNotEmpty()) applySuggestion(suggestion)
+                }
+            }
+            suggestionButtons += cell
+            suggestionStrip.addView(cell, LinearLayout.LayoutParams(0, dp(38), 1f))
+        }
+        root.addView(suggestionStrip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
+
         status = TextView(this).apply {
-            text = "Ana"
-            textSize = 12f
+            text = "Ana • suggestions stay local"
+            textSize = 11f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), 0, dp(10), 0)
             setBackgroundColor(Color.argb(225, 35, 35, 35))
         }
-        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)))
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
 
         contentHost = FrameLayout(this)
         keyboard = AnaKeyboardView(this).apply {
@@ -99,6 +156,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             listener = object : EmojiPanelView.Listener {
                 override fun onEmoji(emoji: String) {
                     currentInputConnection?.commitText(emoji, 1)
+                    clearSuggestions()
                 }
 
                 override fun onGifRequested() {
@@ -110,16 +168,40 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 }
             }
         }
+        clipboardPanel = ClipboardPanelView(this).apply {
+            visibility = View.GONE
+            listener = object : ClipboardPanelView.Listener {
+                override fun onPaste(text: String) {
+                    currentInputConnection?.commitText(text, 1)
+                    KeyboardPrefs.rememberClipboard(this@AnaKeyboardService, text)
+                    showLetterKeyboard()
+                    requestSuggestionsSoon()
+                }
+
+                override fun onBackToLetters() {
+                    showLetterKeyboard()
+                }
+
+                override fun onClearHistory() {
+                    KeyboardPrefs.clearClipboardHistory(this@AnaKeyboardService)
+                    refreshClipboardPanel()
+                    showStatus("Clipboard history cleared")
+                }
+            }
+        }
         contentHost.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         contentHost.addView(emojiPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        contentHost.addView(clipboardPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(contentHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
 
-        // Intentional blank safety row: keeps the lowest keys away from the system navigation edge.
+        // Blank safety row keeps the lowest keys above the system navigation edge.
         root.addView(View(this).apply {
             setBackgroundColor(keyboardShellColor())
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
 
         loadBackgroundImage()
+        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        clearSuggestions()
         updateAiAvailability()
         return root
     }
@@ -132,20 +214,49 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             loadBackgroundImage()
             inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
+            suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+            requestSuggestionsSoon()
         }
     }
 
     private fun showEmojiPanel() {
         if (!::emojiPanel.isInitialized) return
         keyboard.visibility = View.GONE
+        clipboardPanel.visibility = View.GONE
         emojiPanel.visibility = View.VISIBLE
         showStatus("Smileys")
     }
 
-    private fun showLetterKeyboard() {
-        if (!::emojiPanel.isInitialized || !::keyboard.isInitialized) return
+    private fun showClipboardPanel() {
+        if (!::clipboardPanel.isInitialized) return
+        if (isPasswordField()) {
+            showStatus("Clipboard is hidden in password fields")
+            return
+        }
+        refreshClipboardPanel()
+        keyboard.visibility = View.GONE
         emojiPanel.visibility = View.GONE
+        clipboardPanel.visibility = View.VISIBLE
+        showStatus("Clipboard")
+    }
+
+    private fun refreshClipboardPanel() {
+        if (!::clipboardPanel.isInitialized || isPasswordField()) return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val primary = clipboard.primaryClip
+        if (primary != null && primary.itemCount > 0) {
+            val text = primary.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
+            if (text.isNotBlank()) KeyboardPrefs.rememberClipboard(this, text)
+        }
+        clipboardPanel.setItems(KeyboardPrefs.clipboardHistory(this))
+    }
+
+    private fun showLetterKeyboard() {
+        if (!::emojiPanel.isInitialized || !::keyboard.isInitialized || !::clipboardPanel.isInitialized) return
+        emojiPanel.visibility = View.GONE
+        clipboardPanel.visibility = View.GONE
         keyboard.visibility = View.VISIBLE
+        requestSuggestionsSoon()
     }
 
     private fun keyboardShellColor(): Int = when (KeyboardPrefs.theme(this)) {
@@ -174,6 +285,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         super.onStartInput(attribute, restarting)
         capsLock = false
         lastSpaceTap = 0L
+        clearSuggestions()
         if (::keyboard.isInitialized) {
             keyboard.setSymbols(false)
             refreshShiftFromEditor()
@@ -196,21 +308,29 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val connection = currentInputConnection ?: return
         when (code) {
             "SHIFT" -> handleShift()
-            "SYMBOLS" -> keyboard.setSymbols(true)
+            "SYMBOLS" -> {
+                keyboard.setSymbols(true)
+                clearSuggestions()
+            }
             "ABC" -> {
                 keyboard.setSymbols(false)
                 refreshShiftFromEditor()
+                requestSuggestionsSoon()
             }
             "EMOJI" -> showEmojiPanel()
-            "GLOBE" -> switchToNextInputMethod(false)
+            "CLIPBOARD" -> showClipboardPanel()
             "BACKSPACE" -> {
                 val selected = connection.getSelectedText(0)?.toString().orEmpty()
                 if (selected.isNotEmpty()) connection.commitText("", 1)
                 else connection.deleteSurroundingText(1, 0)
                 refreshShiftFromEditor()
+                requestSuggestionsSoon()
             }
             "SPACE" -> handleSpace()
-            "ENTER" -> handleEnter()
+            "ENTER" -> {
+                handleEnter()
+                clearSuggestions()
+            }
             else -> {
                 var typed = code
                 if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) typed = code.uppercase()
@@ -218,12 +338,84 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 if (punctuation && KeyboardPrefs.autoSpaceAfterPunctuation(this)) connection.commitText("$typed ", 1)
                 else connection.commitText(typed, 1)
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
+                if (typed.any { it.isLetter() }) requestSuggestionsSoon() else clearSuggestions()
             }
         }
     }
 
+    private fun currentWord(): String? {
+        val before = currentInputConnection?.getTextBeforeCursor(80, 0)?.toString().orEmpty()
+        if (before.isBlank()) return null
+        return Regex("([\\p{L}']{2,})$").find(before)?.value
+    }
+
+    private fun requestSuggestionsSoon() {
+        mainHandler.removeCallbacks(suggestionRunnable)
+        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
+            clearSuggestions()
+            return
+        }
+        mainHandler.postDelayed(suggestionRunnable, 110)
+    }
+
+    private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
+        if (!::suggestionStrip.isInitialized || isPasswordField()) return
+        if (currentWord() != word || !KeyboardPrefs.wordSuggestionsEnabled(this)) return
+        val clean = suggestions
+            .filterNot { it.equals(word, ignoreCase = true) }
+            .distinctBy { it.lowercase() }
+            .take(3)
+        lastSuggestedWord = word
+        lastLooksLikeTypo = looksLikeTypo
+        bestCorrection = clean.firstOrNull()
+        suggestionButtons.forEachIndexed { index, button ->
+            button.text = clean.getOrNull(index).orEmpty()
+            button.alpha = if (button.text.isNullOrEmpty()) 0f else 1f
+        }
+    }
+
+    private fun clearSuggestions() {
+        if (::suggestionButtons.isInitialized) {
+            suggestionButtons.forEach { it.text = ""; it.alpha = 0f }
+        }
+        lastSuggestedWord = ""
+        bestCorrection = null
+        lastLooksLikeTypo = false
+    }
+
+    private fun applySuggestion(suggestion: String) {
+        val connection = currentInputConnection ?: return
+        val word = currentWord() ?: return
+        val replacement = adjustCase(word, suggestion)
+        connection.deleteSurroundingText(word.length, 0)
+        connection.commitText(replacement, 1)
+        clearSuggestions()
+        refreshShiftFromEditor()
+    }
+
+    private fun adjustCase(original: String, suggestion: String): String {
+        return when {
+            original.all { !it.isLetter() || it.isUpperCase() } -> suggestion.uppercase()
+            original.firstOrNull()?.isUpperCase() == true -> suggestion.replaceFirstChar { it.uppercase() }
+            else -> suggestion.lowercase()
+        }
+    }
+
+    private fun maybeAutoCorrectCurrentWord() {
+        if (!KeyboardPrefs.autoCorrectionEnabled(this)) return
+        val connection = currentInputConnection ?: return
+        val word = currentWord() ?: return
+        val correction = bestCorrection ?: return
+        if (!lastLooksLikeTypo || word != lastSuggestedWord || correction.equals(word, ignoreCase = true)) return
+        val replacement = adjustCase(word, correction)
+        connection.deleteSurroundingText(word.length, 0)
+        connection.commitText(replacement, 1)
+        clearSuggestions()
+    }
+
     private fun handleSpace() {
         val connection = currentInputConnection ?: return
+        maybeAutoCorrectCurrentWord()
         val now = SystemClock.elapsedRealtime()
         val before = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
         val canPeriod = KeyboardPrefs.doubleSpacePeriodEnabled(this) && now - lastSpaceTap < 420 &&
@@ -236,6 +428,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             connection.commitText(" ", 1)
             lastSpaceTap = now
         }
+        clearSuggestions()
         refreshShiftFromEditor()
     }
 
@@ -313,8 +506,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val password = isPasswordField()
         aiButtons.forEach { it.isEnabled = !password }
         if (::targetButton.isInitialized) targetButton.isEnabled = !password
-        if (password) status.text = "Ana AI disabled in password fields"
-        else status.text = "Ana • normal typing stays local"
+        if (password) {
+            status.text = "Ana AI, suggestions and clipboard are disabled in password fields"
+            clearSuggestions()
+        } else status.text = "Ana • suggestions stay local"
     }
 
     private data class ActionText(val text: String, val selected: Boolean)
@@ -377,6 +572,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     }
                     setAiBusy(false)
                     showStatus("Done")
+                    clearSuggestions()
                     refreshShiftFromEditor()
                 }
             } catch (error: Exception) {
@@ -398,11 +594,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         status.text = message
         mainHandler.removeCallbacksAndMessages(STATUS_TOKEN)
         mainHandler.postAtTime({
-            if (!isPasswordField()) status.text = "Ana • normal typing stays local"
+            if (!isPasswordField()) status.text = "Ana • suggestions stay local"
         }, STATUS_TOKEN, SystemClock.uptimeMillis() + 2800)
     }
 
     override fun onDestroy() {
+        suggestionEngine.close()
         executor.shutdownNow()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
