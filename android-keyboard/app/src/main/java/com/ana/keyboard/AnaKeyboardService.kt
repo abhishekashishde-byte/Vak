@@ -1,17 +1,24 @@
 package com.ana.keyboard
 
+import android.Manifest
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -35,6 +42,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var suggestionStrip: LinearLayout
     private lateinit var suggestionEngine: LocalSuggestionEngine
     private var inputLanguageButton: Button? = null
+    private var voiceButton: Button? = null
     private val aiButtons = mutableListOf<Button>()
     private val suggestionButtons = mutableListOf<TextView>()
     private val executor = Executors.newSingleThreadExecutor()
@@ -45,6 +53,16 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var lastSuggestedWord = ""
     private var bestCorrection: String? = null
     private var lastLooksLikeTypo = false
+
+    private var pendingGlide: String? = null
+    private var pendingGlideCapitalized = false
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var voiceListening = false
+
+    private val glideFallbackRunnable = Runnable {
+        val raw = pendingGlide ?: return@Runnable
+        commitGlide(raw)
+    }
 
     private val suggestionRunnable = Runnable {
         if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
@@ -104,6 +122,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }.also { toolbar.addView(it) }
 
             toolbar.addView(actionButton("📋") { showClipboardPanel() })
+            voiceButton = actionButton("🎤") { toggleVoiceTyping() }.also { toolbar.addView(it) }
+            toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Fix") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
             toolbar.addView(actionButton("Tone") { runAnaAction(AnaApi.Action.TONE) }.also { aiButtons += it })
@@ -138,7 +158,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         root.addView(suggestionStrip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42)))
 
         status = TextView(this).apply {
-            text = "Ana • suggestions stay local"
+            text = "Ana • suggestions & glide stay local"
             textSize = 11f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER_VERTICAL
@@ -207,6 +227,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        stopVoiceTyping(false)
         if (::keyboard.isInitialized) {
             showLetterKeyboard()
             keyboard.refreshPreferences()
@@ -220,6 +241,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun showEmojiPanel() {
         if (!::emojiPanel.isInitialized) return
+        stopVoiceTyping(false)
         keyboard.visibility = View.GONE
         clipboardPanel.visibility = View.GONE
         emojiPanel.visibility = View.VISIBLE
@@ -232,6 +254,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Clipboard is hidden in password fields")
             return
         }
+        stopVoiceTyping(false)
         refreshClipboardPanel()
         keyboard.visibility = View.GONE
         emojiPanel.visibility = View.GONE
@@ -274,7 +297,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         minWidth = 0
         minimumWidth = 0
         setPadding(dp(13), 0, dp(13), 0)
-        setOnClickListener { onClick() }
+        setOnClickListener {
+            animate().scaleX(0.94f).scaleY(0.94f).setDuration(55).withEndAction {
+                animate().scaleX(1f).scaleY(1f).setDuration(90).start()
+            }.start()
+            onClick()
+        }
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42)).apply {
             marginEnd = dp(5)
         }
@@ -303,7 +331,32 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
+    override fun onGlide(sequence: String) {
+        val raw = sequence.lowercase().filter { it.isLetter() }
+        if (raw.isBlank()) return
+        if (raw.length == 1 || !KeyboardPrefs.glideTypingEnabled(this)) {
+            onKey(raw)
+            return
+        }
+
+        pendingGlide?.let { commitGlide(it) }
+        pendingGlide = raw
+        pendingGlideCapitalized = keyboard.isShifted()
+        mainHandler.removeCallbacks(glideFallbackRunnable)
+
+        if (isPasswordField()) {
+            commitGlide(raw)
+            return
+        }
+
+        showStatus("Glide: $raw…")
+        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        suggestionEngine.request(raw)
+        mainHandler.postDelayed(glideFallbackRunnable, 480)
+    }
+
     override fun onKey(code: String) {
+        pendingGlide?.let { commitGlide(it) }
         val connection = currentInputConnection ?: return
         when (code) {
             "SHIFT" -> handleShift()
@@ -358,6 +411,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
+        val glide = pendingGlide
+        if (glide != null && glide == word) {
+            mainHandler.removeCallbacks(glideFallbackRunnable)
+            val candidate = if (looksLikeTypo) suggestions.firstOrNull().orEmpty() else ""
+            commitGlide(candidate.ifBlank { glide })
+            return
+        }
+
         if (!::suggestionStrip.isInitialized || isPasswordField()) return
         if (currentWord() != word || !KeyboardPrefs.wordSuggestionsEnabled(this)) return
         val clean = suggestions
@@ -371,6 +432,22 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             button.text = clean.getOrNull(index).orEmpty()
             button.alpha = if (button.text.isNullOrEmpty()) 0f else 1f
         }
+    }
+
+    private fun commitGlide(value: String) {
+        val raw = pendingGlide ?: value
+        mainHandler.removeCallbacks(glideFallbackRunnable)
+        val connection = currentInputConnection
+        if (connection != null) {
+            val clean = value.trim().ifBlank { raw }
+            val finalWord = if (pendingGlideCapitalized) clean.replaceFirstChar { it.uppercase() } else clean.lowercase()
+            connection.commitText("$finalWord ", 1)
+        }
+        pendingGlide = null
+        pendingGlideCapitalized = false
+        clearSuggestions()
+        if (!capsLock) keyboard.setShifted(false)
+        refreshShiftFromEditor()
     }
 
     private fun clearSuggestions() {
@@ -505,10 +582,106 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val password = isPasswordField()
         aiButtons.forEach { it.isEnabled = !password }
         if (::targetButton.isInitialized) targetButton.isEnabled = !password
+        voiceButton?.isEnabled = !password
         if (password) {
-            status.text = "Ana AI, suggestions and clipboard are disabled in password fields"
+            status.text = "Ana AI, voice, suggestions and clipboard are disabled in password fields"
             clearSuggestions()
-        } else status.text = "Ana • suggestions stay local"
+        } else status.text = "Ana • suggestions & glide stay local"
+    }
+
+    private fun toggleVoiceTyping() {
+        if (voiceListening) stopVoiceTyping(true) else startVoiceTyping()
+    }
+
+    private fun startVoiceTyping() {
+        if (!KeyboardPrefs.voiceTypingEnabled(this)) {
+            showStatus("Voice typing is turned off in Ana Keyboard settings")
+            return
+        }
+        if (isPasswordField()) {
+            showStatus("Voice typing is disabled in password fields")
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            startActivity(Intent(this, MicrophonePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            showStatus("Allow microphone access, then tap 🎤 again")
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            showStatus("No Android speech recognizer is available on this device")
+            return
+        }
+
+        if (speechRecognizer == null) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+                setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        voiceListening = true
+                        voiceButton?.text = "■"
+                        showStatus("Listening…")
+                    }
+
+                    override fun onBeginningOfSpeech() = Unit
+                    override fun onRmsChanged(rmsdB: Float) = Unit
+                    override fun onBufferReceived(buffer: ByteArray?) = Unit
+                    override fun onEndOfSpeech() {
+                        showStatus("Finishing dictation…")
+                    }
+
+                    override fun onError(error: Int) {
+                        currentInputConnection?.finishComposingText()
+                        voiceListening = false
+                        voiceButton?.text = "🎤"
+                        showStatus("Voice typing stopped")
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                        if (text.isNotBlank()) currentInputConnection?.commitText("$text ", 1)
+                        else currentInputConnection?.finishComposingText()
+                        voiceListening = false
+                        voiceButton?.text = "🎤"
+                        clearSuggestions()
+                        refreshShiftFromEditor()
+                        showStatus(if (text.isBlank()) "Nothing heard" else "Dictation inserted")
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                        if (partial.isNotBlank()) currentInputConnection?.setComposingText(partial, 1)
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                })
+            }
+        }
+
+        val localeTag = when (KeyboardPrefs.inputBadge(this)) {
+            "DE" -> "de-DE"
+            "HIN" -> "en-IN"
+            else -> "en-US"
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+        voiceListening = true
+        voiceButton?.text = "■"
+        speechRecognizer?.startListening(intent)
+        showStatus("Listening…")
+    }
+
+    private fun stopVoiceTyping(showMessage: Boolean) {
+        if (!voiceListening) return
+        try {
+            speechRecognizer?.stopListening()
+        } catch (_: Exception) {
+        }
+        voiceListening = false
+        voiceButton?.text = "🎤"
+        if (showMessage) showStatus("Voice typing stopped")
     }
 
     private data class ActionText(val text: String, val selected: Boolean)
@@ -537,13 +710,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         val source = actionText()
         if (source == null) {
-            showStatus("Type or select some text first")
+            showStatus(if (action == AnaApi.Action.WRITE) "Type or dictate what you want to write, then tap Write" else "Type or select some text first")
             return
         }
         val connection = currentInputConnection ?: return
-        val target = KeyboardPrefs.target(this)
+        val target = if (action == AnaApi.Action.WRITE) KeyboardPrefs.inputLanguage(this) else KeyboardPrefs.target(this)
         setAiBusy(true)
-        showStatus("Ana is working…")
+        showStatus(if (action == AnaApi.Action.WRITE) "Ana is drafting…" else "Ana is working…")
 
         executor.execute {
             try {
@@ -593,11 +766,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         status.text = message
         mainHandler.removeCallbacksAndMessages(STATUS_TOKEN)
         mainHandler.postAtTime({
-            if (!isPasswordField()) status.text = "Ana • suggestions stay local"
+            if (!isPasswordField() && !voiceListening) status.text = "Ana • suggestions & glide stay local"
         }, STATUS_TOKEN, SystemClock.uptimeMillis() + 2800)
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(glideFallbackRunnable)
+        stopVoiceTyping(false)
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         suggestionEngine.close()
         executor.shutdownNow()
         mainHandler.removeCallbacksAndMessages(null)
