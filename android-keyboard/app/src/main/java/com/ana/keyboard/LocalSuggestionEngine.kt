@@ -6,6 +6,7 @@ import android.view.textservice.SuggestionsInfo
 import android.view.textservice.TextInfo
 import android.view.textservice.TextServicesManager
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class LocalSuggestionEngine(
     private val context: Context,
@@ -18,12 +19,18 @@ class LocalSuggestionEngine(
     )
 
     private val manager = context.getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE) as TextServicesManager
+    private val offline = OfflineFrequencyLexicon(context.applicationContext)
+    private val worker = Executors.newSingleThreadExecutor()
     private var session: SpellCheckerSession? = null
     private var badge = ""
     private var sequence = 0
     private val requests = mutableMapOf<Int, Pending>()
     private var personalWords = emptySet<String>()
     private var learnedCorrections = emptyMap<String, String>()
+
+    init {
+        worker.execute { offline.warmUp() }
+    }
 
     fun setLanguage(inputBadge: String) {
         if (badge == inputBadge && session != null) {
@@ -58,13 +65,17 @@ class LocalSuggestionEngine(
         learnedCorrections[clean]?.let { replacement ->
             return CoreLexicon.Result(listOf(replacement), true)
         }
-        return CoreLexicon.suggestions(clean, if (badge.isBlank()) "EN" else badge)
+        val effectiveBadge = if (badge.isBlank()) "EN" else badge
+        return offline.suggestions(clean, effectiveBadge)
+            ?: CoreLexicon.suggestions(clean, effectiveBadge)
     }
 
     fun decodeGlide(sequence: String): String? {
         val clean = sequence.trim().lowercase()
         learnedCorrections[clean]?.let { return it }
-        return CoreLexicon.decodeGlide(clean, if (badge.isBlank()) "EN" else badge)
+        val effectiveBadge = if (badge.isBlank()) "EN" else badge
+        return offline.decodeGlide(clean, effectiveBadge)
+            ?: CoreLexicon.decodeGlide(clean, effectiveBadge)
     }
 
     fun request(word: String) {
@@ -84,25 +95,24 @@ class LocalSuggestionEngine(
             return
         }
 
-        val local = localResult(clean)
-        if (local.suggestions.isNotEmpty()) {
+        val effectiveBadge = if (badge.isBlank()) "EN" else badge
+        worker.execute {
+            val local = offline.suggestions(clean, effectiveBadge)
+                ?: CoreLexicon.suggestions(clean, effectiveBadge)
             onResult(clean, local.suggestions, local.highConfidenceTypo)
         }
 
-        if (session == null) setLanguage(if (badge.isBlank()) "EN" else badge)
-        val currentSession = session ?: run {
-            if (local.suggestions.isEmpty()) onResult(clean, emptyList(), false)
-            return
-        }
-
+        if (session == null) setLanguage(effectiveBadge)
+        val currentSession = session ?: return
+        val fallback = CoreLexicon.suggestions(clean, effectiveBadge)
         val id = ++sequence
-        requests[id] = Pending(clean, local)
+        synchronized(requests) { requests[id] = Pending(clean, fallback) }
         currentSession.getSuggestions(TextInfo(clean, 0, id), 5)
     }
 
     override fun onGetSuggestions(results: Array<SuggestionsInfo>) {
         results.forEach { info ->
-            val pending = requests.remove(info.sequence) ?: return@forEach
+            val pending = synchronized(requests) { requests.remove(info.sequence) } ?: return@forEach
             val platform = mutableListOf<String>()
             for (i in 0 until info.suggestionsCount) {
                 val value = info.getSuggestionAt(i)?.trim().orEmpty()
@@ -115,19 +125,22 @@ class LocalSuggestionEngine(
                 .filterNot { it.equals(pending.word, ignoreCase = true) }
                 .distinctBy { it.lowercase() }
                 .take(5)
-            onResult(
-                pending.word,
-                merged,
-                platformTypo || pending.local.highConfidenceTypo
-            )
+            if (merged.isNotEmpty() || platformTypo || pending.local.highConfidenceTypo) {
+                onResult(
+                    pending.word,
+                    merged,
+                    platformTypo || pending.local.highConfidenceTypo
+                )
+            }
         }
     }
 
     override fun onGetSentenceSuggestions(results: Array<out android.view.textservice.SentenceSuggestionsInfo>?) = Unit
 
     fun close() {
-        requests.clear()
+        synchronized(requests) { requests.clear() }
         session?.close()
         session = null
+        worker.shutdownNow()
     }
 }
