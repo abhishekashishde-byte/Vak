@@ -36,15 +36,22 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
         orientation = VERTICAL
         setBackgroundColor(Color.rgb(26, 26, 26))
         addView(output, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)))
-        addView(keyboard, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(292)))
+        addView(
+            keyboard,
+            LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(KeyboardSizing.keyboardHeightDp(context)))
+        )
         suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(context))
         refreshFromSettings()
     }
 
     fun refreshFromSettings() {
         suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(context))
+        keyboard.layoutParams = keyboard.layoutParams.apply {
+            height = dp(KeyboardSizing.keyboardHeightDp(context))
+        }
         keyboard.refreshPreferences()
         loadBackground()
+        requestLayout()
         invalidate()
     }
 
