@@ -55,6 +55,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var backgroundBitmap: Bitmap? = null
     private var alternatePopup: AlternatePopup? = null
     private var backspaceRepeated = false
+    private var cachedPalette: Palette? = null
 
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -133,6 +134,7 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     fun refreshPreferences() {
         placed = emptyList()
+        cachedPalette = null
         clearPressState()
         invalidate()
     }
@@ -169,7 +171,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         result.add(r1.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
         result.add(r2.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
         result.add(buildList {
-            add(KeySpec(if (shifted) "⇧" else "↑", "SHIFT", 1.48f))
+            add(KeySpec("", "SHIFT", 1.48f))
             addAll(r3Letters.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
             add(KeySpec("⌫", "BACKSPACE", 1.48f))
         })
@@ -191,6 +193,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     }
 
     private fun layoutKeys(): List<PlacedKey> {
+        if (width <= 0 || height <= 0) return emptyList()
         val rows = rows()
         val outer = dp(5f)
         val gap = dp(3f)
@@ -228,6 +231,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     }
 
     private fun displayLabel(key: KeySpec): String = when {
+        key.code == "SHIFT" -> if (shifted) "⇧" else "↑"
         key.code == "EMOJI" -> ""
         key.letter && shifted -> key.label.uppercase()
         key.letter -> key.label.lowercase()
@@ -275,23 +279,28 @@ class AnaKeyboardView @JvmOverloads constructor(
         val accent: Int
     )
 
-    private fun palette(): Palette = when (KeyboardPrefs.theme(context)) {
-        "light" -> Palette(
-            Color.rgb(225, 228, 232), Color.argb(238, 250, 250, 250), Color.argb(238, 205, 209, 215),
-            Color.rgb(183, 189, 198), Color.rgb(25, 25, 25), Color.rgb(65, 115, 245)
-        )
-        "midnight" -> Palette(
-            Color.BLACK, Color.argb(220, 28, 28, 30), Color.argb(230, 43, 43, 46),
-            Color.rgb(76, 78, 83), Color.WHITE, Color.rgb(100, 170, 255)
-        )
-        "gold" -> Palette(
-            Color.rgb(17, 17, 17), Color.argb(225, 48, 48, 48), Color.argb(235, 63, 59, 46),
-            Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(230, 181, 65)
-        )
-        else -> Palette(
-            Color.rgb(26, 26, 26), Color.argb(228, 54, 54, 54), Color.argb(235, 66, 66, 66),
-            Color.rgb(86, 88, 92), Color.WHITE, Color.rgb(100, 170, 255)
-        )
+    private fun palette(): Palette {
+        cachedPalette?.let { return it }
+        val value = when (KeyboardPrefs.theme(context)) {
+            "light" -> Palette(
+                Color.rgb(225, 228, 232), Color.argb(238, 250, 250, 250), Color.argb(238, 205, 209, 215),
+                Color.rgb(183, 189, 198), Color.rgb(25, 25, 25), Color.rgb(65, 115, 245)
+            )
+            "midnight" -> Palette(
+                Color.BLACK, Color.argb(220, 28, 28, 30), Color.argb(230, 43, 43, 46),
+                Color.rgb(76, 78, 83), Color.WHITE, Color.rgb(100, 170, 255)
+            )
+            "gold" -> Palette(
+                Color.rgb(17, 17, 17), Color.argb(225, 48, 48, 48), Color.argb(235, 63, 59, 46),
+                Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(230, 181, 65)
+            )
+            else -> Palette(
+                Color.rgb(26, 26, 26), Color.argb(228, 54, 54, 54), Color.argb(235, 66, 66, 66),
+                Color.rgb(86, 88, 92), Color.WHITE, Color.rgb(100, 170, 255)
+            )
+        }
+        cachedPalette = value
+        return value
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -299,7 +308,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         val colors = palette()
         canvas.drawColor(colors.background)
         drawBackgroundImage(canvas)
-        placed = layoutKeys()
+        if (placed.isEmpty()) placed = layoutKeys()
 
         placed.forEach { item ->
             val pressed = !gliding && active?.key == item.key && active?.row == item.row
@@ -329,6 +338,11 @@ class AnaKeyboardView @JvmOverloads constructor(
         val popup = alternatePopup
         if (popup != null) drawAlternatePopup(canvas, popup, colors)
         else if (!gliding) active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        if (w != oldw || h != oldh) placed = emptyList()
+        super.onSizeChanged(w, h, oldw, oldh)
     }
 
     private fun drawSpecialIcon(canvas: Canvas, item: PlacedKey, rect: RectF, colors: Palette): Boolean {
