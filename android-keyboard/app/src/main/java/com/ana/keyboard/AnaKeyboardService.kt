@@ -38,6 +38,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var keyboard: AnaKeyboardView
     private lateinit var emojiPanel: EmojiPanelView
     private lateinit var clipboardPanel: ClipboardPanelView
+    private lateinit var languagePicker: TranslationLanguagePickerView
     private lateinit var contentHost: FrameLayout
     private lateinit var status: TextView
     private lateinit var targetButton: Button
@@ -97,6 +98,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onCreateInputView(): View {
         aiButtons.clear()
         suggestionButtons.clear()
+        voiceButton = null
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -124,13 +126,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }.also { toolbar.addView(it) }
 
             targetButton = actionButton("→ ${KeyboardPrefs.targetBadge(this)}") {
-                KeyboardPrefs.cycleTarget(this)
-                targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
-                showStatus("Translate target: ${KeyboardPrefs.target(this)}")
+                showLanguagePicker()
             }.also { toolbar.addView(it) }
 
             toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
-            voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }.also { toolbar.addView(it) }
+            if (KeyboardPrefs.voiceTypingEnabled(this)) {
+                voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
+                    .also { toolbar.addView(it) }
+            }
             toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Fix") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
@@ -143,28 +146,30 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             targetButton = Button(this).apply { visibility = View.GONE }
         }
 
-        suggestionStrip = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(4), dp(1), dp(4), dp(1))
-            setBackgroundColor(Color.argb(238, 31, 31, 31))
-        }
-        repeat(3) {
-            val cell = TextView(this).apply {
-                textSize = 16f
-                setTextColor(Color.WHITE)
+        if (KeyboardPrefs.wordSuggestionsEnabled(this)) {
+            suggestionStrip = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                maxLines = 1
-                setPadding(dp(5), 0, dp(5), 0)
-                setOnClickListener {
-                    val suggestion = text.toString().trim()
-                    if (suggestion.isNotEmpty()) applySuggestion(suggestion)
-                }
+                setPadding(dp(4), dp(1), dp(4), dp(1))
+                setBackgroundColor(Color.argb(238, 31, 31, 31))
             }
-            suggestionButtons += cell
-            suggestionStrip.addView(cell, LinearLayout.LayoutParams(0, dp(38), 1f))
+            repeat(3) {
+                val cell = TextView(this).apply {
+                    textSize = 16f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    setPadding(dp(5), 0, dp(5), 0)
+                    setOnClickListener {
+                        val suggestion = text.toString().trim()
+                        if (suggestion.isNotEmpty()) applySuggestion(suggestion)
+                    }
+                }
+                suggestionButtons += cell
+                suggestionStrip.addView(cell, LinearLayout.LayoutParams(0, dp(38), 1f))
+            }
+            root.addView(suggestionStrip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
         }
-        root.addView(suggestionStrip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
 
         status = TextView(this).apply {
             text = defaultStatus()
@@ -216,10 +221,26 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 }
             }
         }
+        languagePicker = TranslationLanguagePickerView(this).apply {
+            visibility = View.GONE
+            listener = object : TranslationLanguagePickerView.Listener {
+                override fun onLanguageSelected(name: String) {
+                    KeyboardPrefs.setTarget(this@AnaKeyboardService, name)
+                    targetButton.text = "→ ${KeyboardPrefs.targetBadge(this@AnaKeyboardService)}"
+                    showLetterKeyboard()
+                    showStatus("Translate to $name")
+                }
+
+                override fun onBackToKeyboard() {
+                    showLetterKeyboard()
+                }
+            }
+        }
 
         contentHost.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         contentHost.addView(emojiPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         contentHost.addView(clipboardPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        contentHost.addView(languagePicker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(contentHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
 
         root.addView(View(this).apply {
@@ -256,15 +277,22 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
             suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+            suggestionEngine.refreshUserData()
             requestSuggestionsSoon()
         }
+    }
+
+    private fun hidePanels() {
+        if (::emojiPanel.isInitialized) emojiPanel.visibility = View.GONE
+        if (::clipboardPanel.isInitialized) clipboardPanel.visibility = View.GONE
+        if (::languagePicker.isInitialized) languagePicker.visibility = View.GONE
+        if (::keyboard.isInitialized) keyboard.visibility = View.GONE
     }
 
     private fun showEmojiPanel() {
         if (!::emojiPanel.isInitialized) return
         stopVoiceTyping(false)
-        keyboard.visibility = View.GONE
-        clipboardPanel.visibility = View.GONE
+        hidePanels()
         emojiPanel.visibility = View.VISIBLE
         showStatus("Emoji")
     }
@@ -277,10 +305,18 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         stopVoiceTyping(false)
         refreshClipboardPanel()
-        keyboard.visibility = View.GONE
-        emojiPanel.visibility = View.GONE
+        hidePanels()
         clipboardPanel.visibility = View.VISIBLE
         showStatus("Clipboard")
+    }
+
+    private fun showLanguagePicker() {
+        if (!::languagePicker.isInitialized || isPasswordField()) return
+        stopVoiceTyping(false)
+        languagePicker.refresh()
+        hidePanels()
+        languagePicker.visibility = View.VISIBLE
+        showStatus("Choose translation language")
     }
 
     private fun refreshClipboardPanel() {
@@ -295,9 +331,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun showLetterKeyboard() {
-        if (!::emojiPanel.isInitialized || !::keyboard.isInitialized || !::clipboardPanel.isInitialized) return
-        emojiPanel.visibility = View.GONE
-        clipboardPanel.visibility = View.GONE
+        if (!::keyboard.isInitialized) return
+        hidePanels()
         keyboard.visibility = View.VISIBLE
         requestSuggestionsSoon()
     }
@@ -439,7 +474,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             clearSuggestions()
             return
         }
-        mainHandler.postDelayed(suggestionRunnable, 150)
+        mainHandler.postDelayed(suggestionRunnable, 170)
     }
 
     private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
@@ -463,7 +498,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }
         }
 
-        if (!::suggestionStrip.isInitialized || isPasswordField()) return
+        if (isPasswordField()) return
         if (currentWord() != word || !KeyboardPrefs.wordSuggestionsEnabled(this)) return
 
         val clean = suggestions
@@ -521,6 +556,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val replacement = adjustCase(word, suggestion)
         connection.deleteSurroundingText(word.length, 0)
         connection.commitText(replacement, 1)
+        KeyboardPrefs.learnCorrection(this, word, suggestion)
+        suggestionEngine.refreshUserData()
         clearSuggestions()
         refreshShiftFromEditor()
     }
@@ -533,8 +570,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun immediateCorrection(word: String): String? {
         if (!KeyboardPrefs.autoCorrectionEnabled(this)) return null
-        if (word.length < 4) return null
+        if (word.length < 3) return null
         if (word.firstOrNull()?.isUpperCase() == true) return null
+
+        KeyboardPrefs.learnedCorrections(this)[word.lowercase()]?.let { return it }
+        if (KeyboardPrefs.personalDictionary(this).any { it.equals(word, ignoreCase = true) }) return null
 
         if (lastLooksLikeTypo && lastSuggestedWord == word) {
             bestCorrection?.takeIf { !it.equals(word, ignoreCase = true) }?.let { return it }
