@@ -26,6 +26,11 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
+      - name: Prepare Ana launcher icon
+        run: |
+          mkdir -p android-keyboard/app/src/main/res/drawable-nodpi
+          base64 --decode android-keyboard/app/icon/ana_keyboard_icon.b64 > android-keyboard/app/src/main/res/drawable-nodpi/ana_keyboard_icon.png
+
       - name: Build debug APK
         working-directory: android-keyboard
         run: gradle :app:assembleDebug --stacktrace
