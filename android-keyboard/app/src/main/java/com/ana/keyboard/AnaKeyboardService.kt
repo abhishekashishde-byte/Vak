@@ -1146,7 +1146,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (::targetButton.isInitialized) targetButton.isEnabled = !busy
     }
 
-    private fun defaultStatus(): String = "Ana • typing, correction and glide stay local"
+    private fun defaultStatus(): String = "Ana • local typing · AI when enabled"
 
     private fun showStatus(message: String) {
         if (!::status.isInitialized) return
