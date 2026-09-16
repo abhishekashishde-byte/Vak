@@ -35,3 +35,5 @@ jobs:
                   android-keyboard/app/build.gradle.kts api/translate.js
           git commit -m "Stabilize Ana typing and sentence correction" || exit 0
           git push
+
+# Trigger marker: v0.8 stability pass
