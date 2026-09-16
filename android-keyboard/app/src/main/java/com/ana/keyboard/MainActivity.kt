@@ -88,11 +88,11 @@ class MainActivity : Activity() {
         root.addView(navRow("Theme", themeSummary()) { renderTheme() })
 
         root.addView(section("Typing"))
-        root.addView(navRow("Corrections and suggestions", "Auto-capitalisation, shortcuts and Ana toolbar") { renderCorrections() })
+        root.addView(navRow("Corrections and suggestions", "Local spell-check suggestions and auto-correction") { renderCorrections() })
         root.addView(navRow("Glide typing", "Planned — not active yet") { renderComingSoon("Glide typing", listOf("Glide from letter to letter", "Glide trail", "Glide delete", "Space-bar cursor control")) })
         root.addView(navRow("Voice typing", "Planned — not active yet") { renderComingSoon("Voice typing", listOf("Tap-to-dictate", "Multilingual dictation", "Private voice controls")) })
-        root.addView(navRow("Emojis, stickers and GIFs", "Emoji panel planned") { renderComingSoon("Emojis, stickers and GIFs", listOf("Dedicated emoji key", "Recent emoji", "Emoji suggestions", "GIF search")) })
-        root.addView(navRow("Clipboard", "Clipboard tools planned") { renderComingSoon("Clipboard", listOf("Recent clips", "Pinned clips", "Auto-clear sensitive clips")) })
+        root.addView(navRow("Emojis, stickers and GIFs", "Emoji panel active • GIF search planned") { renderEmojiSettings() })
+        root.addView(navRow("Clipboard", "Paste current and recent local clipboard items") { renderClipboardSettings() })
 
         root.addView(section("Ana"))
         root.addView(navRow("Ana & privacy", "Server address, AI actions and password protection") { renderAna() })
@@ -132,6 +132,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) { KeyboardPrefs.setNumberRowEnabled(this, it) })
         root.addView(switchRow("Comma key", "Show comma on the main keyboard", KeyboardPrefs.commaKeyEnabled(this)) { KeyboardPrefs.setCommaKeyEnabled(this, it) })
         root.addView(switchRow("Full stop key", "Show full stop on the main keyboard", KeyboardPrefs.fullStopKeyEnabled(this)) { KeyboardPrefs.setFullStopKeyEnabled(this, it) })
+        root.addView(infoCard("Switch keyboards", "The globe key was removed from Ana. Use Android's keyboard switcher when you want to move to Gboard or another installed keyboard."))
 
         root.addView(section("Key tap"))
         root.addView(switchRow("Sound", "Play a click when tapping keys", KeyboardPrefs.soundEnabled(this)) { KeyboardPrefs.setSoundEnabled(this, it) })
@@ -171,6 +172,7 @@ class MainActivity : Activity() {
             }
             startActivityForResult(intent, REQUEST_BACKGROUND)
         })
+        root.addView(backgroundTintCard())
         if (current.isNotBlank()) {
             root.addView(actionCard("Remove background image") {
                 KeyboardPrefs.setBackgroundUri(this, "")
@@ -184,14 +186,37 @@ class MainActivity : Activity() {
         currentScreen = "corrections"
         val root = page("Corrections and suggestions")
         root.addView(section("Automatic corrections"))
+        root.addView(switchRow("Auto-correction", "Correct likely misspellings when you press space", KeyboardPrefs.autoCorrectionEnabled(this)) { KeyboardPrefs.setAutoCorrectionEnabled(this, it) })
         root.addView(switchRow("Auto-capitalisation", "Capitalise sentence starts while using the keyboard", KeyboardPrefs.autoCapitalisationEnabled(this)) { KeyboardPrefs.setAutoCapitalisationEnabled(this, it) })
         root.addView(switchRow("Double-space full stop", "Period + space after double-tapping space", KeyboardPrefs.doubleSpacePeriodEnabled(this)) { KeyboardPrefs.setDoubleSpacePeriodEnabled(this, it) })
 
         root.addView(section("Suggestion strip"))
+        root.addView(switchRow("Word suggestions", "Use Android's on-device spell checker for correction suggestions", KeyboardPrefs.wordSuggestionsEnabled(this)) { KeyboardPrefs.setWordSuggestionsEnabled(this, it) })
         root.addView(switchRow("Ana toolbar", "Show language, Translate, Fix, Tone and Shorter above the keys", KeyboardPrefs.toolbarEnabled(this)) { KeyboardPrefs.setToolbarEnabled(this, it) })
-        root.addView(disabledRow("Word suggestions", "Coming later — no fake predictions in this build"))
-        root.addView(disabledRow("Next-word suggestions", "Coming later — contextual prediction needs a proper language model"))
-        root.addView(disabledRow("Smart replies", "Coming later"))
+        root.addView(infoCard("Languages", "English and German use the phone's installed spelling dictionaries. Hinglish currently falls back to the device's English (India) dictionary, so suggestions are more limited."))
+        root.addView(disabledRow("Next-word suggestions", "Planned — this is different from spelling correction and needs a proper prediction model"))
+        root.addView(disabledRow("Smart replies", "Planned — not active yet"))
+    }
+
+    private fun renderEmojiSettings() {
+        currentScreen = "emoji"
+        val root = page("Emojis, stickers and GIFs")
+        root.addView(section("Emoji"))
+        root.addView(infoCard("Emoji panel", "Tap 😊 on the keyboard to open the emoji panel. Emoji insertion works locally."))
+        root.addView(section("GIFs"))
+        root.addView(disabledRow("GIF search", "The GIF button is prepared, but online search needs a GIF provider/API before it can be enabled safely."))
+    }
+
+    private fun renderClipboardSettings() {
+        currentScreen = "clipboard"
+        val root = page("Clipboard")
+        root.addView(section("Clipboard access"))
+        root.addView(infoCard("Tap 📋 on the keyboard", "Ana reads the system clipboard only when you open the clipboard panel. It does not monitor your clipboard in the background."))
+        root.addView(infoCard("Recent clips", "Up to 10 recent text clips are stored locally on this device for quick pasting. Clipboard access is blocked in password fields."))
+        root.addView(actionCard("Clear local clipboard history") {
+            KeyboardPrefs.clearClipboardHistory(this)
+            Toast.makeText(this, "Clipboard history cleared", Toast.LENGTH_SHORT).show()
+        })
     }
 
     private fun renderAna() {
@@ -221,8 +246,9 @@ class MainActivity : Activity() {
 
         root.addView(section("Privacy"))
         root.addView(infoCard("Normal typing stays local", "Ana does not send ordinary keystrokes to the server."))
+        root.addView(infoCard("Local spelling suggestions", "Word correction uses Android's on-device spell-check service, not the Ana cloud API."))
         root.addView(infoCard("AI only on tap", "Text is sent only when you explicitly tap Translate, Fix, Tone or Shorter."))
-        root.addView(infoCard("Password protection", "Ana AI actions are disabled in password fields."))
+        root.addView(infoCard("Password protection", "Ana AI, suggestions and clipboard access are disabled in password fields."))
     }
 
     private fun renderComingSoon(title: String, items: List<String>) {
@@ -263,6 +289,31 @@ class MainActivity : Activity() {
                     val ms = progress + 1
                     KeyboardPrefs.setHapticStrengthMs(this@MainActivity, ms)
                     value.text = "Vibration strength on keypress: $ms ms"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        })
+        return wrap
+    }
+
+    private fun backgroundTintCard(): View {
+        val wrap = cardContainer()
+        val value = TextView(this).apply {
+            text = "Background tint: ${KeyboardPrefs.backgroundTintPercent(this@MainActivity)}%"
+            textSize = 17f
+            setTextColor(textColor)
+        }
+        wrap.addView(value)
+        wrap.addView(subText("0% keeps the photo bright. Higher values darken it so the keys stay readable."))
+        wrap.addView(SeekBar(this).apply {
+            max = 80
+            progress = KeyboardPrefs.backgroundTintPercent(this@MainActivity)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    KeyboardPrefs.setBackgroundTintPercent(this@MainActivity, progress)
+                    value.text = "Background tint: $progress%"
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
@@ -396,7 +447,8 @@ class MainActivity : Activity() {
             "gold" -> "Ana Gold"
             else -> "Default dark"
         }
-        return if (KeyboardPrefs.backgroundUri(this).isBlank()) base else "$base • Custom photo"
+        val tint = KeyboardPrefs.backgroundTintPercent(this)
+        return if (KeyboardPrefs.backgroundUri(this).isBlank()) base else "$base • Custom photo • $tint% tint"
     }
 
     companion object {
