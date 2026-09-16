@@ -50,10 +50,11 @@ class LocalSuggestionEngine(
     override fun onGetSuggestions(results: Array<SuggestionsInfo>) {
         results.forEach { info ->
             val word = requests.remove(info.sequence) ?: return@forEach
-            val suggestions = buildList {
-                for (i in 0 until info.suggestionsCount) {
-                    val value = info.getSuggestionAt(i)?.trim().orEmpty()
-                    if (value.isNotEmpty() && none { it.equals(value, ignoreCase = true) }) add(value)
+            val suggestions = mutableListOf<String>()
+            for (i in 0 until info.suggestionsCount) {
+                val value = info.getSuggestionAt(i)?.trim().orEmpty()
+                if (value.isNotEmpty() && suggestions.none { existing -> existing.equals(value, ignoreCase = true) }) {
+                    suggestions.add(value)
                 }
             }
             val typo = info.suggestionsAttributes and SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
