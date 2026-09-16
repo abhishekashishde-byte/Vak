@@ -5,6 +5,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@drawable/ana_keyboard_icon"
+        android:roundIcon="@drawable/ana_keyboard_icon"
         android:label="Ana Keyboard"
         android:supportsRtl="true"
         android:theme="@style/Theme.AnaKeyboard"
