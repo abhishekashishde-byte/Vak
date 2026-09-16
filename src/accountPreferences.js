@@ -11,6 +11,7 @@ export const DEFAULT_PRIVACY_SETTINGS = {
   syncAcrossDevices: true,
   disclosureMode: 'always',
   extraPrivacySensitive: true,
+  maskSensitiveBeforeCloud: true,
 }
 
 let installed = false
@@ -196,8 +197,6 @@ export async function hydrateAccountPreferences() {
     if (remoteTs && remoteTs > localTs) {
       applyRemoteBundle(remote)
       const reconciled = getLocalPreferenceBundle()
-      // If the local glossary was newer than the remote glossary, immediately heal
-      // the account bundle so a future refresh or another device cannot erase it.
       if (reconciled.privacy?.syncAcrossDevices !== false && Number(reconciled.glossaryUpdatedAt || 0) > remoteGlossaryTs) {
         await uploadPreferences(user, reconciled, Date.now())
       } else {
