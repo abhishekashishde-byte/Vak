@@ -28,7 +28,7 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
     private val keyboard = AnaKeyboardView(context).apply {
         listener = this@SettingsKeyboardPreviewView
     }
-
+    private val suggestionEngine = LocalSuggestionEngine(context) { _, _, _ -> Unit }
     private val text = StringBuilder()
     private var lastSpaceAt = 0L
 
@@ -37,10 +37,12 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
         setBackgroundColor(Color.rgb(26, 26, 26))
         addView(output, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)))
         addView(keyboard, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(292)))
+        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(context))
         refreshFromSettings()
     }
 
     fun refreshFromSettings() {
+        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(context))
         keyboard.refreshPreferences()
         loadBackground()
         invalidate()
@@ -67,14 +69,16 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
         }
     }
 
-    override fun onGlide(sequence: String) {
-        val clean = sequence.lowercase().filter { it.isLetter() }
-        if (clean.isBlank()) return
-        val learned = KeyboardPrefs.learnedCorrections(context)[clean]
-        val decoded = learned ?: CoreLexicon.decodeGlide(clean, KeyboardPrefs.inputBadge(context)) ?: clean
-        appendText(if (keyboard.isShifted()) decoded.replaceFirstChar { it.uppercase() } else decoded)
-        appendText(" ")
-        keyboard.setShifted(false)
+    override fun onGlide(trace: AnaKeyboardView.GlideTrace) {
+        suggestionEngine.decodeGlideAsync(trace) { decoded ->
+            post {
+                val word = decoded ?: return@post
+                val finalWord = if (keyboard.isShifted()) word.replaceFirstChar { it.uppercase() } else word
+                appendText(finalWord)
+                appendText(" ")
+                keyboard.setShifted(false)
+            }
+        }
     }
 
     override fun onKey(code: String) {
@@ -82,6 +86,11 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
             "SHIFT" -> keyboard.setShifted(!keyboard.isShifted())
             "SYMBOLS" -> keyboard.setSymbols(true)
             "ABC" -> keyboard.setSymbols(false)
+            "LANGUAGE" -> {
+                KeyboardPrefs.cycleInputLanguage(context)
+                suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(context))
+                keyboard.refreshPreferences()
+            }
             "BACKSPACE" -> {
                 if (text.isNotEmpty()) text.deleteCharAt(text.lastIndex)
                 updateOutput()
@@ -123,7 +132,7 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
         val lower = source.lowercase()
         if (KeyboardPrefs.personalDictionary(context).any { it.equals(source, ignoreCase = true) }) return
         val learned = KeyboardPrefs.learnedCorrections(context)[lower]
-        val replacement = learned ?: CoreLexicon.suggestions(lower, KeyboardPrefs.inputBadge(context))
+        val replacement = learned ?: suggestionEngine.fastResult(lower)
             .takeIf { it.highConfidenceTypo }
             ?.suggestions
             ?.firstOrNull()
@@ -161,6 +170,11 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
         } catch (_: Exception) {
             keyboard.setBackgroundBitmap(null)
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        suggestionEngine.close()
+        super.onDetachedFromWindow()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
