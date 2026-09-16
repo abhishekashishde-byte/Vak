@@ -25,6 +25,9 @@ object KeyboardPrefs {
     private const val KEY_WORD_SUGGESTIONS = "word_suggestions"
     private const val KEY_AUTO_CORRECTION = "auto_correction"
     private const val KEY_CLIPBOARD_HISTORY = "clipboard_history"
+    private const val KEY_GLIDE_TYPING = "glide_typing"
+    private const val KEY_GLIDE_TRAIL = "glide_trail"
+    private const val KEY_VOICE_TYPING = "voice_typing"
 
     val targets = listOf(
         "German" to "DE",
@@ -111,6 +114,15 @@ object KeyboardPrefs {
 
     fun autoCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_CORRECTION, true)
     fun setAutoCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_CORRECTION, enabled).apply()
+
+    fun glideTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_GLIDE_TYPING, true)
+    fun setGlideTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TYPING, enabled).apply()
+
+    fun glideTrailEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_GLIDE_TRAIL, true)
+    fun setGlideTrailEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TRAIL, enabled).apply()
+
+    fun voiceTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_VOICE_TYPING, true)
+    fun setVoiceTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_VOICE_TYPING, enabled).apply()
 
     fun clipboardHistory(context: Context): List<String> {
         val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"
