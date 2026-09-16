@@ -22,10 +22,16 @@ class LocalSuggestionEngine(
     private var badge = ""
     private var sequence = 0
     private val requests = mutableMapOf<Int, Pending>()
+    private var personalWords = emptySet<String>()
+    private var learnedCorrections = emptyMap<String, String>()
 
     fun setLanguage(inputBadge: String) {
-        if (badge == inputBadge && session != null) return
+        if (badge == inputBadge && session != null) {
+            refreshUserData()
+            return
+        }
         badge = inputBadge
+        refreshUserData()
         session?.close()
         requests.clear()
         val locale = when (inputBadge) {
@@ -36,16 +42,45 @@ class LocalSuggestionEngine(
         session = manager.newSpellCheckerSession(null, locale, this, true)
     }
 
-    fun localResult(word: String): CoreLexicon.Result =
-        CoreLexicon.suggestions(word, if (badge.isBlank()) "EN" else badge)
+    fun refreshUserData() {
+        val effectiveBadge = if (badge.isBlank()) "EN" else badge
+        personalWords = KeyboardPrefs.personalDictionary(context, effectiveBadge)
+            .map { it.lowercase() }
+            .toSet()
+        learnedCorrections = KeyboardPrefs.learnedCorrections(context, effectiveBadge)
+            .mapKeys { it.key.lowercase() }
+            .mapValues { it.value.lowercase() }
+    }
 
-    fun decodeGlide(sequence: String): String? =
-        CoreLexicon.decodeGlide(sequence, if (badge.isBlank()) "EN" else badge)
+    fun localResult(word: String): CoreLexicon.Result {
+        val clean = word.trim().lowercase()
+        if (clean in personalWords) return CoreLexicon.Result(emptyList(), false)
+        learnedCorrections[clean]?.let { replacement ->
+            return CoreLexicon.Result(listOf(replacement), true)
+        }
+        return CoreLexicon.suggestions(clean, if (badge.isBlank()) "EN" else badge)
+    }
+
+    fun decodeGlide(sequence: String): String? {
+        val clean = sequence.trim().lowercase()
+        learnedCorrections[clean]?.let { return it }
+        return CoreLexicon.decodeGlide(clean, if (badge.isBlank()) "EN" else badge)
+    }
 
     fun request(word: String) {
         val clean = word.trim()
         if (clean.length < 2) {
             onResult(clean, emptyList(), false)
+            return
+        }
+
+        val lower = clean.lowercase()
+        if (lower in personalWords) {
+            onResult(clean, emptyList(), false)
+            return
+        }
+        learnedCorrections[lower]?.let { replacement ->
+            onResult(clean, listOf(replacement), true)
             return
         }
 
