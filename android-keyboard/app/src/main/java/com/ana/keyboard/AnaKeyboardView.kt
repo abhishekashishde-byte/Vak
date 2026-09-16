@@ -102,22 +102,22 @@ class AnaKeyboardView @JvmOverloads constructor(
 
         val (r1, r2, r3Letters) = letterRows()
         val result = mutableListOf<List<KeySpec>>()
-        if (KeyboardPrefs.numberRowEnabled(context)) result += "1234567890".map { KeySpec(it.toString()) }
-        result += r1.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
-        result += r2.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
-        result += buildList {
+        if (KeyboardPrefs.numberRowEnabled(context)) result.add("1234567890".map { KeySpec(it.toString()) })
+        result.add(r1.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) })
+        result.add(r2.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) })
+        result.add(buildList {
             add(KeySpec(if (shifted) "⇧" else "↑", "SHIFT", 1.35f))
             addAll(r3Letters.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) })
             add(KeySpec("⌫", "BACKSPACE", 1.35f))
-        }
-        result += buildList {
+        })
+        result.add(buildList {
             add(KeySpec("?123", "SYMBOLS", 1.35f))
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(","))
             add(KeySpec("🌐", "GLOBE", 1.0f))
             add(KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 3.5f else 4.3f))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec("."))
             add(KeySpec("↵", "ENTER", 1.25f))
-        }
+        })
         return result
     }
 
