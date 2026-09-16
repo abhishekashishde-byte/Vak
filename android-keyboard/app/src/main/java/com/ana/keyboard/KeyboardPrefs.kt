@@ -32,6 +32,7 @@ object KeyboardPrefs {
     private const val KEY_VOICE_TYPING = "voice_typing"
     private const val KEY_PERSONAL_DICTIONARY_PREFIX = "personal_dictionary_"
     private const val KEY_LEARNED_CORRECTIONS_PREFIX = "learned_corrections_"
+    private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
 
     data class TranslationTarget(val name: String, val badge: String)
 
@@ -137,6 +138,7 @@ object KeyboardPrefs {
         return next
     }
     fun inputBadge(context: Context): String = inputLanguages.firstOrNull { it.first == inputLanguage(context) }?.second ?: "EN"
+    fun inputDisplayBadge(context: Context): String = if (inputBadge(context) == "HIN") "IN" else inputBadge(context)
 
     fun numberRowEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_NUMBER_ROW, true)
     fun setNumberRowEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_NUMBER_ROW, enabled).apply()
@@ -156,7 +158,8 @@ object KeyboardPrefs {
     fun autoSpaceAfterPunctuation(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_SPACE_PUNCT, true)
     fun setAutoSpaceAfterPunctuation(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_SPACE_PUNCT, enabled).apply()
 
-    fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, false)
+    // Compact toolbar now contains only the useful Ana actions (Translate, Write, clipboard, mic, target language).
+    fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, true)
     fun setToolbarEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_TOOLBAR, enabled).apply()
 
     fun theme(context: Context): String = prefs(context).getString(KEY_THEME, "dark") ?: "dark"
@@ -277,4 +280,11 @@ object KeyboardPrefs {
     }
 
     fun clearClipboardHistory(context: Context) = prefs(context).edit().remove(KEY_CLIPBOARD_HISTORY).apply()
+
+    fun setPendingGifUri(context: Context, uri: String) = prefs(context).edit().putString(KEY_PENDING_GIF_URI, uri).apply()
+    fun consumePendingGifUri(context: Context): String {
+        val value = prefs(context).getString(KEY_PENDING_GIF_URI, "").orEmpty()
+        if (value.isNotBlank()) prefs(context).edit().remove(KEY_PENDING_GIF_URI).apply()
+        return value
+    }
 }
