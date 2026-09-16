@@ -16,7 +16,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Space
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -25,8 +24,8 @@ class MainActivity : Activity() {
     private val bg = Color.rgb(52, 52, 54)
     private val card = Color.rgb(31, 31, 33)
     private val card2 = Color.rgb(42, 42, 45)
-    private val text = Color.WHITE
-    private val sub = Color.rgb(190, 190, 195)
+    private val textColor = Color.WHITE
+    private val subColor = Color.rgb(190, 190, 195)
     private val accent = Color.rgb(230, 181, 65)
     private var currentScreen = "home"
 
@@ -60,16 +59,16 @@ class MainActivity : Activity() {
             top.addView(TextView(this).apply {
                 text = "‹"
                 textSize = 42f
-                setTextColor(text)
+                setTextColor(textColor)
                 gravity = Gravity.CENTER
                 setPadding(0, 0, dp(16), 0)
                 setOnClickListener { renderHome() }
             }, LinearLayout.LayoutParams(dp(52), dp(58)))
         }
         top.addView(TextView(this).apply {
-            this.text = title
+            text = title
             textSize = if (currentScreen == "home") 30f else 28f
-            setTextColor(text)
+            setTextColor(textColor)
             setTypeface(typeface, Typeface.NORMAL)
             gravity = Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, dp(64), 1f))
@@ -202,7 +201,7 @@ class MainActivity : Activity() {
         val baseUrl = EditText(this).apply {
             hint = "https://your-ana-domain.com"
             setHintTextColor(Color.GRAY)
-            setTextColor(text)
+            setTextColor(textColor)
             setText(KeyboardPrefs.baseUrl(this@MainActivity))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
@@ -252,7 +251,7 @@ class MainActivity : Activity() {
         val value = TextView(this).apply {
             text = "Vibration strength on keypress: ${KeyboardPrefs.hapticStrengthMs(this@MainActivity)} ms"
             textSize = 17f
-            setTextColor(text)
+            setTextColor(textColor)
         }
         wrap.addView(value)
         wrap.addView(SeekBar(this).apply {
@@ -279,7 +278,7 @@ class MainActivity : Activity() {
         copy.addView(titleText(title))
         copy.addView(subText(subtitle))
         row.addView(copy, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(TextView(this).apply { text = "›"; textSize = 32f; setTextColor(sub); gravity = Gravity.CENTER })
+        row.addView(TextView(this).apply { text = "›"; textSize = 32f; setTextColor(subColor); gravity = Gravity.CENTER })
         wrap.addView(row)
         return wrap
     }
@@ -334,7 +333,7 @@ class MainActivity : Activity() {
         text = label
         isAllCaps = false
         textSize = 16f
-        setTextColor(text)
+        setTextColor(textColor)
         background = rounded(card, 20)
         setOnClickListener { onClick() }
         layoutParams = marginParams(dp(6)).apply { height = dp(58) }
@@ -352,20 +351,20 @@ class MainActivity : Activity() {
     private fun titleText(value: String) = TextView(this).apply {
         text = value
         textSize = 18f
-        setTextColor(text)
+        setTextColor(textColor)
     }
 
     private fun subText(value: String) = TextView(this).apply {
         text = value
         textSize = 14f
-        setTextColor(sub)
+        setTextColor(subColor)
         setPadding(0, dp(4), 0, 0)
     }
 
     private fun summary(value: String) = TextView(this).apply {
         text = value
         textSize = 15f
-        setTextColor(sub)
+        setTextColor(subColor)
         setPadding(dp(4), 0, dp(4), dp(12))
     }
 
