@@ -1,0 +1,41 @@
+name: Add Ana keyboard hero demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/add-keyboard-demo-to-meet-ana.py'
+      - '.github/workflows/add-keyboard-hero-demo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source recording
+        run: |
+          python -m pip install --quiet gdown
+          gdown 1NU1fmz8x8FW-vzUHuoxPJncZWXmbmSoN -O /tmp/ana-keyboard-source.mp4
+          test -s /tmp/ana-keyboard-source.mp4
+      - name: Create lightweight muted hero loop
+        run: |
+          ffmpeg -y -ss 4 -i /tmp/ana-keyboard-source.mp4 -t 14 -an \
+            -vf "drawbox=x=0:y=2380:w=iw:h=120:color=0x232323@0.98:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='Ana Keyboard':x=34:y=2402:fontsize=48:fontcolor=white@0.82,scale=540:-2:flags=lanczos" \
+            -c:v libx264 -preset medium -crf 25 -movflags +faststart -r 30 \
+            public/meet-ana/ana-keyboard-demo.mp4
+          test -s public/meet-ana/ana-keyboard-demo.mp4
+      - name: Update Meet Ana hero and keyboard status copy
+        run: python3 scripts/add-keyboard-demo-to-meet-ana.py
+      - name: Verify web build
+        run: npm install --no-audit --no-fund && npm run build
+      - name: Commit final assets
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/meet-ana/index.html public/meet-ana/ana-keyboard-demo.mp4 android-keyboard/app/src/main/java/com/ana/keyboard/AnaKeyboardService.kt
+          git commit -m "Show Ana Keyboard demo on Meet Ana" || exit 0
+          git push
