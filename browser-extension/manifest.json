@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Ana — communicate anywhere",
+  "version": "0.1.0",
+  "description": "Send selected webpage text to Ana for translation, rewriting, explanation or replies.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "contextMenus", "storage", "activeTab", "scripting"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_title": "Open Ana" },
+  "side_panel": { "default_path": "sidepanel.html" }
+}
