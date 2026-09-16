@@ -36,6 +36,12 @@
             android:name=".GifPickerActivity"
             android:exported="false" />
 
+        <provider
+            android:name=".GifContentProvider"
+            android:authorities="com.ana.keyboard.gifs"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".AnaKeyboardService"
             android:exported="true"
