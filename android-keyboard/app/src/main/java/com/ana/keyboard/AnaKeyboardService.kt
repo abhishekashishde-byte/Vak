@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -25,6 +26,8 @@ import java.util.concurrent.Executors
 
 class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var keyboard: AnaKeyboardView
+    private lateinit var emojiPanel: EmojiPanelView
+    private lateinit var contentHost: FrameLayout
     private lateinit var status: TextView
     private lateinit var targetButton: Button
     private var inputLanguageButton: Button? = null
@@ -87,10 +90,35 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)))
 
+        contentHost = FrameLayout(this)
         keyboard = AnaKeyboardView(this).apply {
             listener = this@AnaKeyboardService
         }
-        root.addView(keyboard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
+        emojiPanel = EmojiPanelView(this).apply {
+            visibility = View.GONE
+            listener = object : EmojiPanelView.Listener {
+                override fun onEmoji(emoji: String) {
+                    currentInputConnection?.commitText(emoji, 1)
+                }
+
+                override fun onGifRequested() {
+                    showStatus("GIF search needs an online GIF provider — not enabled yet")
+                }
+
+                override fun onBackToLetters() {
+                    showLetterKeyboard()
+                }
+            }
+        }
+        contentHost.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        contentHost.addView(emojiPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(contentHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)))
+
+        // Intentional blank safety row: keeps the lowest keys away from the system navigation edge.
+        root.addView(View(this).apply {
+            setBackgroundColor(keyboardShellColor())
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34)))
+
         loadBackgroundImage()
         updateAiAvailability()
         return root
@@ -99,11 +127,25 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         if (::keyboard.isInitialized) {
+            showLetterKeyboard()
             keyboard.refreshPreferences()
             loadBackgroundImage()
             inputLanguageButton?.text = KeyboardPrefs.inputBadge(this)
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
         }
+    }
+
+    private fun showEmojiPanel() {
+        if (!::emojiPanel.isInitialized) return
+        keyboard.visibility = View.GONE
+        emojiPanel.visibility = View.VISIBLE
+        showStatus("Smileys")
+    }
+
+    private fun showLetterKeyboard() {
+        if (!::emojiPanel.isInitialized || !::keyboard.isInitialized) return
+        emojiPanel.visibility = View.GONE
+        keyboard.visibility = View.VISIBLE
     }
 
     private fun keyboardShellColor(): Int = when (KeyboardPrefs.theme(this)) {
@@ -159,6 +201,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 keyboard.setSymbols(false)
                 refreshShiftFromEditor()
             }
+            "EMOJI" -> showEmojiPanel()
             "GLOBE" -> switchToNextInputMethod(false)
             "BACKSPACE" -> {
                 val selected = connection.getSelectedText(0)?.toString().orEmpty()
