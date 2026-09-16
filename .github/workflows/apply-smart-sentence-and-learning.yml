@@ -17,7 +17,7 @@ jobs:
       - name: Apply Ana updates
         run: python3 scripts/apply-smart-sentence-and-learning.py
       - name: Verify web build
-        run: npm ci && npm run build
+        run: npm install --no-audit --no-fund && npm run build
       - name: Commit changes
         shell: bash
         run: |
