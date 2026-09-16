@@ -25,3 +25,5 @@ jobs:
           git add android-keyboard/app/src/main/java/com/ana/keyboard/AnaKeyboardService.kt
           git commit -m "Make Ana sentence correction trigger after typing pauses" || exit 0
           git push
+
+# trigger
