@@ -1,10 +1,12 @@
 package com.ana.keyboard
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Handler
@@ -12,6 +14,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.hypot
 import kotlin.math.max
 
 class AnaKeyboardView @JvmOverloads constructor(
@@ -21,6 +24,7 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     interface Listener {
         fun onKey(code: String)
+        fun onGlide(sequence: String)
         fun onPressFeedback(view: View)
     }
 
@@ -43,16 +47,38 @@ class AnaKeyboardView @JvmOverloads constructor(
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val longPressHandler = Handler(Looper.getMainLooper())
 
+    private var downX = 0f
+    private var downY = 0f
+    private var gliding = false
+    private val glidePoints = mutableListOf<Pair<Float, Float>>()
+    private val glideLetters = mutableListOf<String>()
+    private var fadingTrail = emptyList<Pair<Float, Float>>()
+    private var trailAlpha = 0
+    private var trailAnimator: ValueAnimator? = null
+
+    private var pressAmount = 0f
+    private var pressAnimator: ValueAnimator? = null
+    private var pulseX = 0f
+    private var pulseY = 0f
+    private var pulseProgress = 1f
+    private var pulseAnimator: ValueAnimator? = null
+
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL)
     }
+    private val trailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val repeatBackspace = object : Runnable {
         override fun run() {
-            if (active?.key?.code != "BACKSPACE") return
+            if (active?.key?.code != "BACKSPACE" || gliding) return
             backspaceRepeated = true
             listener?.onKey("BACKSPACE")
             repeatHandler.postDelayed(this, 55)
@@ -60,6 +86,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     }
 
     private val showAlternates = Runnable {
+        if (gliding) return@Runnable
         val current = active ?: return@Runnable
         val options = alternatesFor(current.key) ?: return@Runnable
         alternatePopup = createAlternatePopup(current, options)
@@ -201,19 +228,19 @@ class AnaKeyboardView @JvmOverloads constructor(
     private fun palette(): Palette = when (KeyboardPrefs.theme(context)) {
         "light" -> Palette(
             Color.rgb(225, 228, 232), Color.argb(238, 250, 250, 250), Color.argb(238, 205, 209, 215),
-            Color.rgb(185, 190, 198), Color.rgb(25, 25, 25), Color.rgb(210, 214, 220)
+            Color.rgb(185, 190, 198), Color.rgb(25, 25, 25), Color.rgb(65, 115, 245)
         )
         "midnight" -> Palette(
             Color.BLACK, Color.argb(220, 28, 28, 30), Color.argb(230, 43, 43, 46),
-            Color.rgb(78, 78, 82), Color.WHITE, Color.rgb(48, 55, 59)
+            Color.rgb(78, 78, 82), Color.WHITE, Color.rgb(100, 170, 255)
         )
         "gold" -> Palette(
             Color.rgb(17, 17, 17), Color.argb(225, 48, 48, 48), Color.argb(235, 63, 59, 46),
-            Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(102, 82, 38)
+            Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(230, 181, 65)
         )
         else -> Palette(
             Color.rgb(26, 26, 26), Color.argb(228, 54, 54, 54), Color.argb(235, 66, 66, 66),
-            Color.rgb(88, 88, 88), Color.WHITE, Color.rgb(62, 72, 76)
+            Color.rgb(88, 88, 88), Color.WHITE, Color.rgb(100, 170, 255)
         )
     }
 
@@ -225,25 +252,32 @@ class AnaKeyboardView @JvmOverloads constructor(
         placed = layoutKeys()
 
         placed.forEach { item ->
-            val pressed = active?.key == item.key && active?.rect == item.rect
-            val special = item.key.code.length > 1 && item.key.code !in setOf("SPACE")
+            val pressed = !gliding && active?.key == item.key && active?.rect == item.rect
+            val special = item.key.code.length > 1 && item.key.code != "SPACE"
             keyPaint.color = when {
                 pressed -> colors.pressedKey
                 special -> colors.specialKey
                 else -> colors.normalKey
             }
-            canvas.drawRoundRect(item.rect, dp(7f), dp(7f), keyPaint)
+            val rect = if (pressed) {
+                val expand = dp(1.8f) * pressAmount
+                RectF(item.rect.left - expand, item.rect.top - expand - dp(1f) * pressAmount, item.rect.right + expand, item.rect.bottom + expand)
+            } else item.rect
+            canvas.drawRoundRect(rect, dp(7f), dp(7f), keyPaint)
 
             val label = displayLabel(item.key)
             textPaint.textSize = if (label.length > 4) dp(13f) else dp(20f)
             textPaint.color = colors.text
-            val baseline = item.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(label, item.rect.centerX(), baseline, textPaint)
+            val baseline = rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(label, rect.centerX(), baseline, textPaint)
         }
+
+        drawTrail(canvas, colors)
+        drawReleasePulse(canvas, colors)
 
         val popup = alternatePopup
         if (popup != null) drawAlternatePopup(canvas, popup, colors)
-        else active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
+        else if (!gliding) active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
     }
 
     private fun drawBackgroundImage(canvas: Canvas) {
@@ -266,6 +300,34 @@ class AnaKeyboardView @JvmOverloads constructor(
             keyPaint.color = Color.argb(alpha, 0, 0, 0)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), keyPaint)
         }
+    }
+
+    private fun drawTrail(canvas: Canvas, colors: Palette) {
+        if (!KeyboardPrefs.glideTrailEnabled(context)) return
+        val points = if (gliding) glidePoints else fadingTrail
+        if (points.size < 2) return
+        val alpha = if (gliding) 225 else trailAlpha
+        if (alpha <= 0) return
+        val path = Path().apply {
+            moveTo(points.first().first, points.first().second)
+            points.drop(1).forEach { lineTo(it.first, it.second) }
+        }
+        trailPaint.color = colors.preview
+        trailPaint.alpha = alpha
+        trailPaint.strokeWidth = dp(5.5f)
+        canvas.drawPath(path, trailPaint)
+        val last = points.last()
+        keyPaint.color = colors.preview
+        keyPaint.alpha = alpha
+        canvas.drawCircle(last.first, last.second, dp(6.5f), keyPaint)
+        keyPaint.alpha = 255
+    }
+
+    private fun drawReleasePulse(canvas: Canvas, colors: Palette) {
+        if (pulseProgress >= 1f) return
+        pulsePaint.color = colors.preview
+        pulsePaint.alpha = ((1f - pulseProgress) * 80).toInt().coerceIn(0, 80)
+        canvas.drawCircle(pulseX, pulseY, dp(7f) + dp(14f) * pulseProgress, pulsePaint)
     }
 
     private fun drawKeyPreview(canvas: Canvas, item: PlacedKey, colors: Palette) {
@@ -309,6 +371,18 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun keyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { it.rect.contains(x, y) }
 
+    private fun glideKeyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { item ->
+        if (!item.key.letter) return@firstOrNull false
+        val center = RectF(item.rect)
+        center.inset(item.rect.width() * 0.18f, item.rect.height() * 0.18f)
+        center.contains(x, y)
+    }
+
+    private fun appendGlideLetter(item: PlacedKey?) {
+        val code = item?.key?.takeIf { it.letter }?.code ?: return
+        if (glideLetters.lastOrNull() != code) glideLetters += code
+    }
+
     private fun updateAlternateSelection(x: Float, y: Float) {
         val popup = alternatePopup ?: return
         if (y > popup.rect.bottom + dp(18f) || y < popup.rect.top - dp(18f)) {
@@ -326,34 +400,122 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (alternatesFor(item.key) != null) longPressHandler.postDelayed(showAlternates, 360)
     }
 
+    private fun animatePressIn() {
+        pressAnimator?.cancel()
+        pressAmount = 0f
+        pressAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 75
+            addUpdateListener {
+                pressAmount = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun animateReleasePulse(x: Float, y: Float) {
+        pulseAnimator?.cancel()
+        pulseX = x
+        pulseY = y
+        pulseProgress = 0f
+        pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 150
+            addUpdateListener {
+                pulseProgress = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun fadeTrail() {
+        trailAnimator?.cancel()
+        fadingTrail = glidePoints.toList()
+        trailAlpha = 220
+        trailAnimator = ValueAnimator.ofInt(220, 0).apply {
+            duration = 220
+            addUpdateListener {
+                trailAlpha = it.animatedValue as Int
+                invalidate()
+            }
+            doOnEndCompat {
+                fadingTrail = emptyList()
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun ValueAnimator.doOnEndCompat(block: () -> Unit) {
+        addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) = block()
+        })
+    }
+
     private fun clearPressState() {
         repeatHandler.removeCallbacks(repeatBackspace)
         longPressHandler.removeCallbacks(showAlternates)
         active = null
         alternatePopup = null
         backspaceRepeated = false
+        gliding = false
+        glidePoints.clear()
+        glideLetters.clear()
+        pressAmount = 0f
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (placed.isEmpty()) placed = layoutKeys()
+                downX = event.x
+                downY = event.y
+                gliding = false
+                glidePoints.clear()
+                glideLetters.clear()
                 active = keyAt(event.x, event.y)
                 alternatePopup = null
                 backspaceRepeated = false
                 active?.let {
                     listener?.onPressFeedback(this)
+                    animatePressIn()
+                    if (KeyboardPrefs.glideTypingEnabled(context) && it.key.letter && !symbols) {
+                        glidePoints += event.x to event.y
+                        appendGlideLetter(it)
+                    }
                     if (it.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 380)
                     else scheduleLongPress(it)
                 }
                 invalidate()
                 return active != null
             }
+
             MotionEvent.ACTION_MOVE -> {
                 if (alternatePopup != null) {
                     updateAlternateSelection(event.x, event.y)
                     return true
                 }
+
+                val distance = hypot(event.x - downX, event.y - downY)
+                if (!gliding && KeyboardPrefs.glideTypingEnabled(context) && active?.key?.letter == true && distance > dp(12f)) {
+                    gliding = true
+                    repeatHandler.removeCallbacks(repeatBackspace)
+                    longPressHandler.removeCallbacks(showAlternates)
+                    alternatePopup = null
+                }
+
+                if (gliding) {
+                    val last = glidePoints.lastOrNull()
+                    if (last == null || hypot(event.x - last.first, event.y - last.second) > dp(3.5f)) {
+                        glidePoints += event.x to event.y
+                    }
+                    val next = glideKeyAt(event.x, event.y)
+                    appendGlideLetter(next)
+                    active = next
+                    invalidate()
+                    return true
+                }
+
                 val next = keyAt(event.x, event.y)
                 if (next?.key != active?.key) {
                     repeatHandler.removeCallbacks(repeatBackspace)
@@ -362,6 +524,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                     backspaceRepeated = false
                     active?.let {
                         listener?.onPressFeedback(this)
+                        animatePressIn()
                         if (it.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 380)
                         else scheduleLongPress(it)
                     }
@@ -369,9 +532,25 @@ class AnaKeyboardView @JvmOverloads constructor(
                 }
                 return true
             }
+
             MotionEvent.ACTION_UP -> {
                 repeatHandler.removeCallbacks(repeatBackspace)
                 longPressHandler.removeCallbacks(showAlternates)
+
+                if (gliding) {
+                    appendGlideLetter(keyAt(event.x, event.y))
+                    if (glidePoints.lastOrNull() != (event.x to event.y)) glidePoints += event.x to event.y
+                    val sequence = glideLetters.joinToString("")
+                    fadeTrail()
+                    animateReleasePulse(event.x, event.y)
+                    if (sequence.length >= 2) listener?.onGlide(sequence)
+                    else if (sequence.isNotEmpty()) listener?.onKey(sequence)
+                    performClick()
+                    clearPressState()
+                    invalidate()
+                    return true
+                }
+
                 val popup = alternatePopup
                 val selected = active
                 if (selected != null) {
@@ -386,11 +565,13 @@ class AnaKeyboardView @JvmOverloads constructor(
                             performClick()
                         }
                     }
+                    animateReleasePulse(event.x, event.y)
                 }
                 clearPressState()
                 invalidate()
                 return true
             }
+
             MotionEvent.ACTION_CANCEL -> {
                 clearPressState()
                 invalidate()
@@ -403,5 +584,14 @@ class AnaKeyboardView @JvmOverloads constructor(
     override fun performClick(): Boolean {
         super.performClick()
         return true
+    }
+
+    override fun onDetachedFromWindow() {
+        repeatHandler.removeCallbacksAndMessages(null)
+        longPressHandler.removeCallbacksAndMessages(null)
+        pressAnimator?.cancel()
+        trailAnimator?.cancel()
+        pulseAnimator?.cancel()
+        super.onDetachedFromWindow()
     }
 }
