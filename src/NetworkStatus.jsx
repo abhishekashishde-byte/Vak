@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CloudOff, RadioTower } from 'lucide-react'
 import { getNetworkState, subscribeNetworkState } from './networkResilience.js'
 
-export default function NetworkStatus() {
+export default function NetworkStatus({ onOpenEmergency }) {
   const [state, setState] = useState(getNetworkState)
   const [restored, setRestored] = useState(false)
   const previousOnlineRef = useRef(state.online)
@@ -28,6 +28,7 @@ export default function NetworkStatus() {
   if (!state.online) {
     return <div className="ana-network-banner offline" role="status">
       <CloudOff size={15}/><span><strong>You’re offline.</strong> Typed translation drafts stay saved. Voice, documents and Ana’s cloud translation need a connection.</span>
+      {onOpenEmergency && <button type="button" onClick={onOpenEmergency}>Emergency phrases</button>}
     </div>
   }
 

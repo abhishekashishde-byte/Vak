@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Captions, Check, ChevronDown, CircleHelp, Headphones, Languages, Mic, MessagesSquare, ShieldCheck, UsersRound, X } from 'lucide-react'
+import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
@@ -11,7 +11,11 @@ import CameraMode from './CameraMode.jsx'
 import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
 import NetworkStatus from './NetworkStatus.jsx'
+import SensitiveMaskingNotice from './SensitiveMaskingNotice.jsx'
 import LearnCenter from './LearnCenter.jsx'
+import ConversationPrepMode from './ConversationPrepMode.jsx'
+import EmergencyPhrasebook from './EmergencyPhrasebook.jsx'
+import PracticeMode from './PracticeMode.jsx'
 import DomainControl from './DomainControl.jsx'
 import { installDomainFetchInterceptor } from './domainEngine.js'
 import './live.css'
@@ -26,16 +30,22 @@ import './ana-identity.css'
 import './workspace.css'
 import './learn.css'
 import './domain.css'
+import './communication-intelligence.css'
+import './offline-privacy.css'
+import './practice.css'
 
 installDomainFetchInterceptor()
 
 const MAIN_MODES = [
   { id: 'translate', label: 'Translate', description: 'Text, voice, camera, photos and documents', icon: Languages },
+  { id: 'prepare', label: 'Prepare & coach', description: 'Prepare a conversation or check how wording may land', icon: Sparkles },
+  { id: 'practice', label: 'Practice', description: 'Role-play a real conversation and review your language', icon: GraduationCap },
+  { id: 'emergency', label: 'Offline emergency', description: 'Essential phrases that work without internet', icon: WifiOff },
   { id: 'live', label: 'Live', description: 'Interpreter, subtitles or a multi-person room', icon: Mic },
   { id: 'meeting', label: 'Meeting', description: 'Listen, translate and keep the transcript', icon: Headphones },
   { id: 'talk', label: 'Talk for me', description: 'Ana handles the conversation for you', icon: MessagesSquare },
 ]
-const MODE_PARENT = { translate:'translate', scan:'translate', camera:'translate', live:'live', captions:'live', room:'live', meeting:'meeting', talk:'talk' }
+const MODE_PARENT = { translate:'translate', scan:'translate', camera:'translate', prepare:'prepare', practice:'practice', emergency:'emergency', live:'live', captions:'live', room:'live', meeting:'meeting', talk:'talk' }
 const modeParent = mode => MODE_PARENT[mode] || 'translate'
 
 function isFirstVisit() {
@@ -73,7 +83,8 @@ export default function Workspace() {
   }
 
   return <div className="ana-workspace">
-    <NetworkStatus/>
+    <NetworkStatus onOpenEmergency={() => chooseMode('emergency')}/>
+    <SensitiveMaskingNotice/>
 
     <nav className="ana-modebar" aria-label="Ana mode selection">
       <button className="ana-mode-trigger" type="button" onClick={() => setPickerOpen(true)} aria-haspopup="dialog" aria-expanded={pickerOpen}>
@@ -92,6 +103,9 @@ export default function Workspace() {
       {mode === 'translate' && <App onOpenCamera={() => chooseMode('camera')} onOpenDocuments={() => chooseMode('scan')}/>} 
       {mode === 'scan' && <main className="app-shell"><ScanMode/></main>}
       {mode === 'camera' && <main className="app-shell"><CameraMode/></main>}
+      {mode === 'prepare' && <main className="app-shell"><ConversationPrepMode/></main>}
+      {mode === 'practice' && <main className="app-shell"><PracticeMode/></main>}
+      {mode === 'emergency' && <main className="app-shell"><EmergencyPhrasebook/></main>}
       {['live','captions','room'].includes(mode) && <div className="ana-live-stack">
         <div className="ana-live-subnav"><button className={mode === 'live' ? 'active' : ''} onClick={() => chooseMode('live')}><Mic size={14}/>Interpreter</button><button className={mode === 'captions' ? 'active' : ''} onClick={() => chooseMode('captions')}><Captions size={14}/>Subtitles</button><button className={mode === 'room' ? 'active' : ''} onClick={() => chooseMode('room')}><UsersRound size={14}/>Room</button></div>
         {mode === 'live' && <main className="app-shell"><LiveMode/></main>}{mode === 'captions' && <main className="app-shell"><CaptionsMode/></main>}{mode === 'room' && <main className="app-shell"><RoomMode/></main>}
