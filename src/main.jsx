@@ -7,10 +7,12 @@ import { installContextualIntelligence } from './contextualIntelligence.js'
 import { installConversationPrivacyGate } from './conversationPrivacyGate.js'
 import { installCounterpartyView } from './counterpartyView.js'
 import { installGlossaryReliability } from './glossaryReliability.js'
+import { installLocalSensitiveMasking } from './localSensitiveMasking.js'
 import { installNetworkResilience } from './networkResilience.js'
 import { installPersonalLanguageMemory } from './personalLanguageMemory.js'
 import { installPushToTalkFallback } from './pushToTalk.js'
 import { installRealtimeTonePolicy } from './realtimeTone.js'
+import { installSmartGlossaryLearning } from './smartGlossaryLearning.js'
 import { installTalkPolish } from './talkPolish.js'
 import './styles.css'
 import './translateResponsive.css'
@@ -28,6 +30,8 @@ installNetworkResilience()
 installAccountPreferenceSync()
 installPersonalLanguageMemory()
 installGlossaryReliability()
+installSmartGlossaryLearning()
+installLocalSensitiveMasking()
 installContextualIntelligence()
 installRealtimeTonePolicy()
 installTalkPolish()
