@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object AnaApi {
-    enum class Action { TRANSLATE, FIX, TONE, SHORTER }
+    enum class Action { TRANSLATE, FIX, TONE, SHORTER, WRITE }
 
     fun transform(baseUrl: String, text: String, action: Action, target: String): String {
         require(baseUrl.startsWith("https://")) { "Set the Ana https address in the Ana Keyboard app first." }
@@ -18,6 +18,7 @@ object AnaApi {
             Action.FIX -> "You are Ana Keyboard. Correct spelling, grammar and punctuation in the user's text while preserving its language, meaning, names, facts, tone and level of formality. Complete only an obviously unfinished phrase when the intended meaning is clear. Return ONLY the corrected replacement text."
             Action.TONE -> "You are Ana Keyboard. Rewrite the user's text in the same language so it sounds warm, natural and appropriately polite without becoming wordy. Preserve every factual detail and request. Return ONLY the replacement text."
             Action.SHORTER -> "You are Ana Keyboard. Rewrite the user's text in the same language to be shorter and clearer while preserving all important facts, requests, names, dates and numbers. Return ONLY the replacement text."
+            Action.WRITE -> "You are Ana Keyboard's Writing Tool. The user's text is an instruction describing what they want to write. Draft the finished message in $target. Make it natural, clear and appropriate for everyday communication. Preserve every fact the user supplied and do not invent names, dates, promises, prices, commitments or personal details. Return ONLY the finished message, with no labels, explanations or quotation marks."
         }
 
         val endpoint = URL(baseUrl.trimEnd('/') + "/api/translate")
