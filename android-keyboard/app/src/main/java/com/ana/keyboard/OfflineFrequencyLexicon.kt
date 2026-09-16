@@ -29,7 +29,9 @@ class OfflineFrequencyLexicon(private val context: Context) {
         if (clean in dict.exact) return CoreLexicon.Result(emptyList(), false)
 
         val first = clean.first()
-        val buckets = dict.byFirstAndLength[first] ?: return CoreLexicon.Result(emptyList(), false)
+        val candidateFirstLetters = dict.byFirstAndLength.keys.filter { it == first || keyboardAdjacent(first, it) }
+        if (candidateFirstLetters.isEmpty()) return CoreLexicon.Result(emptyList(), false)
+
         val maxEdit = when {
             clean.length <= 4 -> 10
             clean.length <= 7 -> 16
@@ -37,10 +39,13 @@ class OfflineFrequencyLexicon(private val context: Context) {
         }
 
         val candidates = ArrayList<Pair<Entry, Int>>()
-        for (length in (clean.length - 2).coerceAtLeast(2)..(clean.length + 2)) {
-            for (entry in buckets[length].orEmpty()) {
-                val distance = weightedDamerau(clean, entry.word, maxEdit)
-                if (distance <= maxEdit) candidates += entry to distance
+        for (candidateFirst in candidateFirstLetters) {
+            val buckets = dict.byFirstAndLength[candidateFirst] ?: continue
+            for (length in (clean.length - 2).coerceAtLeast(2)..(clean.length + 2)) {
+                for (entry in buckets[length].orEmpty()) {
+                    val distance = weightedDamerau(clean, entry.word, maxEdit)
+                    if (distance <= maxEdit) candidates += entry to distance
+                }
             }
         }
         if (candidates.isEmpty()) return CoreLexicon.Result(emptyList(), false)
@@ -66,27 +71,30 @@ class OfflineFrequencyLexicon(private val context: Context) {
         val trace = collapse(normalize(sequence))
         if (trace.length < 3) return null
         val dict = dictionary(badge) ?: return null
-        val firstBuckets = dict.byFirstAndLength[trace.first()] ?: return null
+        val firstLetters = dict.byFirstAndLength.keys.filter { it == trace.first() || keyboardAdjacent(trace.first(), it) }
 
         var best: Entry? = null
         var bestScore = Int.MAX_VALUE
         val minLength = 3
         val maxLength = (trace.length + 2).coerceAtMost(16)
-        for (length in minLength..maxLength) {
-            for (entry in firstBuckets[length].orEmpty()) {
-                if (entry.word.lastOrNull() != trace.lastOrNull()) continue
-                val pathPenalty = glidePenalty(trace, entry.word)
-                if (pathPenalty >= 60) continue
-                val frequencyBonus = (ln(entry.frequency.coerceAtLeast(1).toDouble()) * 1.8).toInt()
-                val score = pathPenalty * 10 - frequencyBonus
-                if (score < bestScore) {
-                    bestScore = score
-                    best = entry
+        for (first in firstLetters) {
+            val firstBuckets = dict.byFirstAndLength[first] ?: continue
+            for (length in minLength..maxLength) {
+                for (entry in firstBuckets[length].orEmpty()) {
+                    if (entry.word.lastOrNull() != trace.lastOrNull() && !keyboardAdjacent(entry.word.last(), trace.last())) continue
+                    val pathPenalty = glidePenalty(trace, entry.word)
+                    if (pathPenalty >= 60) continue
+                    val frequencyBonus = (ln(entry.frequency.coerceAtLeast(1).toDouble()) * 1.8).toInt()
+                    val score = pathPenalty * 10 - frequencyBonus
+                    if (score < bestScore) {
+                        bestScore = score
+                        best = entry
+                    }
                 }
             }
         }
         val match = best ?: return null
-        return match.word.takeIf { bestScore < 170 }
+        return match.word.takeIf { bestScore < 230 }
     }
 
     private fun dictionary(badge: String): Dictionary? {
@@ -139,7 +147,9 @@ class OfflineFrequencyLexicon(private val context: Context) {
     }
 
     private fun glidePenalty(trace: String, word: String): Int {
-        if (trace.firstOrNull() != word.firstOrNull() || trace.lastOrNull() != word.lastOrNull()) return 100
+        var endpointPenalty = 0
+        if (trace.firstOrNull() != word.firstOrNull()) endpointPenalty += 6
+        if (trace.lastOrNull() != word.lastOrNull()) endpointPenalty += 6
 
         var wi = 0
         var extras = 0
@@ -147,11 +157,11 @@ class OfflineFrequencyLexicon(private val context: Context) {
             if (wi < word.length && ch == word[wi]) wi++ else extras++
         }
         if (wi == word.length) {
-            return extras * 3 + abs(trace.length - word.length)
+            return endpointPenalty + extras * 3 + abs(trace.length - word.length)
         }
 
         val edit = weightedDamerau(trace, word, 30)
-        return edit + abs(trace.length - word.length) * 2
+        return endpointPenalty + edit + abs(trace.length - word.length) * 2
     }
 
     /** Costs are scaled by 10. Adjacent-key substitutions are cheaper. */
