@@ -52,3 +52,5 @@ jobs:
           name: ana-keyboard-debug
           path: android-keyboard/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+# v0.8 stability build trigger
