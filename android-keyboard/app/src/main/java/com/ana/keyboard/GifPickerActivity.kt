@@ -150,7 +150,7 @@ class GifPickerActivity : Activity() {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val base = KeyboardPrefs.baseUrl(this).trimEnd('/')
         if (base.startsWith("https://")) {
-            val proxy = "$base/api/gifs?limit=18" + if (query.isBlank()) "" else "&q=$encoded"
+            val proxy = "$base/api/translate?mode=gifs&limit=18" + if (query.isBlank()) "" else "&q=$encoded"
             try { return fetchNormalized(proxy).takeIf { it.isNotEmpty() } ?: emptyList() }
             catch (e: Exception) { errors += "Ana proxy ${e.message.orEmpty()}" }
         }
