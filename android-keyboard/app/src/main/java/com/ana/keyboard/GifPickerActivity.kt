@@ -142,14 +142,14 @@ class GifPickerActivity : Activity() {
     private fun runSearch() {
         val query = search.text.toString().trim()
         if (query.isBlank()) loadTrending() else loadUrl(
-            "https://api.klipy.com/api/v1/$KLIPY_TEST_KEY/gifs/search?q=${URLEncoder.encode(query, "UTF-8")}&page=1&per_page=16",
+            "https://api.klipy.com/v2/search?key=$KLIPY_TEST_KEY&q=${URLEncoder.encode(query, "UTF-8")}&searchfilter=gif&locale=en_US&contentfilter=medium&media_filter=gif,tinygif&limit=16",
             "Results for “$query”"
         )
     }
 
     private fun loadTrending() {
         loadUrl(
-            "https://api.klipy.com/api/v1/$KLIPY_TEST_KEY/gifs/trending?page=1&per_page=16",
+            "https://api.klipy.com/v2/featured?key=$KLIPY_TEST_KEY&searchfilter=gif&locale=en_US&contentfilter=medium&media_filter=gif,tinygif&limit=16",
             "Trending GIFs"
         )
     }
@@ -182,15 +182,36 @@ class GifPickerActivity : Activity() {
     private fun fetchItems(endpoint: String): List<GifItem> {
         val connection = URL(endpoint).openConnection() as HttpURLConnection
         return try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 12_000
             connection.setRequestProperty("Accept", "application/json")
-            if (connection.responseCode !in 200..299) error("KLIPY ${connection.responseCode}")
+            connection.setRequestProperty("User-Agent", "AnaKeyboard/0.8")
+            if (connection.responseCode !in 200..299) {
+                val errorBody = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                error("KLIPY ${connection.responseCode}: ${errorBody.take(160)}")
+            }
             val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val array = JSONObject(body)
-                .optJSONObject("data")
-                ?.optJSONArray("data") ?: return emptyList()
+            val root = JSONObject(body)
 
+            // Current KLIPY v2 format.
+            root.optJSONArray("results")?.let { array ->
+                return buildList {
+                    for (i in 0 until array.length()) {
+                        val item = array.optJSONObject(i) ?: continue
+                        val formats = item.optJSONObject("media_formats") ?: continue
+                        fun media(name: String): String? = formats.optJSONObject(name)
+                            ?.optString("url")
+                            ?.takeIf { it.startsWith("https://") }
+
+                        val preview = media("tinygif") ?: media("mediumgif") ?: media("gif") ?: continue
+                        val share = media("gif") ?: media("mediumgif") ?: preview
+                        add(GifItem(preview, share, item.optString("title", "GIF")))
+                    }
+                }.take(16)
+            }
+
+            // Backward-compatible v1 format.
+            val array = root.optJSONObject("data")?.optJSONArray("data") ?: return emptyList()
             buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
@@ -200,7 +221,6 @@ class GifPickerActivity : Activity() {
                         ?.optJSONObject("gif")
                         ?.optString("url")
                         ?.takeIf { it.startsWith("https://") }
-
                     val preview = url("xs") ?: url("sm") ?: url("md") ?: url("hd") ?: continue
                     val share = url("md") ?: url("sm") ?: url("hd") ?: preview
                     add(GifItem(preview, share, item.optString("title", "GIF")))

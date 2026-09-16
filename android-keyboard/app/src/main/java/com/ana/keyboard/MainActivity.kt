@@ -148,7 +148,7 @@ class MainActivity : Activity() {
 
         root.addView(menuRow("Languages", "Typing languages and Translate-to language") { renderLanguages() })
         root.addView(menuRow("Themes", themeSummary()) { renderTheme() })
-        root.addView(menuRow("Typing", "Auto-correction, suggestions and glide typing") { renderTyping() })
+        root.addView(menuRow("Typing", "Auto-correction, smart sentence correction and suggestions") { renderTyping() })
         root.addView(menuRow("Rich input", "Voice typing, clipboard and Writing Tool") { renderRichInput() })
         root.addView(menuRow("Layout & keys", "Keyboard size, number row, punctuation and toolbar") { renderLayoutKeys() })
         root.addView(menuRow("Sound & vibration", "Key click and vibration strength") { renderSoundVibration() })
@@ -255,7 +255,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
-        root.addView(switchRow("Smart sentence correction", "After a short pause, Ana can correct grammar and contextual typing mistakes across the whole sentence. This sends that sentence to your Ana server; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
+        root.addView(switchRow("Smart sentence correction", "Automatically check the current sentence after you pause. Fixes grammar, completeness and contextual typing mistakes. The sentence is sent to your Ana server; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
             KeyboardPrefs.setSmartSentenceCorrectionEnabled(this, it)
         })
         root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
@@ -271,14 +271,8 @@ class MainActivity : Activity() {
             KeyboardPrefs.setAutoSpaceAfterPunctuation(this, it)
         })
 
-        root.addView(section("Glide typing"))
-        root.addView(switchRow("Glide typing", "Create words by intentionally swiping over letters", KeyboardPrefs.glideTypingEnabled(this)) {
-            KeyboardPrefs.setGlideTypingEnabled(this, it)
-        })
-        root.addView(switchRow("Glide trail", "Show the line following your finger", KeyboardPrefs.glideTrailEnabled(this)) {
-            KeyboardPrefs.setGlideTrailEnabled(this, it)
-        })
-        root.addView(infoCard("Fast typing protection", "Ana requires a deliberate glide before switching from tapping to swipe mode."))
+        root.addView(section("Swipe typing"))
+        root.addView(infoCard("Paused for stability", "Swipe typing is temporarily disabled. Ana now treats finger movement during fast typing as normal typing only while we prioritise zero-lag typing."))
     }
 
     private fun renderRichInput() {

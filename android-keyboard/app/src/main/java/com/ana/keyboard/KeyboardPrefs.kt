@@ -180,13 +180,13 @@ object KeyboardPrefs {
     fun autoCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_CORRECTION, true)
     fun setAutoCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_CORRECTION, enabled).apply()
 
-    fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, false)
+    fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, true)
     fun setSmartSentenceCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_SMART_SENTENCE_CORRECTION, enabled).apply()
 
-    fun glideTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_GLIDE_TYPING, true)
+    fun glideTypingEnabled(context: Context): Boolean = false // Temporarily paused: typing stability takes priority.
     fun setGlideTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TYPING, enabled).apply()
 
-    fun glideTrailEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_GLIDE_TRAIL, true)
+    fun glideTrailEnabled(context: Context): Boolean = false // Glide is temporarily paused.
     fun setGlideTrailEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TRAIL, enabled).apply()
 
     fun voiceTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_VOICE_TYPING, true)

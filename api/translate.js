@@ -105,6 +105,7 @@ export default async function handler(req, res) {
   const isAnaTranslation = rawInstructions.includes('premium translation engine')
   const isWordRefinement = rawInstructions.includes('bilingual editor refining a translation')
   const isLanguageDetection = rawInstructions.includes("Ana's language detector")
+  const isKeyboardSentenceCorrection = rawInstructions.includes('Smart Sentence Correction')
   const isMeetingNotes = rawInstructions.includes('ANA_MEETING_NOTES')
   const isMeetingEnrichment = rawInstructions.includes('ANA_MEETING_ENRICHMENT')
   const isMeetingQa = rawInstructions.includes('ANA_MEETING_QA')
@@ -114,14 +115,14 @@ export default async function handler(req, res) {
   const isStructuredLayoutRequest = rawInstructions.includes('LAYOUT IS BINDING.')
   const preserveLayout = isAnaTranslation && !isStructuredLayoutRequest && /[\r\n]/.test(text)
 
-  const domainResolution = isLanguageDetection
+  const domainResolution = (isLanguageDetection || isKeyboardSentenceCorrection)
     ? resolveDomain('', { mode: 'general' })
     : resolveDomain(text, req.body?.domain)
-  const domainInstructions = isLanguageDetection ? '' : domainPrompt(domainResolution)
+  const domainInstructions = (isLanguageDetection || isKeyboardSentenceCorrection) ? '' : domainPrompt(domainResolution)
 
   const model = isTalkTurn || isAnaTranslation || isVisualOrDocumentTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
-  const reasoningEffort = isAnaTranslation ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
-  const deadlineMs = isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
+  const reasoningEffort = (isAnaTranslation || isKeyboardSentenceCorrection) ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
+  const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
 
   let finalInstructions = rawInstructions
   if (domainInstructions) finalInstructions += `\n\n${domainInstructions}`
@@ -152,6 +153,7 @@ export default async function handler(req, res) {
     if (isMeetingEnrichment) body.max_output_tokens = 3400
     if (isMeetingQa) body.max_output_tokens = 1000
     if (isMeetingOutput) body.max_output_tokens = 1800
+    if (isKeyboardSentenceCorrection) body.max_output_tokens = 420
     if (isAnaTranslation || isVisualOrDocumentTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
 
     let content = await callResponses(body, controller.signal)
