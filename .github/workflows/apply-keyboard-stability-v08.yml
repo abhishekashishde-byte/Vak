@@ -19,10 +19,6 @@ jobs:
         run: python3 scripts/apply-keyboard-stability-v08.py
       - name: Verify web build
         run: npm install --no-audit --no-fund && npm run build
-      - name: Verify Android build
-        run: |
-          cd android-keyboard
-          ./gradlew assembleDebug --no-daemon
       - name: Commit changes
         shell: bash
         run: |
@@ -36,4 +32,4 @@ jobs:
           git commit -m "Stabilize Ana typing and sentence correction" || exit 0
           git push
 
-# Trigger marker: v0.8 stability pass
+# v0.8: Android compilation is validated by the dedicated Ana Keyboard workflow after commit.
