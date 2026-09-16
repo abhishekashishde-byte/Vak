@@ -1,9 +1,11 @@
 package com.ana.keyboard
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
@@ -31,9 +33,11 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var placed = emptyList<PlacedKey>()
     private var active: PlacedKey? = null
     private var backspaceRepeated = false
+    private var backgroundBitmap: Bitmap? = null
     private val repeatHandler = Handler(Looper.getMainLooper())
 
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL)
@@ -67,6 +71,21 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     fun isSymbols(): Boolean = symbols
 
+    fun setBackgroundBitmap(bitmap: Bitmap?) {
+        backgroundBitmap = bitmap
+        invalidate()
+    }
+
+    fun refreshPreferences() {
+        placed = emptyList()
+        invalidate()
+    }
+
+    private fun letterRows(): Triple<String, String, String> = when (KeyboardPrefs.inputBadge(context)) {
+        "DE" -> Triple("QWERTZUIOP", "ASDFGHJKL", "YXCVBNM")
+        else -> Triple("QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM")
+    }
+
     private fun rows(): List<List<KeySpec>> {
         if (symbols) return listOf(
             "1234567890".map { KeySpec(it.toString()) },
@@ -76,33 +95,40 @@ class AnaKeyboardView @JvmOverloads constructor(
                 KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.35f)
             ),
             listOf(
-                KeySpec("=", "=", 1.25f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.05f),
-                KeySpec("space", "SPACE", 3.8f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
+                KeySpec("=", "=", 1.15f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.0f),
+                KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", 3.7f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
             )
         )
 
-        val row1 = "QWERTYUIOP".map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
-        val row2 = "ASDFGHJKL".map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
-        val row3 = buildList {
+        val (r1, r2, r3Letters) = letterRows()
+        val result = mutableListOf<List<KeySpec>>()
+        if (KeyboardPrefs.numberRowEnabled(context)) result += "1234567890".map { KeySpec(it.toString()) }
+        result += r1.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
+        result += r2.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) }
+        result += buildList {
             add(KeySpec(if (shifted) "⇧" else "↑", "SHIFT", 1.35f))
-            addAll("ZXCVBNM".map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) })
+            addAll(r3Letters.map { KeySpec(it.toString(), it.toString().lowercase(), letter = true) })
             add(KeySpec("⌫", "BACKSPACE", 1.35f))
         }
-        val row4 = listOf(
-            KeySpec("?123", "SYMBOLS", 1.35f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.0f),
-            KeySpec("space", "SPACE", 3.9f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
-        )
-        return listOf(row1, row2, row3, row4)
+        result += buildList {
+            add(KeySpec("?123", "SYMBOLS", 1.35f))
+            if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(","))
+            add(KeySpec("🌐", "GLOBE", 1.0f))
+            add(KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 3.5f else 4.3f))
+            if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec("."))
+            add(KeySpec("↵", "ENTER", 1.25f))
+        }
+        return result
     }
 
     private fun layoutKeys(): List<PlacedKey> {
         val rows = rows()
         val outer = dp(5f)
         val gap = dp(4f)
-        val rowGap = dp(6f)
-        val previewReserve = dp(40f)
+        val rowGap = dp(5f)
+        val previewReserve = if (KeyboardPrefs.keyPopupEnabled(context)) dp(40f) else dp(4f)
         val availableHeight = height - outer * 2 - previewReserve - rowGap * (rows.size - 1)
-        val rowHeight = max(dp(42f), availableHeight / rows.size)
+        val rowHeight = max(dp(38f), availableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
         rows.forEachIndexed { rowIndex, row ->
@@ -123,34 +149,76 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (shifted) key.label.uppercase() else key.label.lowercase()
     } else key.label
 
-    private fun canPreview(key: KeySpec): Boolean = key.code.length == 1
+    private fun canPreview(key: KeySpec): Boolean = KeyboardPrefs.keyPopupEnabled(context) && key.code.length == 1
+
+    private data class Palette(val background: Int, val normalKey: Int, val specialKey: Int, val pressedKey: Int, val text: Int, val preview: Int)
+
+    private fun palette(): Palette = when (KeyboardPrefs.theme(context)) {
+        "light" -> Palette(
+            Color.rgb(225, 228, 232), Color.argb(238, 250, 250, 250), Color.argb(238, 205, 209, 215),
+            Color.rgb(185, 190, 198), Color.rgb(25, 25, 25), Color.rgb(210, 214, 220)
+        )
+        "midnight" -> Palette(
+            Color.BLACK, Color.argb(220, 28, 28, 30), Color.argb(230, 43, 43, 46),
+            Color.rgb(78, 78, 82), Color.WHITE, Color.rgb(48, 55, 59)
+        )
+        "gold" -> Palette(
+            Color.rgb(17, 17, 17), Color.argb(225, 48, 48, 48), Color.argb(235, 63, 59, 46),
+            Color.rgb(118, 96, 46), Color.WHITE, Color.rgb(102, 82, 38)
+        )
+        else -> Palette(
+            Color.rgb(26, 26, 26), Color.argb(228, 54, 54, 54), Color.argb(235, 66, 66, 66),
+            Color.rgb(88, 88, 88), Color.WHITE, Color.rgb(62, 72, 76)
+        )
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Color.rgb(26, 26, 26))
+        val colors = palette()
+        canvas.drawColor(colors.background)
+        drawBackgroundImage(canvas)
         placed = layoutKeys()
 
         placed.forEach { item ->
             val pressed = active?.key == item.key && active?.rect == item.rect
             val special = item.key.code.length > 1 && item.key.code !in setOf("SPACE")
             keyPaint.color = when {
-                pressed -> Color.rgb(88, 88, 88)
-                special -> Color.rgb(66, 66, 66)
-                else -> Color.rgb(54, 54, 54)
+                pressed -> colors.pressedKey
+                special -> colors.specialKey
+                else -> colors.normalKey
             }
             canvas.drawRoundRect(item.rect, dp(7f), dp(7f), keyPaint)
 
             val label = displayLabel(item.key)
-            textPaint.textSize = if (label.length > 4) dp(14f) else dp(20f)
-            textPaint.color = Color.WHITE
+            textPaint.textSize = if (label.length > 4) dp(13f) else dp(20f)
+            textPaint.color = colors.text
             val baseline = item.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(label, item.rect.centerX(), baseline, textPaint)
         }
 
-        active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it) }
+        active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
     }
 
-    private fun drawKeyPreview(canvas: Canvas, item: PlacedKey) {
+    private fun drawBackgroundImage(canvas: Canvas) {
+        val bitmap = backgroundBitmap ?: return
+        if (bitmap.width <= 0 || bitmap.height <= 0 || width <= 0 || height <= 0) return
+        val sourceAspect = bitmap.width.toFloat() / bitmap.height
+        val targetAspect = width.toFloat() / height
+        val src = if (sourceAspect > targetAspect) {
+            val cropWidth = (bitmap.height * targetAspect).toInt()
+            val left = (bitmap.width - cropWidth) / 2
+            Rect(left, 0, left + cropWidth, bitmap.height)
+        } else {
+            val cropHeight = (bitmap.width / targetAspect).toInt()
+            val top = (bitmap.height - cropHeight) / 2
+            Rect(0, top, bitmap.width, top + cropHeight)
+        }
+        canvas.drawBitmap(bitmap, src, Rect(0, 0, width, height), imagePaint)
+        keyPaint.color = Color.argb(55, 0, 0, 0)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), keyPaint)
+    }
+
+    private fun drawKeyPreview(canvas: Canvas, item: PlacedKey, colors: Palette) {
         val previewWidth = max(dp(58f), item.rect.width() * 1.35f)
         val previewHeight = dp(62f)
         val overlap = dp(8f)
@@ -160,11 +228,11 @@ class AnaKeyboardView @JvmOverloads constructor(
         val top = max(dp(2f), bottom - previewHeight)
         val popup = RectF(left, top, left + previewWidth, bottom)
 
-        keyPaint.color = Color.rgb(62, 72, 76)
+        keyPaint.color = colors.preview
         canvas.drawRoundRect(popup, dp(13f), dp(13f), keyPaint)
 
         textPaint.textSize = dp(34f)
-        textPaint.color = Color.WHITE
+        textPaint.color = colors.text
         val baseline = popup.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f - dp(1f)
         canvas.drawText(displayLabel(item.key), popup.centerX(), baseline, textPaint)
     }
