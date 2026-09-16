@@ -80,19 +80,20 @@ class MainActivity : Activity() {
     private fun renderHome() {
         currentScreen = "home"
         val root = page("Ana Keyboard settings")
-        root.addView(summary("A full everyday keyboard with Ana available when you ask for it."))
+        root.addView(summary("Everyday typing first. Ana tools appear only when you ask for them."))
 
         root.addView(section("Keyboard"))
         root.addView(navRow("Languages", "English (QWERTY) • Deutsch (QWERTZ) • Hindi (Hinglish)") { renderLanguages() })
-        root.addView(navRow("Preferences", "Keys, layout, sound, vibration and key pop-up") { renderPreferences() })
+        root.addView(navRow("Preferences", "Keys, sound, vibration and key pop-up") { renderPreferences() })
         root.addView(navRow("Theme", themeSummary()) { renderTheme() })
 
         root.addView(section("Typing"))
-        root.addView(navRow("Corrections and suggestions", "Local spell-check suggestions and auto-correction") { renderCorrections() })
-        root.addView(navRow("Glide typing", "Planned — not active yet") { renderComingSoon("Glide typing", listOf("Glide from letter to letter", "Glide trail", "Glide delete", "Space-bar cursor control")) })
-        root.addView(navRow("Voice typing", "Planned — not active yet") { renderComingSoon("Voice typing", listOf("Tap-to-dictate", "Multilingual dictation", "Private voice controls")) })
-        root.addView(navRow("Emojis, stickers and GIFs", "Emoji panel active • GIF search planned") { renderEmojiSettings() })
-        root.addView(navRow("Clipboard", "Paste current and recent local clipboard items") { renderClipboardSettings() })
+        root.addView(navRow("Corrections and suggestions", "Local spelling suggestions and auto-correction") { renderCorrections() })
+        root.addView(navRow("Glide typing", if (KeyboardPrefs.glideTypingEnabled(this)) "On • swipe with visible trail" else "Off") { renderGlide() })
+        root.addView(navRow("Voice typing", if (KeyboardPrefs.voiceTypingEnabled(this)) "On • tap the mic and speak" else "Off") { renderVoice() })
+        root.addView(navRow("Writing tools", "Describe what you want to write and let Ana draft it") { renderWritingTools() })
+        root.addView(navRow("Emojis, stickers and GIFs", "Emoji panel active • GIF search still planned") { renderEmoji() })
+        root.addView(navRow("Clipboard", "Local recent clipboard history") { renderClipboard() })
 
         root.addView(section("Ana"))
         root.addView(navRow("Ana & privacy", "Server address, AI actions and password protection") { renderAna() })
@@ -107,7 +108,7 @@ class MainActivity : Activity() {
     private fun renderLanguages() {
         currentScreen = "languages"
         val root = page("Languages")
-        root.addView(summary("Choose the typing layout. You can also switch language from the Ana toolbar while typing."))
+        root.addView(summary("Choose the typing layout. You can switch language from the Ana toolbar while typing."))
         root.addView(section("Typing languages"))
         KeyboardPrefs.inputLanguages.forEach { (name, badge) ->
             val layout = when (badge) {
@@ -121,18 +122,16 @@ class MainActivity : Activity() {
             })
         }
         root.addView(section("Translation target"))
-        root.addView(infoCard("Ana Translate target", "The Translate button has its own target language. Tap the → language chip in the keyboard toolbar to change it."))
+        root.addView(infoCard("Translate target", "The → language chip controls the Translate button. Writing Tool uses the current typing language instead."))
     }
 
     private fun renderPreferences() {
         currentScreen = "preferences"
         val root = page("Preferences")
-
         root.addView(section("Keys"))
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) { KeyboardPrefs.setNumberRowEnabled(this, it) })
         root.addView(switchRow("Comma key", "Show comma on the main keyboard", KeyboardPrefs.commaKeyEnabled(this)) { KeyboardPrefs.setCommaKeyEnabled(this, it) })
         root.addView(switchRow("Full stop key", "Show full stop on the main keyboard", KeyboardPrefs.fullStopKeyEnabled(this)) { KeyboardPrefs.setFullStopKeyEnabled(this, it) })
-        root.addView(infoCard("Switch keyboards", "The globe key was removed from Ana. Use Android's keyboard switcher when you want to move to Gboard or another installed keyboard."))
 
         root.addView(section("Key tap"))
         root.addView(switchRow("Sound", "Play a click when tapping keys", KeyboardPrefs.soundEnabled(this)) { KeyboardPrefs.setSoundEnabled(this, it) })
@@ -142,7 +141,7 @@ class MainActivity : Activity() {
 
         root.addView(section("Shortcuts"))
         root.addView(switchRow("Double-space full stop", "Double-tap space to add a period followed by a space", KeyboardPrefs.doubleSpacePeriodEnabled(this)) { KeyboardPrefs.setDoubleSpacePeriodEnabled(this, it) })
-        root.addView(switchRow("Auto-space after punctuation", "Add a space after common punctuation where appropriate", KeyboardPrefs.autoSpaceAfterPunctuation(this)) { KeyboardPrefs.setAutoSpaceAfterPunctuation(this, it) })
+        root.addView(switchRow("Auto-space after punctuation", "Add a space after common punctuation", KeyboardPrefs.autoSpaceAfterPunctuation(this)) { KeyboardPrefs.setAutoSpaceAfterPunctuation(this, it) })
     }
 
     private fun renderTheme() {
@@ -163,7 +162,7 @@ class MainActivity : Activity() {
 
         root.addView(section("Custom background"))
         val current = KeyboardPrefs.backgroundUri(this)
-        root.addView(infoCard("Background image", if (current.isBlank()) "No custom image selected" else "Custom photo selected — applied behind the keys"))
+        root.addView(infoCard("Background image", if (current.isBlank()) "No custom image selected" else "Custom photo selected"))
         root.addView(actionCard(if (current.isBlank()) "Choose background image" else "Change background image") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -172,51 +171,77 @@ class MainActivity : Activity() {
             }
             startActivityForResult(intent, REQUEST_BACKGROUND)
         })
-        root.addView(backgroundTintCard())
         if (current.isNotBlank()) {
+            root.addView(backgroundTintCard())
             root.addView(actionCard("Remove background image") {
                 KeyboardPrefs.setBackgroundUri(this, "")
                 renderTheme()
             })
         }
-        root.addView(infoCard("Privacy", "Your selected background image stays on this device. It is not uploaded to Ana."))
+        root.addView(infoCard("Privacy", "The selected image stays on this device and is not uploaded to Ana."))
     }
 
     private fun renderCorrections() {
         currentScreen = "corrections"
         val root = page("Corrections and suggestions")
         root.addView(section("Automatic corrections"))
-        root.addView(switchRow("Auto-correction", "Correct likely misspellings when you press space", KeyboardPrefs.autoCorrectionEnabled(this)) { KeyboardPrefs.setAutoCorrectionEnabled(this, it) })
-        root.addView(switchRow("Auto-capitalisation", "Capitalise sentence starts while using the keyboard", KeyboardPrefs.autoCapitalisationEnabled(this)) { KeyboardPrefs.setAutoCapitalisationEnabled(this, it) })
+        root.addView(switchRow("Auto-correction", "Use Android's local spell-checker when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) { KeyboardPrefs.setAutoCorrectionEnabled(this, it) })
+        root.addView(switchRow("Auto-capitalisation", "Capitalise sentence starts", KeyboardPrefs.autoCapitalisationEnabled(this)) { KeyboardPrefs.setAutoCapitalisationEnabled(this, it) })
         root.addView(switchRow("Double-space full stop", "Period + space after double-tapping space", KeyboardPrefs.doubleSpacePeriodEnabled(this)) { KeyboardPrefs.setDoubleSpacePeriodEnabled(this, it) })
 
         root.addView(section("Suggestion strip"))
-        root.addView(switchRow("Word suggestions", "Use Android's on-device spell checker for correction suggestions", KeyboardPrefs.wordSuggestionsEnabled(this)) { KeyboardPrefs.setWordSuggestionsEnabled(this, it) })
-        root.addView(switchRow("Ana toolbar", "Show language, Translate, Fix, Tone and Shorter above the keys", KeyboardPrefs.toolbarEnabled(this)) { KeyboardPrefs.setToolbarEnabled(this, it) })
-        root.addView(infoCard("Languages", "English and German use the phone's installed spelling dictionaries. Hinglish currently falls back to the device's English (India) dictionary, so suggestions are more limited."))
-        root.addView(disabledRow("Next-word suggestions", "Planned — this is different from spelling correction and needs a proper prediction model"))
-        root.addView(disabledRow("Smart replies", "Planned — not active yet"))
+        root.addView(switchRow("Word suggestions", "Show local spelling suggestions above the keys", KeyboardPrefs.wordSuggestionsEnabled(this)) { KeyboardPrefs.setWordSuggestionsEnabled(this, it) })
+        root.addView(switchRow("Ana toolbar", "Show language, mic, Write, Translate, Fix, Tone and Shorter", KeyboardPrefs.toolbarEnabled(this)) { KeyboardPrefs.setToolbarEnabled(this, it) })
+        root.addView(infoCard("Next-word prediction", "Not Gboard-level yet. Ana currently provides spelling corrections, not full next-word prediction."))
     }
 
-    private fun renderEmojiSettings() {
+    private fun renderGlide() {
+        currentScreen = "glide"
+        val root = page("Glide typing")
+        root.addView(summary("Swipe across letters without lifting your finger. Ana draws the path and resolves the traced letters locally."))
+        root.addView(switchRow("Glide typing", "Create words by swiping over letters", KeyboardPrefs.glideTypingEnabled(this)) { KeyboardPrefs.setGlideTypingEnabled(this, it) })
+        root.addView(switchRow("Glide trail", "Show the line following your finger", KeyboardPrefs.glideTrailEnabled(this)) { KeyboardPrefs.setGlideTrailEnabled(this, it) })
+        root.addView(infoCard("How it works", "The gesture is decoded locally using the phone's spelling service. No Ana/OpenAI call is made for ordinary glide typing."))
+        root.addView(infoCard("Current limitation", "This is the first glide decoder. It should handle common words, but it will not yet match Gboard's years of gesture-language training."))
+    }
+
+    private fun renderVoice() {
+        currentScreen = "voice"
+        val root = page("Voice typing")
+        root.addView(switchRow("Voice typing", "Show and use the microphone button", KeyboardPrefs.voiceTypingEnabled(this)) { KeyboardPrefs.setVoiceTypingEnabled(this, it) })
+        root.addView(actionCard("Enable microphone permission") {
+            startActivity(Intent(this, MicrophonePermissionActivity::class.java))
+        })
+        root.addView(infoCard("Use", "Tap 🎤 in the Ana toolbar, speak, and Android speech recognition inserts the result into the current text field."))
+        root.addView(infoCard("Language", "English and German use their matching recognition language. Hinglish uses the device's Indian-English recognizer for Roman-script output and may vary by phone."))
+    }
+
+    private fun renderWritingTools() {
+        currentScreen = "writing"
+        val root = page("Writing tools")
+        root.addView(summary("Use the current text field as your instruction box."))
+        root.addView(infoCard("Write", "Type or dictate something like what you want to say, then tap Write. Ana replaces that instruction with a finished message in your current typing language."))
+        root.addView(infoCard("Example flow", "Dictate your intention → tap Write → Ana drafts the message → edit or send it in the app you are already using."))
+        root.addView(infoCard("Safety", "Ana preserves supplied facts and is instructed not to invent names, dates, promises, prices or commitments."))
+    }
+
+    private fun renderEmoji() {
         currentScreen = "emoji"
         val root = page("Emojis, stickers and GIFs")
-        root.addView(section("Emoji"))
-        root.addView(infoCard("Emoji panel", "Tap 😊 on the keyboard to open the emoji panel. Emoji insertion works locally."))
-        root.addView(section("GIFs"))
-        root.addView(disabledRow("GIF search", "The GIF button is prepared, but online search needs a GIF provider/API before it can be enabled safely."))
+        root.addView(infoCard("Emoji panel", "Active. Tap 😊 on the keyboard to open smileys and symbols."))
+        root.addView(infoCard("GIF search", "Still planned. Online GIF search needs a provider/API before it can be enabled properly."))
+        root.addView(infoCard("Stickers", "Planned after GIF support."))
     }
 
-    private fun renderClipboardSettings() {
+    private fun renderClipboard() {
         currentScreen = "clipboard"
         val root = page("Clipboard")
-        root.addView(section("Clipboard access"))
-        root.addView(infoCard("Tap 📋 on the keyboard", "Ana reads the system clipboard only when you open the clipboard panel. It does not monitor your clipboard in the background."))
-        root.addView(infoCard("Recent clips", "Up to 10 recent text clips are stored locally on this device for quick pasting. Clipboard access is blocked in password fields."))
-        root.addView(actionCard("Clear local clipboard history") {
+        root.addView(infoCard("Recent clips", "Tap 📋 to open up to 10 recent text clips. Ana reads the system clipboard only when you open the clipboard panel."))
+        root.addView(actionCard("Clear Ana clipboard history") {
             KeyboardPrefs.clearClipboardHistory(this)
             Toast.makeText(this, "Clipboard history cleared", Toast.LENGTH_SHORT).show()
         })
+        root.addView(infoCard("Privacy", "Clipboard history is stored locally and is hidden in password fields."))
     }
 
     private fun renderAna() {
@@ -246,17 +271,8 @@ class MainActivity : Activity() {
 
         root.addView(section("Privacy"))
         root.addView(infoCard("Normal typing stays local", "Ana does not send ordinary keystrokes to the server."))
-        root.addView(infoCard("Local spelling suggestions", "Word correction uses Android's on-device spell-check service, not the Ana cloud API."))
-        root.addView(infoCard("AI only on tap", "Text is sent only when you explicitly tap Translate, Fix, Tone or Shorter."))
-        root.addView(infoCard("Password protection", "Ana AI, suggestions and clipboard access are disabled in password fields."))
-    }
-
-    private fun renderComingSoon(title: String, items: List<String>) {
-        currentScreen = "coming"
-        val root = page(title)
-        root.addView(summary("This belongs in Ana Keyboard, but it is not active yet. I would rather show that clearly than pretend the feature works."))
-        root.addView(section("Planned"))
-        items.forEach { root.addView(disabledRow(it, "Coming later")) }
+        root.addView(infoCard("AI only on tap", "Text is sent only when you explicitly tap Write, Translate, Fix, Tone or Shorter."))
+        root.addView(infoCard("Password protection", "Ana AI, voice, suggestions and clipboard are disabled in password fields."))
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -305,7 +321,6 @@ class MainActivity : Activity() {
             setTextColor(textColor)
         }
         wrap.addView(value)
-        wrap.addView(subText("0% keeps the photo bright. Higher values darken it so the keys stay readable."))
         wrap.addView(SeekBar(this).apply {
             max = 80
             progress = KeyboardPrefs.backgroundTintPercent(this@MainActivity)
@@ -364,15 +379,6 @@ class MainActivity : Activity() {
         })
         wrap.addView(row)
         return wrap
-    }
-
-    private fun disabledRow(title: String, subtitle: String): View = cardContainer().apply {
-        alpha = 0.58f
-        addView(LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(titleText(title))
-            addView(subText(subtitle))
-        })
     }
 
     private fun infoCard(title: String, subtitle: String): View = cardContainer().apply {
@@ -447,8 +453,7 @@ class MainActivity : Activity() {
             "gold" -> "Ana Gold"
             else -> "Default dark"
         }
-        val tint = KeyboardPrefs.backgroundTintPercent(this)
-        return if (KeyboardPrefs.backgroundUri(this).isBlank()) base else "$base • Custom photo • $tint% tint"
+        return if (KeyboardPrefs.backgroundUri(this).isBlank()) base else "$base • Custom photo • ${KeyboardPrefs.backgroundTintPercent(this)}% tint"
     }
 
     companion object {
