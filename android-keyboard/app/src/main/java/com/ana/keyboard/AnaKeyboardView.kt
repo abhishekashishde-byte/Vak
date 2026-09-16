@@ -100,7 +100,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         val outer = dp(5f)
         val gap = dp(4f)
         val rowGap = dp(6f)
-        val availableHeight = height - outer * 2 - rowGap * (rows.size - 1)
+        val previewReserve = dp(40f)
+        val availableHeight = height - outer * 2 - previewReserve - rowGap * (rows.size - 1)
         val rowHeight = max(dp(42f), availableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
@@ -108,7 +109,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             val totalFlex = row.sumOf { it.flex.toDouble() }.toFloat()
             val availableWidth = width - outer * 2 - gap * (row.size - 1)
             var x = outer
-            val top = outer + rowIndex * (rowHeight + rowGap)
+            val top = outer + previewReserve + rowIndex * (rowHeight + rowGap)
             row.forEach { key ->
                 val w = availableWidth * (key.flex / totalFlex)
                 result += PlacedKey(key, RectF(x, top, x + w, top + rowHeight))
@@ -117,6 +118,12 @@ class AnaKeyboardView @JvmOverloads constructor(
         }
         return result
     }
+
+    private fun displayLabel(key: KeySpec): String = if (key.letter) {
+        if (shifted) key.label.uppercase() else key.label.lowercase()
+    } else key.label
+
+    private fun canPreview(key: KeySpec): Boolean = key.code.length == 1
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -127,20 +134,39 @@ class AnaKeyboardView @JvmOverloads constructor(
             val pressed = active?.key == item.key && active?.rect == item.rect
             val special = item.key.code.length > 1 && item.key.code !in setOf("SPACE")
             keyPaint.color = when {
-                pressed -> Color.rgb(201, 162, 39)
+                pressed -> Color.rgb(88, 88, 88)
                 special -> Color.rgb(66, 66, 66)
                 else -> Color.rgb(54, 54, 54)
             }
             canvas.drawRoundRect(item.rect, dp(7f), dp(7f), keyPaint)
 
-            val label = if (item.key.letter) {
-                if (shifted) item.key.label.uppercase() else item.key.label.lowercase()
-            } else item.key.label
+            val label = displayLabel(item.key)
             textPaint.textSize = if (label.length > 4) dp(14f) else dp(20f)
-            textPaint.color = if (pressed) Color.BLACK else Color.WHITE
+            textPaint.color = Color.WHITE
             val baseline = item.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(label, item.rect.centerX(), baseline, textPaint)
         }
+
+        active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it) }
+    }
+
+    private fun drawKeyPreview(canvas: Canvas, item: PlacedKey) {
+        val previewWidth = max(dp(58f), item.rect.width() * 1.35f)
+        val previewHeight = dp(62f)
+        val overlap = dp(8f)
+        val desiredLeft = item.rect.centerX() - previewWidth / 2f
+        val left = desiredLeft.coerceIn(dp(3f), width - previewWidth - dp(3f))
+        val bottom = item.rect.top + overlap
+        val top = max(dp(2f), bottom - previewHeight)
+        val popup = RectF(left, top, left + previewWidth, bottom)
+
+        keyPaint.color = Color.rgb(62, 72, 76)
+        canvas.drawRoundRect(popup, dp(13f), dp(13f), keyPaint)
+
+        textPaint.textSize = dp(34f)
+        textPaint.color = Color.WHITE
+        val baseline = popup.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f - dp(1f)
+        canvas.drawText(displayLabel(item.key), popup.centerX(), baseline, textPaint)
     }
 
     private fun keyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { it.rect.contains(x, y) }
