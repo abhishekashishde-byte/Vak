@@ -110,7 +110,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.35f)
             ),
             listOf(
-                KeySpec("😊", "EMOJI", 1.05f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.0f),
+                KeySpec("😊", "EMOJI", 1.05f), KeySpec(","), KeySpec("📋", "CLIPBOARD", 1.05f),
                 KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", 3.45f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
             )
         )
@@ -129,7 +129,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             add(KeySpec("?123", "SYMBOLS", 1.30f))
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(","))
             add(KeySpec("😊", "EMOJI", 1.0f))
-            add(KeySpec("🌐", "GLOBE", 1.0f))
+            add(KeySpec("📋", "CLIPBOARD", 1.0f))
             add(KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 3.15f else 3.9f))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec("."))
             add(KeySpec("↵", "ENTER", 1.25f))
@@ -261,8 +261,11 @@ class AnaKeyboardView @JvmOverloads constructor(
             Rect(0, top, bitmap.width, top + cropHeight)
         }
         canvas.drawBitmap(bitmap, src, Rect(0, 0, width, height), imagePaint)
-        keyPaint.color = Color.argb(55, 0, 0, 0)
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), keyPaint)
+        val alpha = (KeyboardPrefs.backgroundTintPercent(context) * 255 / 100).coerceIn(0, 204)
+        if (alpha > 0) {
+            keyPaint.color = Color.argb(alpha, 0, 0, 0)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), keyPaint)
+        }
     }
 
     private fun drawKeyPreview(canvas: Canvas, item: PlacedKey, colors: Palette) {
