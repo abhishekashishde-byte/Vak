@@ -26,6 +26,11 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     data class KeySpec(val label: String, val code: String = label, val flex: Float = 1f, val letter: Boolean = false)
     data class PlacedKey(val key: KeySpec, val rect: RectF)
+    data class AlternatePopup(
+        val options: List<String>,
+        val rect: RectF,
+        var selectedIndex: Int = -1
+    )
 
     var listener: Listener? = null
     private var shifted = false
@@ -34,7 +39,9 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var active: PlacedKey? = null
     private var backspaceRepeated = false
     private var backgroundBitmap: Bitmap? = null
+    private var alternatePopup: AlternatePopup? = null
     private val repeatHandler = Handler(Looper.getMainLooper())
+    private val longPressHandler = Handler(Looper.getMainLooper())
 
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -52,6 +59,13 @@ class AnaKeyboardView @JvmOverloads constructor(
         }
     }
 
+    private val showAlternates = Runnable {
+        val current = active ?: return@Runnable
+        val options = alternatesFor(current.key) ?: return@Runnable
+        alternatePopup = createAlternatePopup(current, options)
+        invalidate()
+    }
+
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
 
     fun setShifted(value: Boolean) {
@@ -65,7 +79,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     fun setSymbols(value: Boolean) {
         if (symbols == value) return
         symbols = value
-        active = null
+        clearPressState()
         invalidate()
     }
 
@@ -78,6 +92,7 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     fun refreshPreferences() {
         placed = emptyList()
+        clearPressState()
         invalidate()
     }
 
@@ -95,8 +110,8 @@ class AnaKeyboardView @JvmOverloads constructor(
                 KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.35f)
             ),
             listOf(
-                KeySpec("=", "=", 1.15f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.0f),
-                KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", 3.7f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
+                KeySpec("😊", "EMOJI", 1.05f), KeySpec(","), KeySpec("🌐", "GLOBE", 1.0f),
+                KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", 3.45f), KeySpec("."), KeySpec("↵", "ENTER", 1.25f)
             )
         )
 
@@ -111,10 +126,11 @@ class AnaKeyboardView @JvmOverloads constructor(
             add(KeySpec("⌫", "BACKSPACE", 1.35f))
         })
         result.add(buildList {
-            add(KeySpec("?123", "SYMBOLS", 1.35f))
+            add(KeySpec("?123", "SYMBOLS", 1.30f))
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(","))
+            add(KeySpec("😊", "EMOJI", 1.0f))
             add(KeySpec("🌐", "GLOBE", 1.0f))
-            add(KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 3.5f else 4.3f))
+            add(KeySpec(KeyboardPrefs.inputBadge(context), "SPACE", if (KeyboardPrefs.commaKeyEnabled(context) && KeyboardPrefs.fullStopKeyEnabled(context)) 3.15f else 3.9f))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec("."))
             add(KeySpec("↵", "ENTER", 1.25f))
         })
@@ -150,6 +166,35 @@ class AnaKeyboardView @JvmOverloads constructor(
     } else key.label
 
     private fun canPreview(key: KeySpec): Boolean = KeyboardPrefs.keyPopupEnabled(context) && key.code.length == 1
+
+    private fun alternatesFor(key: KeySpec): List<String>? {
+        if (!key.letter || symbols) return null
+        val variants = when (key.code.lowercase()) {
+            "a" -> listOf("ä", "á", "à", "â", "ã", "å", "æ")
+            "c" -> listOf("ç", "ć", "č")
+            "e" -> listOf("é", "è", "ê", "ë")
+            "i" -> listOf("í", "ì", "î", "ï")
+            "n" -> listOf("ñ", "ń")
+            "o" -> listOf("ö", "ó", "ò", "ô", "õ", "ø", "œ")
+            "s" -> listOf("ß", "ś", "š")
+            "u" -> listOf("ü", "ú", "ù", "û")
+            "y" -> listOf("ÿ", "ý")
+            "z" -> listOf("ž", "ź", "ż")
+            else -> emptyList()
+        }
+        if (variants.isEmpty()) return null
+        return if (shifted) variants.map { it.uppercase() } else variants
+    }
+
+    private fun createAlternatePopup(item: PlacedKey, options: List<String>): AlternatePopup {
+        val cell = dp(43f)
+        val widthNeeded = (cell * options.size).coerceAtMost(width - dp(8f))
+        val desiredLeft = item.rect.centerX() - widthNeeded / 2f
+        val left = desiredLeft.coerceIn(dp(4f), width - widthNeeded - dp(4f))
+        val bottom = item.rect.top + dp(7f)
+        val top = max(dp(2f), bottom - dp(58f))
+        return AlternatePopup(options, RectF(left, top, left + widthNeeded, bottom))
+    }
 
     private data class Palette(val background: Int, val normalKey: Int, val specialKey: Int, val pressedKey: Int, val text: Int, val preview: Int)
 
@@ -196,7 +241,9 @@ class AnaKeyboardView @JvmOverloads constructor(
             canvas.drawText(label, item.rect.centerX(), baseline, textPaint)
         }
 
-        active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
+        val popup = alternatePopup
+        if (popup != null) drawAlternatePopup(canvas, popup, colors)
+        else active?.takeIf { canPreview(it.key) }?.let { drawKeyPreview(canvas, it, colors) }
     }
 
     private fun drawBackgroundImage(canvas: Canvas) {
@@ -237,30 +284,83 @@ class AnaKeyboardView @JvmOverloads constructor(
         canvas.drawText(displayLabel(item.key), popup.centerX(), baseline, textPaint)
     }
 
+    private fun drawAlternatePopup(canvas: Canvas, popup: AlternatePopup, colors: Palette) {
+        keyPaint.color = colors.preview
+        canvas.drawRoundRect(popup.rect, dp(12f), dp(12f), keyPaint)
+        val cellWidth = popup.rect.width() / popup.options.size
+        popup.options.forEachIndexed { index, option ->
+            val left = popup.rect.left + index * cellWidth
+            if (popup.selectedIndex == index) {
+                keyPaint.color = colors.pressedKey
+                canvas.drawRoundRect(
+                    RectF(left + dp(2f), popup.rect.top + dp(3f), left + cellWidth - dp(2f), popup.rect.bottom - dp(3f)),
+                    dp(9f), dp(9f), keyPaint
+                )
+            }
+            textPaint.textSize = dp(24f)
+            textPaint.color = colors.text
+            val baseline = popup.rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(option, left + cellWidth / 2f, baseline, textPaint)
+        }
+    }
+
     private fun keyAt(x: Float, y: Float): PlacedKey? = placed.firstOrNull { it.rect.contains(x, y) }
+
+    private fun updateAlternateSelection(x: Float, y: Float) {
+        val popup = alternatePopup ?: return
+        if (y > popup.rect.bottom + dp(18f) || y < popup.rect.top - dp(18f)) {
+            popup.selectedIndex = -1
+            invalidate()
+            return
+        }
+        val cellWidth = popup.rect.width() / popup.options.size
+        popup.selectedIndex = ((x - popup.rect.left) / cellWidth).toInt().coerceIn(0, popup.options.lastIndex)
+        invalidate()
+    }
+
+    private fun scheduleLongPress(item: PlacedKey) {
+        longPressHandler.removeCallbacks(showAlternates)
+        if (alternatesFor(item.key) != null) longPressHandler.postDelayed(showAlternates, 360)
+    }
+
+    private fun clearPressState() {
+        repeatHandler.removeCallbacks(repeatBackspace)
+        longPressHandler.removeCallbacks(showAlternates)
+        active = null
+        alternatePopup = null
+        backspaceRepeated = false
+    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (placed.isEmpty()) placed = layoutKeys()
                 active = keyAt(event.x, event.y)
+                alternatePopup = null
                 backspaceRepeated = false
                 active?.let {
                     listener?.onPressFeedback(this)
                     if (it.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 380)
+                    else scheduleLongPress(it)
                 }
                 invalidate()
                 return active != null
             }
             MotionEvent.ACTION_MOVE -> {
+                if (alternatePopup != null) {
+                    updateAlternateSelection(event.x, event.y)
+                    return true
+                }
                 val next = keyAt(event.x, event.y)
                 if (next?.key != active?.key) {
                     repeatHandler.removeCallbacks(repeatBackspace)
+                    longPressHandler.removeCallbacks(showAlternates)
                     active = next
                     backspaceRepeated = false
                     active?.let {
                         listener?.onPressFeedback(this)
                         if (it.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 380)
+                        else scheduleLongPress(it)
                     }
                     invalidate()
                 }
@@ -268,21 +368,28 @@ class AnaKeyboardView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 repeatHandler.removeCallbacks(repeatBackspace)
-                val released = keyAt(event.x, event.y)
+                longPressHandler.removeCallbacks(showAlternates)
+                val popup = alternatePopup
                 val selected = active
-                if (selected != null && released?.key == selected.key) {
-                    if (selected.key.code != "BACKSPACE" || !backspaceRepeated) listener?.onKey(selected.key.code)
-                    performClick()
+                if (selected != null) {
+                    if (popup != null) {
+                        if (popup.selectedIndex >= 0) listener?.onKey(popup.options[popup.selectedIndex])
+                        else listener?.onKey(selected.key.code)
+                        performClick()
+                    } else {
+                        val released = keyAt(event.x, event.y)
+                        if (released?.key == selected.key) {
+                            if (selected.key.code != "BACKSPACE" || !backspaceRepeated) listener?.onKey(selected.key.code)
+                            performClick()
+                        }
+                    }
                 }
-                active = null
-                backspaceRepeated = false
+                clearPressState()
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                repeatHandler.removeCallbacks(repeatBackspace)
-                active = null
-                backspaceRepeated = false
+                clearPressState()
                 invalidate()
                 return true
             }
