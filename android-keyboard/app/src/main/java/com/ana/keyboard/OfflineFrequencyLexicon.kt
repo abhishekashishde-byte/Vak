@@ -93,8 +93,7 @@ class OfflineFrequencyLexicon(private val context: Context) {
                 }
             }
         }
-        val match = best ?: return null
-        return match.word.takeIf { bestScore < 230 }
+        return best?.word
     }
 
     private fun dictionary(badge: String): Dictionary? {
