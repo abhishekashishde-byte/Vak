@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ana</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <main class="shell">
+    <header><div class="mark">A</div><div><h1>Ana</h1><p>Communicate anywhere</p></div></header>
+    <section class="card">
+      <div class="row between"><label for="selection">Selected text</label><button id="capture" class="link">Capture selection</button></div>
+      <textarea id="selection" placeholder="Select text on the page, or paste it here."></textarea>
+      <div class="meta"><span id="count">0 characters</span><span id="source"></span></div>
+    </section>
+    <section class="actions" aria-label="Ana actions">
+      <button data-action="translate">Translate</button>
+      <button data-action="rewrite">Rewrite</button>
+      <button data-action="explain">Explain</button>
+      <button data-action="reply">Reply</button>
+    </section>
+    <section class="settings card">
+      <div class="row between"><strong>Ana web app</strong><button id="toggleSettings" class="link">Settings</button></div>
+      <div id="settingsBody" hidden>
+        <p class="hint">Enter your normal Ana web address once. Selected text is passed in a URL fragment, which is not sent to the web server, and Ana clears it after opening.</p>
+        <input id="appUrl" type="url" placeholder="https://your-ana-domain.example" autocomplete="url" />
+        <button id="saveUrl" class="save">Save</button>
+      </div>
+      <p id="status" class="status"></p>
+    </section>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
