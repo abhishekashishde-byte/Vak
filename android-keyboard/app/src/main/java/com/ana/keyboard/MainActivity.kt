@@ -121,7 +121,13 @@ class MainActivity : Activity() {
         val previewHolder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = if (previewExpanded) View.VISIBLE else View.GONE
-            addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(350)))
+            addView(
+                preview,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(KeyboardSizing.previewTotalHeightDp(this@MainActivity))
+                )
+            )
         }
         wrap.addView(previewHolder)
 
@@ -144,7 +150,7 @@ class MainActivity : Activity() {
         root.addView(menuRow("Themes", themeSummary()) { renderTheme() })
         root.addView(menuRow("Typing", "Auto-correction, suggestions and glide typing") { renderTyping() })
         root.addView(menuRow("Rich input", "Voice typing, clipboard and Writing Tool") { renderRichInput() })
-        root.addView(menuRow("Layout & keys", "Number row, punctuation, pop-up and Ana toolbar") { renderLayoutKeys() })
+        root.addView(menuRow("Layout & keys", "Keyboard size, number row, punctuation and toolbar") { renderLayoutKeys() })
         root.addView(menuRow("Sound & vibration", "Key click and vibration strength") { renderSoundVibration() })
         root.addView(menuRow("Dictionary & corrections", "Personal words and learned corrections") { renderDictionary() })
         root.addView(menuRow("Privacy & Ana", "Ana connection and local typing protection") { renderPrivacy() })
@@ -249,7 +255,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
-        root.addView(switchRow("Word suggestions", "Show local correction suggestions above the keyboard", KeyboardPrefs.wordSuggestionsEnabled(this)) {
+        root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
             KeyboardPrefs.setWordSuggestionsEnabled(this, it)
         })
         root.addView(switchRow("Auto-capitalisation", "Capitalise sentence starts", KeyboardPrefs.autoCapitalisationEnabled(this)) {
@@ -297,6 +303,21 @@ class MainActivity : Activity() {
     private fun renderLayoutKeys() {
         currentScreen = "layout"
         val root = page("Layout & keys")
+
+        root.addView(section("Keyboard size"))
+        KeyboardSizing.options.forEach { size ->
+            val detail = when (size) {
+                "Small" -> "More screen space"
+                "Large" -> "Larger keys and taller keyboard"
+                else -> "Balanced default size"
+            }
+            root.addView(choiceRow(size, detail, KeyboardSizing.size(this) == size) {
+                KeyboardSizing.setSize(this, size)
+                renderLayoutKeys()
+            })
+        }
+
+        root.addView(section("Keys"))
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) {
             KeyboardPrefs.setNumberRowEnabled(this, it)
         })
@@ -309,7 +330,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Key pop-up", "Show the enlarged key indicator while pressing", KeyboardPrefs.keyPopupEnabled(this)) {
             KeyboardPrefs.setKeyPopupEnabled(this, it)
         })
-        root.addView(switchRow("Ana toolbar", "Show language, clipboard, voice, Write and translation tools", KeyboardPrefs.toolbarEnabled(this)) {
+        root.addView(switchRow("Ana toolbar", "Show Translate, Write, clipboard, voice and target language", KeyboardPrefs.toolbarEnabled(this)) {
             KeyboardPrefs.setToolbarEnabled(this, it)
         })
     }
@@ -359,7 +380,7 @@ class MainActivity : Activity() {
 
         val words = KeyboardPrefs.personalDictionary(this, badge)
         if (words.isEmpty()) {
-            root.addView(infoCard("No personal words yet", "Add names, SAP terms, abbreviations or Hinglish words that Ana should treat as valid."))
+            root.addView(infoCard("No personal words yet", "Tap your exact typed word in the suggestion strip, or add names, SAP terms and Hinglish words here."))
         } else {
             words.forEach { word ->
                 root.addView(removableRow(word, "Valid word") {
@@ -414,7 +435,7 @@ class MainActivity : Activity() {
 
         root.addView(section("Privacy"))
         root.addView(infoCard("Normal typing stays local", "Ordinary keystrokes, local correction and glide decoding are not sent to Ana."))
-        root.addView(infoCard("AI only on explicit action", "Text is sent only when you tap Write, Translate, Fix, Tone or Shorter."))
+        root.addView(infoCard("AI only on explicit action", "Text is sent only when you tap Write or Translate."))
         root.addView(infoCard("Password fields", "Ana AI, voice, suggestions and clipboard are disabled in password fields."))
     }
 
