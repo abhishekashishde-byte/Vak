@@ -7,6 +7,7 @@ import org.json.JSONObject
 object KeyboardPrefs {
     private const val STORE = "ana_keyboard_settings"
     private const val KEY_BASE_URL = "ana_base_url"
+    private const val DEFAULT_BASE_URL = "https://ana-translate.vercel.app"
     private const val KEY_HAPTIC = "haptic_enabled"
     private const val KEY_HAPTIC_STRENGTH = "haptic_strength_ms"
     private const val KEY_SOUND = "sound_enabled"
@@ -72,7 +73,8 @@ object KeyboardPrefs {
 
     private fun prefs(context: Context) = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
 
-    fun baseUrl(context: Context): String = prefs(context).getString(KEY_BASE_URL, "")?.trim().orEmpty()
+    fun baseUrl(context: Context): String =
+        prefs(context).getString(KEY_BASE_URL, DEFAULT_BASE_URL)?.trim().orEmpty().ifBlank { DEFAULT_BASE_URL }
     fun setBaseUrl(context: Context, value: String) = prefs(context).edit().putString(KEY_BASE_URL, value.trim().trimEnd('/')).apply()
 
     fun hapticEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_HAPTIC, true)
