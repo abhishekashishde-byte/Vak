@@ -1,0 +1,27 @@
+name: Finalize Ana v0.8 sentence check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/finalize-v08-sentence-check.py'
+      - '.github/workflows/finalize-v08-sentence-check.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply final sentence check patch
+        run: python3 scripts/finalize-v08-sentence-check.py
+      - name: Commit change
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android-keyboard/app/src/main/java/com/ana/keyboard/AnaKeyboardService.kt
+          git commit -m "Make Ana sentence correction trigger after typing pauses" || exit 0
+          git push
