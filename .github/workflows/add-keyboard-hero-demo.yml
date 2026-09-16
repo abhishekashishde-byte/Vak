@@ -20,6 +20,10 @@ jobs:
           python -m pip install --quiet gdown
           gdown 1NU1fmz8x8FW-vzUHuoxPJncZWXmbmSoN -O /tmp/ana-keyboard-source.mp4
           test -s /tmp/ana-keyboard-source.mp4
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
       - name: Create lightweight muted hero loop
         run: |
           ffmpeg -y -ss 4 -i /tmp/ana-keyboard-source.mp4 -t 14 -an \
