@@ -72,6 +72,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var lastSentenceCorrection: SentenceCorrectionRecord? = null
     private var smartSentenceToken = 0
     private var lastSmartSentenceChecked = ""
+    @Volatile private var smartSentenceInFlight = false
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
@@ -514,6 +515,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 if (typed.any { it.isLetter() }) {
                     showTypedWordCandidate()
                     requestSuggestionsSoon()
+                    // A user may stop immediately after the final letter. Keep this
+                    // lightweight delayed check so no trailing Space is required.
+                    scheduleSmartSentenceCorrection()
                 } else {
                     clearSuggestions()
                     if (punctuation) scheduleSmartSentenceCorrection()
@@ -556,7 +560,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
         if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
-        mainHandler.postDelayed(smartSentenceRunnable, 650)
+        mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
     private fun currentSentenceCandidate(): SentenceCandidate? {
@@ -588,6 +592,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun runSmartSentenceCorrection() {
         if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
+        if (smartSentenceInFlight) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
         val candidate = currentSentenceCandidate() ?: return
@@ -597,6 +602,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val token = smartSentenceToken
         val languageHint = KeyboardPrefs.inputLanguage(this)
         showStatus("Checking sentence…")
+        smartSentenceInFlight = true
 
         smartSentenceExecutor.execute {
             try {
@@ -623,6 +629,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 mainHandler.post {
                     if (token == smartSentenceToken && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
                         showStatus("Sentence check unavailable")
+                    }
+                }
+            } finally {
+                mainHandler.post {
+                    smartSentenceInFlight = false
+                    // If the user continued typing while an older request was in
+                    // flight, schedule one fresh check for the latest sentence.
+                    if (token != smartSentenceToken && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
+                        scheduleSmartSentenceCorrection()
                     }
                 }
             }
