@@ -20,7 +20,7 @@ object KeyboardPrefs {
     private const val KEY_AUTO_CAP = "auto_capitalisation"
     private const val KEY_DOUBLE_SPACE = "double_space_period"
     private const val KEY_AUTO_SPACE_PUNCT = "auto_space_punctuation"
-    private const val KEY_TOOLBAR = "ana_toolbar"
+    private const val KEY_TOOLBAR = "ana_toolbar_compact_v2"
     private const val KEY_THEME = "keyboard_theme"
     private const val KEY_BACKGROUND_URI = "background_uri"
     private const val KEY_BACKGROUND_TINT = "background_tint_percent"
@@ -61,7 +61,6 @@ object KeyboardPrefs {
         TranslationTarget("Romanian", "RO")
     )
 
-    // Kept for existing callers while the keyboard moves from cycling to a picker.
     val targets: List<Pair<String, String>> = translationTargets.map { it.name to it.badge }
 
     val inputLanguages = listOf(
@@ -157,7 +156,7 @@ object KeyboardPrefs {
     fun autoSpaceAfterPunctuation(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_SPACE_PUNCT, true)
     fun setAutoSpaceAfterPunctuation(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_SPACE_PUNCT, enabled).apply()
 
-    fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, true)
+    fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, false)
     fun setToolbarEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_TOOLBAR, enabled).apply()
 
     fun theme(context: Context): String = prefs(context).getString(KEY_THEME, "dark") ?: "dark"
