@@ -1,6 +1,7 @@
 package com.ana.keyboard
 
 import android.content.Context
+import org.json.JSONArray
 
 object KeyboardPrefs {
     private const val STORE = "ana_keyboard_settings"
@@ -20,6 +21,10 @@ object KeyboardPrefs {
     private const val KEY_TOOLBAR = "ana_toolbar"
     private const val KEY_THEME = "keyboard_theme"
     private const val KEY_BACKGROUND_URI = "background_uri"
+    private const val KEY_BACKGROUND_TINT = "background_tint_percent"
+    private const val KEY_WORD_SUGGESTIONS = "word_suggestions"
+    private const val KEY_AUTO_CORRECTION = "auto_correction"
+    private const val KEY_CLIPBOARD_HISTORY = "clipboard_history"
 
     val targets = listOf(
         "German" to "DE",
@@ -97,4 +102,40 @@ object KeyboardPrefs {
 
     fun backgroundUri(context: Context): String = prefs(context).getString(KEY_BACKGROUND_URI, "") ?: ""
     fun setBackgroundUri(context: Context, value: String) = prefs(context).edit().putString(KEY_BACKGROUND_URI, value).apply()
+
+    fun backgroundTintPercent(context: Context): Int = prefs(context).getInt(KEY_BACKGROUND_TINT, 22).coerceIn(0, 80)
+    fun setBackgroundTintPercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_BACKGROUND_TINT, value.coerceIn(0, 80)).apply()
+
+    fun wordSuggestionsEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_WORD_SUGGESTIONS, true)
+    fun setWordSuggestionsEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_WORD_SUGGESTIONS, enabled).apply()
+
+    fun autoCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_CORRECTION, true)
+    fun setAutoCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_CORRECTION, enabled).apply()
+
+    fun clipboardHistory(context: Context): List<String> {
+        val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val value = array.optString(i).trim()
+                    if (value.isNotEmpty()) add(value)
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun rememberClipboard(context: Context, text: String) {
+        val clean = text.trim().take(800)
+        if (clean.isBlank()) return
+        val items = clipboardHistory(context).filterNot { it == clean }.toMutableList()
+        items.add(0, clean)
+        val array = JSONArray()
+        items.take(10).forEach { array.put(it) }
+        prefs(context).edit().putString(KEY_CLIPBOARD_HISTORY, array.toString()).apply()
+    }
+
+    fun clearClipboardHistory(context: Context) = prefs(context).edit().remove(KEY_CLIPBOARD_HISTORY).apply()
 }
