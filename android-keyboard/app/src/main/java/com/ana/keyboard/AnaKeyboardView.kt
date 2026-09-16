@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -109,7 +110,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (gliding) return@Runnable
         val current = active ?: return@Runnable
         val options = alternatesFor(current.key) ?: return@Runnable
-        alternatePopup = createAlternatePopup(current, options)
+        alternatePopup = createAlternatePopup(current, options).apply { selectedIndex = 0 }
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         invalidate()
     }
 
@@ -156,15 +158,15 @@ class AnaKeyboardView @JvmOverloads constructor(
                 "1234567890".map { KeySpec(it.toString()) },
                 listOf("@", "#", "€", "_", "%", "&", "-", "+", "(", ")").map { KeySpec(it) },
                 listOf(
-                    KeySpec("ABC", "ABC", 1.38f), KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
-                    KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.42f)
+                    KeySpec("ABC", "ABC", 1.48f), KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
+                    KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.55f)
                 ),
                 listOf(
-                    KeySpec("", "EMOJI", 0.92f),
-                    KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 0.90f),
-                    KeySpec("", "SPACE", 4.2f),
-                    KeySpec(".", ".", 0.82f),
-                    KeySpec("↵", "ENTER", 1.30f)
+                    KeySpec("", "EMOJI", 0.86f),
+                    KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
+                    KeySpec("", "SPACE", 4.45f),
+                    KeySpec(".", ".", 0.72f),
+                    KeySpec("↵", "ENTER", 1.34f)
                 )
             )
         }
@@ -177,18 +179,18 @@ class AnaKeyboardView @JvmOverloads constructor(
         result.add(r1.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
         result.add(r2.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
         result.add(buildList {
-            add(KeySpec("", "SHIFT", 1.48f))
+            add(KeySpec("", "SHIFT", 1.62f))
             addAll(r3Letters.map { KeySpec(it.toString(), it.lowercase(), letter = true) })
-            add(KeySpec("⌫", "BACKSPACE", 1.48f))
+            add(KeySpec("⌫", "BACKSPACE", 1.62f))
         })
         result.add(buildList {
-            add(KeySpec("?123", "SYMBOLS", 1.34f))
-            if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.75f))
-            add(KeySpec("", "EMOJI", 0.86f))
-            add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 0.86f))
-            add(KeySpec("", "SPACE", 3.85f))
-            if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.75f))
-            add(KeySpec("↵", "ENTER", 1.25f))
+            add(KeySpec("?123", "SYMBOLS", 1.42f))
+            if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.70f))
+            add(KeySpec("", "EMOJI", 0.82f))
+            add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f))
+            add(KeySpec("", "SPACE", 4.30f))
+            if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.70f))
+            add(KeySpec("↵", "ENTER", 1.34f))
         })
         return result
     }
@@ -196,11 +198,11 @@ class AnaKeyboardView @JvmOverloads constructor(
     private fun layoutKeys(): List<PlacedKey> {
         if (width <= 0 || height <= 0) return emptyList()
         val rows = rows()
-        val outer = dp(4f)
-        val gap = dp(4f)
-        val rowGap = dp(4f)
+        val outer = dp(6f)
+        val gap = dp(5f)
+        val rowGap = dp(5f)
         val usableHeight = height - outer * 2 - rowGap * (rows.size - 1)
-        val rowHeight = max(dp(38f), usableHeight / rows.size)
+        val rowHeight = max(dp(36f), usableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
         val numberOffset = if (!symbols && KeyboardPrefs.numberRowEnabled(context)) 1 else 0
@@ -210,7 +212,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         rows.forEachIndexed { rowIndex, row ->
             val inset = when {
                 symbols -> 0f
-                rowIndex == aRow -> dp(14f)
+                rowIndex == aRow -> dp(22f)
                 else -> 0f
             }
             val leftBound = outer + inset
@@ -244,29 +246,47 @@ class AnaKeyboardView @JvmOverloads constructor(
     private fun alternatesFor(key: KeySpec): List<String>? {
         if (!key.letter || symbols) return null
         val variants = when (key.code.lowercase()) {
+            "q" -> listOf("1")
+            "w" -> listOf("2")
+            "e" -> listOf("é", "è", "ê", "ë", "3")
+            "r" -> listOf("4")
+            "t" -> listOf("5")
+            "y" -> listOf("ÿ", "ý", "6")
+            "u" -> listOf("ü", "ú", "ù", "û", "7")
+            "i" -> listOf("í", "ì", "î", "ï", "8")
+            "o" -> listOf("ö", "ó", "ò", "ô", "õ", "ø", "œ", "9")
+            "p" -> listOf("0")
             "a" -> listOf("ä", "á", "à", "â", "ã", "å", "æ")
-            "c" -> listOf("ç", "ć", "č")
-            "e" -> listOf("é", "è", "ê", "ë")
-            "i" -> listOf("í", "ì", "î", "ï")
-            "n" -> listOf("ñ", "ń")
-            "o" -> listOf("ö", "ó", "ò", "ô", "õ", "ø", "œ")
             "s" -> listOf("ß", "ś", "š")
-            "u" -> listOf("ü", "ú", "ù", "û")
-            "y" -> listOf("ÿ", "ý")
+            "d" -> listOf("#")
+            "f" -> listOf("%")
+            "g" -> listOf("&")
+            "h" -> listOf("-")
+            "j" -> listOf("+")
+            "k" -> listOf("(")
+            "l" -> listOf(")")
             "z" -> listOf("ž", "ź", "ż")
+            "x" -> listOf("?")
+            "c" -> listOf("ç", "ć", "č")
+            "v" -> listOf("/")
+            "b" -> listOf("\"")
+            "n" -> listOf("ñ", "ń")
+            "m" -> listOf("'")
             else -> emptyList()
         }
         if (variants.isEmpty()) return null
-        return if (shifted) variants.map { it.uppercase() } else variants
+        return if (shifted) variants.map { value ->
+            if (value.any { it.isLetter() }) value.uppercase() else value
+        } else variants
     }
 
     private fun createAlternatePopup(item: PlacedKey, options: List<String>): AlternatePopup {
-        val cell = dp(43f)
+        val cell = dp(42f)
         val widthNeeded = (cell * options.size).coerceAtMost(width - dp(8f))
         val desiredLeft = item.rect.centerX() - widthNeeded / 2f
         val left = desiredLeft.coerceIn(dp(4f), width - widthNeeded - dp(4f))
-        val bottom = max(dp(58f), item.rect.top + dp(5f))
-        val top = max(dp(2f), bottom - dp(56f))
+        val bottom = max(dp(56f), item.rect.top + dp(5f))
+        val top = max(dp(2f), bottom - dp(54f))
         return AlternatePopup(options, RectF(left, top, left + widthNeeded, bottom))
     }
 
@@ -311,9 +331,9 @@ class AnaKeyboardView @JvmOverloads constructor(
         }
         if (backgroundBitmap == null) return color
         val alpha = when {
-            pressed -> 205
-            special -> 165
-            else -> 142
+            pressed -> 190
+            special -> 128
+            else -> 105
         }
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
@@ -499,7 +519,7 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun scheduleLongPress(item: PlacedKey) {
         longPressHandler.removeCallbacks(showAlternates)
-        if (alternatesFor(item.key) != null) longPressHandler.postDelayed(showAlternates, 360)
+        if (alternatesFor(item.key) != null) longPressHandler.postDelayed(showAlternates, 300)
     }
 
     private fun startGlideIfIntentional(event: MotionEvent) {
@@ -601,7 +621,8 @@ class AnaKeyboardView @JvmOverloads constructor(
                 }
 
                 val distance = hypot(event.x - downX, event.y - downY)
-                if (!gliding && distance > touchSlop * 1.5f) longPressHandler.removeCallbacks(showAlternates)
+                val longPressCancelDistance = max(dp(18f), touchSlop * 2.5f)
+                if (!gliding && distance > longPressCancelDistance) longPressHandler.removeCallbacks(showAlternates)
 
                 if (active?.key?.letter == true && KeyboardPrefs.glideTypingEnabled(context) && !symbols) {
                     appendPotentialGlide(glideKeyAt(event.x, event.y))
