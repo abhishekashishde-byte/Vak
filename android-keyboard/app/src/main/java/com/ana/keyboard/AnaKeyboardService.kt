@@ -133,6 +133,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 .also { toolbar.addView(it) }
             toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Correct") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
             toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
             if (KeyboardPrefs.voiceTypingEnabled(this)) {
                 voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
@@ -192,7 +193,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
                 override fun onGifRequested() {
                     startActivity(Intent(this@AnaKeyboardService, GifPickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    showStatus("Choose a GIF from your phone")
+                    showStatus("Search GIFs")
                 }
 
                 override fun onBackToLetters() = showLetterKeyboard()
@@ -396,6 +397,16 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         layoutParams = LinearLayout.LayoutParams(dp(43), dp(40)).apply { marginEnd = dp(5) }
     }
 
+    private fun vibrateSuggestionTap() {
+        if (!KeyboardPrefs.hapticEnabled(this)) return
+        vibrator.vibrate(
+            VibrationEffect.createOneShot(
+                KeyboardPrefs.hapticStrengthMs(this).toLong(),
+                VibrationEffect.DEFAULT_AMPLITUDE
+            )
+        )
+    }
+
     override fun onPressFeedback(view: View) {
         if (KeyboardPrefs.hapticEnabled(this)) {
             vibrator.vibrate(
@@ -582,20 +593,25 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun applySuggestion(suggestion: String) {
         val connection = currentInputConnection ?: return
         val word = currentWord() ?: return
+        vibrateSuggestionTap()
 
         if (suggestion.equals(word, ignoreCase = true)) {
             KeyboardPrefs.addPersonalWord(this, word)
             suggestionEngine.refreshUserData()
+            connection.commitText(" ", 1)
+            pendingDelimitedWord = null
             clearSuggestions()
+            refreshShiftFromEditor()
             showStatus("$word added to your dictionary")
             return
         }
 
         val replacement = adjustCase(word, suggestion)
         connection.deleteSurroundingText(word.length, 0)
-        connection.commitText(replacement, 1)
+        connection.commitText("$replacement ", 1)
         KeyboardPrefs.learnCorrection(this, word, suggestion)
         suggestionEngine.refreshUserData()
+        pendingDelimitedWord = null
         clearSuggestions()
         refreshShiftFromEditor()
     }
@@ -901,12 +917,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun actionText(): ActionText? {
         val connection = currentInputConnection ?: return null
         val selected = connection.getSelectedText(0)?.toString().orEmpty()
-        if (selected.isNotBlank()) return ActionText(selected.take(2500), true)
+        if (selected.isNotBlank()) return ActionText(selected.take(8000), true)
 
-        val before = connection.getTextBeforeCursor(2500, 0)?.toString().orEmpty()
+        val before = connection.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
         if (before.isBlank()) return null
         val lineStart = before.lastIndexOf('\n') + 1
-        val draft = before.substring(lineStart).takeLast(2500)
+        val draft = before.substring(lineStart).takeLast(8000)
         return if (draft.isBlank()) null else ActionText(draft, false)
     }
 
@@ -922,14 +938,25 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         val source = actionText()
         if (source == null) {
-            showStatus(if (action == AnaApi.Action.WRITE) "Type or dictate what you want to write, then tap Write" else "Type or select some text first")
+            val message = when (action) {
+                AnaApi.Action.WRITE -> "Type or dictate what you want to write, then tap Write"
+                AnaApi.Action.FIX -> "Type or select the message you want Ana to correct"
+                else -> "Type or select some text first"
+            }
+            showStatus(message)
             return
         }
 
         val connection = currentInputConnection ?: return
-        val target = if (action == AnaApi.Action.WRITE) KeyboardPrefs.inputLanguage(this) else KeyboardPrefs.target(this)
+        val target = KeyboardPrefs.target(this)
         setAiBusy(true)
-        showStatus(if (action == AnaApi.Action.WRITE) "Ana is drafting…" else "Ana is translating…")
+        val busyMessage = when (action) {
+            AnaApi.Action.WRITE -> "Ana is writing in $target…"
+            AnaApi.Action.FIX -> "Ana is correcting to $target…"
+            AnaApi.Action.TRANSLATE -> "Ana is translating to $target…"
+            else -> "Ana is working…"
+        }
+        showStatus(busyMessage)
 
         executor.execute {
             try {
