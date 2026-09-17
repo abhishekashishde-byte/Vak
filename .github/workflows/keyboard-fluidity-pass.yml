@@ -24,6 +24,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      - name: Prepare launcher icon
+        run: |
+          mkdir -p android-keyboard/app/src/main/res/drawable-nodpi
+          base64 --decode android-keyboard/app/icon/ana_keyboard_icon.b64 > android-keyboard/app/src/main/res/drawable-nodpi/ana_keyboard_icon.png
       - name: Prepare offline correction dictionaries
         run: |
           set -euo pipefail
@@ -33,7 +37,15 @@ jobs:
           head -n 30000 /tmp/en_50k.txt > android-keyboard/app/src/main/assets/en_freq.txt
           head -n 30000 /tmp/de_50k.txt > android-keyboard/app/src/main/assets/de_freq.txt
       - name: Apply fluidity pass
-        run: python3 scripts/apply-keyboard-fluidity-pass.py
+        run: |
+          python3 scripts/apply-keyboard-fluidity-pass.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android-keyboard/app/src/main/java/com/ana/keyboard/AnaKeyboardView.kt')
+          s = p.read_text()
+          s = s.replace('        fun onReplaceLastKey(text: String)\n', '        fun onReplaceLastKey(text: String) {}\n', 1)
+          p.write_text(s)
+          PY
       - name: Build keyboard
         working-directory: android-keyboard
         run: gradle :app:assembleDebug --stacktrace
