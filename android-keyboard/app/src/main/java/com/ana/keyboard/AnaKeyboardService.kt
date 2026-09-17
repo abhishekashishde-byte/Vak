@@ -76,6 +76,22 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     @Volatile private var smartSentenceInFlight = false
     private var shortcutCache: Map<String, String> = emptyMap()
 
+    // Cached once per input session so physical key taps never need to query
+    // SharedPreferences or rebuild dictionaries on the hot path.
+    private var cachedWordSuggestionsEnabled = true
+    private var cachedSmartSentenceEnabled = false
+    private var cachedAutoCorrectionEnabled = true
+    private var cachedDoubleSpacePeriodEnabled = true
+    private var cachedAutoSpacePunctuation = true
+    private var cachedHapticEnabled = true
+    private var cachedHapticStrengthMs = 6
+    private var cachedSoundEnabled = true
+    private var cachedInputBadge = "EN"
+    private var cachedPersonalWords: Set<String> = emptySet()
+    private var cachedLearnedCorrections: Map<String, String> = emptyMap()
+    private var typingIdleSawLetter = false
+    private var typingIdleSawPunctuation = false
+
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
 
@@ -84,6 +100,21 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private data class SentenceCandidate(val text: String, val suffix: String, val trailing: String)
 
     private val smartSentenceRunnable = Runnable { runSmartSentenceCorrection() }
+
+    private val typingIdleRunnable = Runnable {
+        val sawLetter = typingIdleSawLetter
+        val sawPunctuation = typingIdleSawPunctuation
+        typingIdleSawLetter = false
+        typingIdleSawPunctuation = false
+
+        if (cachedWordSuggestionsEnabled && !isPasswordField()) {
+            showTypedWordCandidate()
+            requestSuggestionsSoon()
+        } else {
+            clearSuggestions()
+        }
+        if (sawLetter || sawPunctuation) scheduleSmartSentenceCorrection()
+    }
 
     private val glideFallbackRunnable = Runnable {
         val raw = pendingGlide ?: return@Runnable
@@ -97,7 +128,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private val suggestionRunnable = Runnable {
-        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
+        if (!cachedWordSuggestionsEnabled || isPasswordField()) {
             clearSuggestions()
             return@Runnable
         }
@@ -106,11 +137,33 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             clearSuggestions()
             return@Runnable
         }
-        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        suggestionEngine.setLanguage(cachedInputBadge)
         suggestionEngine.request(word)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun refreshTypingCache() {
+        cachedWordSuggestionsEnabled = KeyboardPrefs.wordSuggestionsEnabled(this)
+        cachedSmartSentenceEnabled = KeyboardPrefs.smartSentenceCorrectionEnabled(this)
+        cachedAutoCorrectionEnabled = cachedAutoCorrectionEnabled
+        cachedDoubleSpacePeriodEnabled = cachedDoubleSpacePeriodEnabled
+        cachedAutoSpacePunctuation = KeyboardPrefs.autoSpaceAfterPunctuation(this)
+        cachedHapticEnabled = KeyboardPrefs.hapticEnabled(this)
+        cachedHapticStrengthMs = KeyboardPrefs.hapticStrengthMs(this)
+        cachedSoundEnabled = KeyboardPrefs.soundEnabled(this)
+        cachedInputBadge = KeyboardPrefs.inputBadge(this)
+        cachedPersonalWords = KeyboardPrefs.personalDictionary(this, cachedInputBadge)
+            .map { it.lowercase() }.toSet()
+        cachedLearnedCorrections = KeyboardPrefs.learnedCorrections(this, cachedInputBadge)
+    }
+
+    private fun scheduleTypingIdleUpdate(letter: Boolean, punctuation: Boolean) {
+        typingIdleSawLetter = typingIdleSawLetter || letter
+        typingIdleSawPunctuation = typingIdleSawPunctuation || punctuation
+        mainHandler.removeCallbacks(typingIdleRunnable)
+        mainHandler.postDelayed(typingIdleRunnable, 55)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -247,7 +300,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             listener = object : InputLanguagePickerView.Listener {
                 override fun onLanguageSelected(name: String) {
                     KeyboardPrefs.setInputLanguage(this@AnaKeyboardService, name)
-                    suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this@AnaKeyboardService))
+                    refreshTypingCache()
+                    suggestionEngine.setLanguage(cachedInputBadge)
                     shortcutCache = KeyboardPrefs.textShortcuts(this@AnaKeyboardService)
                     keyboard.refreshPreferences()
                     showLetterKeyboard()
@@ -274,7 +328,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         )
 
         loadBackgroundImage()
-        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        refreshTypingCache()
+        suggestionEngine.setLanguage(cachedInputBadge)
         shortcutCache = KeyboardPrefs.textShortcuts(this)
         clearSuggestions()
         updateAiAvailability()
@@ -304,11 +359,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         super.onStartInputView(info, restarting)
         stopVoiceTyping(false)
         if (::keyboard.isInitialized) {
+            refreshTypingCache()
             showLetterKeyboard()
             keyboard.refreshPreferences()
             loadBackgroundImage()
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
-            suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+            suggestionEngine.setLanguage(cachedInputBadge)
             suggestionEngine.refreshUserData()
             shortcutCache = KeyboardPrefs.textShortcuts(this)
             requestSuggestionsSoon()
@@ -426,15 +482,22 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onPressFeedback(view: View) {
-        if (KeyboardPrefs.hapticEnabled(this)) {
+        if (cachedHapticEnabled) {
             vibrator.vibrate(
                 VibrationEffect.createOneShot(
-                    KeyboardPrefs.hapticStrengthMs(this).toLong(),
+                    cachedHapticStrengthMs.toLong(),
                     VibrationEffect.DEFAULT_AMPLITUDE
                 )
             )
         }
-        if (KeyboardPrefs.soundEnabled(this)) audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.34f)
+        if (cachedSoundEnabled) audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.34f)
+    }
+
+    override fun onReplaceLastKey(text: String) {
+        val connection = currentInputConnection ?: return
+        connection.deleteSurroundingText(1, 0)
+        connection.commitText(text, 1)
+        scheduleTypingIdleUpdate(text.any { it.isLetter() }, text in setOf(",", ".", "?", "!", ":", ";"))
     }
 
     override fun onGlide(trace: AnaKeyboardView.GlideTrace) {
@@ -442,7 +505,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (raw.isBlank() || !KeyboardPrefs.glideTypingEnabled(this)) return
 
         flushPendingGlideFast()
-        suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+        suggestionEngine.setLanguage(cachedInputBadge)
         pendingGlide = raw
         pendingGlideCapitalized = keyboard.isShifted()
         val token = ++pendingGlideToken
@@ -520,19 +583,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 var typed = code
                 if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) typed = code.uppercase()
                 val punctuation = typed in setOf(",", ".", "?", "!", ":", ";")
-                if (punctuation && KeyboardPrefs.autoSpaceAfterPunctuation(this)) connection.commitText("$typed ", 1)
+                if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
                 else connection.commitText(typed, 1)
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
-                if (typed.any { it.isLetter() }) {
-                    showTypedWordCandidate()
-                    requestSuggestionsSoon()
-                    // A user may stop immediately after the final letter. Keep this
-                    // lightweight delayed check so no trailing Space is required.
-                    scheduleSmartSentenceCorrection()
-                } else {
-                    clearSuggestions()
-                    if (punctuation) scheduleSmartSentenceCorrection()
-                }
+
+                // Suggestions, regex scans and sentence intelligence only run
+                // after a short typing idle period. The physical key path ends here.
+                scheduleTypingIdleUpdate(typed.any { it.isLetter() }, punctuation)
             }
         }
     }
@@ -560,7 +617,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun requestSuggestionsSoon() {
         mainHandler.removeCallbacks(suggestionRunnable)
-        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField()) {
+        if (!cachedWordSuggestionsEnabled || isPasswordField()) {
             clearSuggestions()
             return
         }
@@ -570,7 +627,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun scheduleSmartSentenceCorrection() {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
-        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
+        if (!cachedSmartSentenceEnabled || isPasswordField()) return
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
@@ -697,7 +754,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
 
         if (isPasswordField()) return
-        if (currentWord() != word || !KeyboardPrefs.wordSuggestionsEnabled(this)) return
+        if (currentWord() != word || !cachedWordSuggestionsEnabled) return
 
         val clean = suggestions
             .filterNot { it.equals(word, ignoreCase = true) }
@@ -751,6 +808,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         if (suggestion.equals(word, ignoreCase = true)) {
             KeyboardPrefs.addPersonalWord(this, word)
+            refreshTypingCache()
             suggestionEngine.refreshUserData()
             connection.commitText(" ", 1)
             pendingDelimitedWord = null
@@ -764,6 +822,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         connection.deleteSurroundingText(word.length, 0)
         connection.commitText("$replacement ", 1)
         KeyboardPrefs.learnCorrection(this, word, suggestion)
+        refreshTypingCache()
         suggestionEngine.refreshUserData()
         pendingDelimitedWord = null
         clearSuggestions()
@@ -777,20 +836,18 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun immediateCorrection(word: String): String? {
-        if (!KeyboardPrefs.autoCorrectionEnabled(this)) return null
+        if (!cachedAutoCorrectionEnabled) return null
         if (word.length < 3) return null
         if (word.firstOrNull()?.isUpperCase() == true) return null
 
-        KeyboardPrefs.learnedCorrections(this)[word.lowercase()]?.let { return it }
-        if (KeyboardPrefs.personalDictionary(this).any { it.equals(word, ignoreCase = true) }) return null
+        cachedLearnedCorrections[word.lowercase()]?.let { return it }
+        if (word.lowercase() in cachedPersonalWords) return null
 
+        // Never run dictionary ranking synchronously on Space. If the current
+        // suggestion result is ready, use it; otherwise the existing async
+        // delimited-word path can correct just after the space is committed.
         if (lastLooksLikeTypo && lastSuggestedWord == word) {
             bestCorrection?.takeIf { !it.equals(word, ignoreCase = true) }?.let { return it }
-        }
-
-        val fast = suggestionEngine.fastResult(word)
-        if (fast.highConfidenceTypo) {
-            return fast.suggestions.firstOrNull()?.takeIf { !it.equals(word, ignoreCase = true) }
         }
         return null
     }
@@ -823,7 +880,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         val now = SystemClock.elapsedRealtime()
         val before = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
-        val canPeriod = KeyboardPrefs.doubleSpacePeriodEnabled(this) && now - lastSpaceTap < 420 &&
+        val canPeriod = cachedDoubleSpacePeriodEnabled && now - lastSpaceTap < 420 &&
             before.length >= 2 && before.last() == ' ' && !before[before.length - 2].isWhitespace()
 
         if (canPeriod) {
@@ -835,9 +892,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         } else {
             connection.commitText(" ", 1)
             lastSpaceTap = now
-            if (!corrected && !wordBeforeSpace.isNullOrBlank() && KeyboardPrefs.autoCorrectionEnabled(this)) {
+            if (!corrected && !wordBeforeSpace.isNullOrBlank() && cachedAutoCorrectionEnabled) {
                 pendingDelimitedWord = wordBeforeSpace
-                suggestionEngine.setLanguage(KeyboardPrefs.inputBadge(this))
+                suggestionEngine.setLanguage(cachedInputBadge)
                 suggestionEngine.request(wordBeforeSpace)
             } else {
                 pendingDelimitedWord = null
@@ -874,6 +931,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         connection.deleteSurroundingText(record.corrected.length + 1, 0)
         connection.commitText(record.original, 1)
         KeyboardPrefs.addPersonalWord(this, record.original)
+        refreshTypingCache()
         suggestionEngine.refreshUserData()
         lastAutoCorrection = null
         pendingDelimitedWord = null

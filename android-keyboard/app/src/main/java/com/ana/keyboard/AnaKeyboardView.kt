@@ -37,6 +37,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         fun onKey(code: String)
         fun onGlide(trace: GlideTrace)
         fun onPressFeedback(view: View)
+        fun onReplaceLastKey(text: String) {}
     }
 
     data class KeySpec(
@@ -68,8 +69,18 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var calibrationBadge = KeyboardPrefs.inputBadge(context)
     private var touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
     private var calibrationDirty = 0
+    private var keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
+    private var backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
     private var spaceCursorMoved = false
     private var spaceCursorAnchorX = 0f
+
+    // Every physical pointer is tracked independently. This is essential for
+    // fast two-thumb typing where the next finger often lands before the
+    // previous finger has lifted.
+    private val pointerKeys = mutableMapOf<Int, PlacedKey>()
+    private val pointerDownPositions = mutableMapOf<Int, Pair<Float, Float>>()
+    private val committedPointers = mutableSetOf<Int>()
+    private var primaryPointerId = MotionEvent.INVALID_POINTER_ID
 
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -153,6 +164,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         adaptiveTouch = KeyboardPrefs.adaptiveTouchEnabled(context)
         calibrationBadge = KeyboardPrefs.inputBadge(context)
         touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
+        keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
+        backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
         clearPressState()
         invalidate()
     }
@@ -260,7 +273,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     }
 
     private fun canPreview(key: KeySpec): Boolean =
-        KeyboardPrefs.keyPopupEnabled(context) && key.code.length == 1 && key.code.firstOrNull()?.isLetterOrDigit() == true
+        keyPopupEnabled && key.code.length == 1 && key.code.firstOrNull()?.isLetterOrDigit() == true
 
     private fun alternatesFor(key: KeySpec): List<String>? {
         if (!key.letter || symbols) return null
@@ -430,7 +443,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             Rect(0, top, bitmap.width, top + cropHeight)
         }
         canvas.drawBitmap(bitmap, src, Rect(0, 0, width, height), imagePaint)
-        val alpha = (KeyboardPrefs.backgroundTintPercent(context) * 255 / 100).coerceIn(0, 204)
+        val alpha = (backgroundTintPercent * 255 / 100).coerceIn(0, 204)
         if (alpha > 0) {
             keyPaint.style = Paint.Style.FILL
             keyPaint.color = Color.argb(alpha, 0, 0, 0)
@@ -527,14 +540,20 @@ class AnaKeyboardView @JvmOverloads constructor(
         return nearest.takeIf { calibratedContains(it, x, y, horizontalTolerance, verticalTolerance) }
     }
 
-    private fun recordSuccessfulTouch(item: PlacedKey, upX: Float, upY: Float) {
+    private fun recordSuccessfulTouch(
+        item: PlacedKey,
+        pressX: Float,
+        pressY: Float,
+        upX: Float,
+        upY: Float
+    ) {
         if (!adaptiveTouch || !item.key.letter || symbols) return
-        if (!item.rect.contains(downX, downY)) return // avoid reinforcing a previously shifted miss
-        if (hypot(upX - downX, upY - downY) > max(dp(14f), touchSlop * 1.8f)) return
+        if (!item.rect.contains(pressX, pressY)) return // avoid reinforcing a previously shifted miss
+        if (hypot(upX - pressX, upY - pressY) > max(dp(14f), touchSlop * 1.8f)) return
         val width = item.rect.width().coerceAtLeast(1f)
         val height = item.rect.height().coerceAtLeast(1f)
-        val sampleDx = ((downX - item.rect.centerX()) / width).coerceIn(-0.20f, 0.20f)
-        val sampleDy = ((downY - item.rect.centerY()) / height).coerceIn(-0.20f, 0.20f)
+        val sampleDx = ((pressX - item.rect.centerX()) / width).coerceIn(-0.20f, 0.20f)
+        val sampleDy = ((pressY - item.rect.centerY()) / height).coerceIn(-0.20f, 0.20f)
         val key = item.key.code.lowercase()
         val old = touchCalibration[key] ?: KeyboardPrefs.TouchCalibration(0f, 0f, 0)
         val alpha = if (old.count < 18) 0.16f else 0.045f
@@ -545,7 +564,9 @@ class AnaKeyboardView @JvmOverloads constructor(
         )
         touchCalibration[key] = next
         calibrationDirty++
-        if (calibrationDirty >= 16) persistTouchCalibration()
+        // Persist less often. JSON/SharedPreferences serialization must not
+        // periodically interrupt a fast typing burst.
+        if (calibrationDirty >= 64) persistTouchCalibration()
     }
 
     private fun persistTouchCalibration() {
@@ -656,39 +677,101 @@ class AnaKeyboardView @JvmOverloads constructor(
         glidePoints.clear()
         glideLetters.clear()
         spaceCursorMoved = false
+        pointerKeys.clear()
+        pointerDownPositions.clear()
+        committedPointers.clear()
+        primaryPointerId = MotionEvent.INVALID_POINTER_ID
+    }
+
+    private fun shouldCommitImmediately(item: PlacedKey): Boolean =
+        item.key.code.length == 1 && !(item.key.letter && KeyboardPrefs.glideTypingEnabled(context))
+
+    private fun beginPointer(event: MotionEvent, index: Int, primary: Boolean): PlacedKey? {
+        val pointerId = event.getPointerId(index)
+        val x = event.getX(index)
+        val y = event.getY(index)
+        val item = keyAt(x, y) ?: return null
+        pointerKeys[pointerId] = item
+        pointerDownPositions[pointerId] = x to y
+
+        // Ordinary text keys commit on DOWN. That preserves the exact physical
+        // tap order and prevents overlapping two-thumb taps from being dropped.
+        if (shouldCommitImmediately(item)) {
+            listener?.onKey(item.key.code)
+            committedPointers += pointerId
+        }
+        // Feedback happens after the text commit, never before it.
+        listener?.onPressFeedback(this)
+
+        if (primary) {
+            primaryPointerId = pointerId
+            downX = x
+            downY = y
+            downAt = SystemClock.uptimeMillis()
+            active = item
+            alternatePopup = null
+            backspaceRepeated = false
+            gliding = false
+            potentialGlideLetters.clear()
+            glidePoints.clear()
+            glideLetters.clear()
+            spaceCursorMoved = false
+            spaceCursorAnchorX = x
+
+            if (item.key.letter && KeyboardPrefs.glideTypingEnabled(context) && !symbols) appendPotentialGlide(item)
+            if (item.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 370)
+            else scheduleLongPress(item)
+        } else {
+            // A second thumb means this is rapid tapping, not a long-press or glide.
+            longPressHandler.removeCallbacks(showAlternates)
+            alternatePopup = null
+            if (gliding) {
+                gliding = false
+                potentialGlideLetters.clear()
+                glidePoints.clear()
+                glideLetters.clear()
+            }
+        }
+        invalidate()
+        return item
+    }
+
+    private fun finishSecondaryPointer(pointerId: Int, upX: Float, upY: Float) {
+        val item = pointerKeys[pointerId] ?: return
+        if (pointerId !in committedPointers) listener?.onKey(item.key.code)
+        val down = pointerDownPositions[pointerId]
+        if (down != null) recordSuccessfulTouch(item, down.first, down.second, upX, upY)
+        pointerKeys.remove(pointerId)
+        pointerDownPositions.remove(pointerId)
+        committedPointers.remove(pointerId)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (placed.isEmpty()) placed = layoutKeys()
-                downX = event.x
-                downY = event.y
-                downAt = SystemClock.uptimeMillis()
-                active = keyAt(event.x, event.y)
-                alternatePopup = null
-                backspaceRepeated = false
-                gliding = false
-                potentialGlideLetters.clear()
-                glidePoints.clear()
-                glideLetters.clear()
-                spaceCursorMoved = false
-                spaceCursorAnchorX = event.x
+                pointerKeys.clear()
+                pointerDownPositions.clear()
+                committedPointers.clear()
+                primaryPointerId = MotionEvent.INVALID_POINTER_ID
+                val item = beginPointer(event, event.actionIndex, primary = true)
+                return item != null
+            }
 
-                active?.let { item ->
-                    listener?.onPressFeedback(this)
-                    if (item.key.letter && KeyboardPrefs.glideTypingEnabled(context) && !symbols) appendPotentialGlide(item)
-                    if (item.key.code == "BACKSPACE") repeatHandler.postDelayed(repeatBackspace, 370)
-                    else scheduleLongPress(item)
-                }
-                invalidate()
-                return active != null
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                beginPointer(event, event.actionIndex, primary = false)
+                return true
             }
 
             MotionEvent.ACTION_MOVE -> {
+                val primaryIndex = event.findPointerIndex(primaryPointerId)
+                if (primaryIndex < 0) return true
+                val x = event.getX(primaryIndex)
+                val y = event.getY(primaryIndex)
+
                 if (active?.key?.code == "SPACE") {
-                    val step = dp(17f)
-                    val rawSteps = ((event.x - spaceCursorAnchorX) / step).toInt().coerceIn(-6, 6)
+                    val step = dp(15f)
+                    val rawSteps = ((x - spaceCursorAnchorX) / step).toInt().coerceIn(-12, 12)
                     if (rawSteps != 0) {
                         val code = if (rawSteps > 0) "CURSOR_RIGHT" else "CURSOR_LEFT"
                         repeat(kotlin.math.abs(rawSteps)) { listener?.onKey(code) }
@@ -700,32 +783,77 @@ class AnaKeyboardView @JvmOverloads constructor(
                 }
 
                 if (alternatePopup != null) {
-                    updateAlternateSelection(event.x, event.y)
+                    updateAlternateSelection(x, y)
                     return true
                 }
 
-                val distance = hypot(event.x - downX, event.y - downY)
+                val distance = hypot(x - downX, y - downY)
                 val longPressCancelDistance = max(dp(18f), touchSlop * 2.5f)
                 if (!gliding && distance > longPressCancelDistance) longPressHandler.removeCallbacks(showAlternates)
 
                 if (active?.key?.letter == true && KeyboardPrefs.glideTypingEnabled(context) && !symbols) {
-                    appendPotentialGlide(glideKeyAt(event.x, event.y))
+                    appendPotentialGlide(glideKeyAt(x, y))
                     startGlideIfIntentional(event)
                 }
 
                 if (gliding) {
-                    appendGlide(glideKeyAt(event.x, event.y), event.x, event.y)
+                    appendGlide(glideKeyAt(x, y), x, y)
                     invalidate()
                 }
                 return true
             }
 
+            MotionEvent.ACTION_POINTER_UP -> {
+                val index = event.actionIndex
+                val pointerId = event.getPointerId(index)
+                val upX = event.getX(index)
+                val upY = event.getY(index)
+
+                if (pointerId == primaryPointerId) {
+                    repeatHandler.removeCallbacks(repeatBackspace)
+                    longPressHandler.removeCallbacks(showAlternates)
+                    val selected = pointerKeys[pointerId] ?: active
+                    if (selected != null && pointerId !in committedPointers) {
+                        if (selected.key.code == "SPACE" && spaceCursorMoved) {
+                            // cursor drag: no space
+                        } else if (selected.key.code != "BACKSPACE" || !backspaceRepeated) {
+                            listener?.onKey(selected.key.code)
+                        }
+                    }
+                    val down = pointerDownPositions[pointerId]
+                    if (selected != null && down != null) recordSuccessfulTouch(selected, down.first, down.second, upX, upY)
+                    pointerKeys.remove(pointerId)
+                    pointerDownPositions.remove(pointerId)
+                    committedPointers.remove(pointerId)
+                    active = null
+                    primaryPointerId = MotionEvent.INVALID_POINTER_ID
+                    alternatePopup = null
+                    invalidate()
+                } else {
+                    finishSecondaryPointer(pointerId, upX, upY)
+                }
+                return true
+            }
+
             MotionEvent.ACTION_UP -> {
+                val index = event.actionIndex
+                val pointerId = event.getPointerId(index)
+                val upX = event.getX(index)
+                val upY = event.getY(index)
+
+                if (pointerId != primaryPointerId) {
+                    finishSecondaryPointer(pointerId, upX, upY)
+                    performClick()
+                    clearPressState()
+                    invalidate()
+                    return true
+                }
+
                 repeatHandler.removeCallbacks(repeatBackspace)
                 longPressHandler.removeCallbacks(showAlternates)
 
                 if (gliding) {
-                    appendGlide(glideKeyAt(event.x, event.y), event.x, event.y)
+                    appendGlide(glideKeyAt(upX, upY), upX, upY)
                     val sequence = glideLetters.joinToString("")
                     val trace = buildGlideTrace(sequence)
                     fadeTrail()
@@ -736,18 +864,25 @@ class AnaKeyboardView @JvmOverloads constructor(
                     return true
                 }
 
-                val selected = active
+                val selected = pointerKeys[pointerId] ?: active
                 val popup = alternatePopup
                 if (selected != null) {
+                    val alreadyCommitted = pointerId in committedPointers
                     if (popup != null) {
-                        if (popup.selectedIndex >= 0) listener?.onKey(popup.options[popup.selectedIndex])
-                        else listener?.onKey(selected.key.code)
+                        if (popup.selectedIndex >= 0) {
+                            val replacement = popup.options[popup.selectedIndex]
+                            if (alreadyCommitted) listener?.onReplaceLastKey(replacement)
+                            else listener?.onKey(replacement)
+                        } else if (!alreadyCommitted) {
+                            listener?.onKey(selected.key.code)
+                        }
                     } else if (selected.key.code == "SPACE" && spaceCursorMoved) {
                         // A horizontal spacebar drag is cursor control, not a Space keypress.
-                    } else if (selected.key.code != "BACKSPACE" || !backspaceRepeated) {
+                    } else if (!alreadyCommitted && (selected.key.code != "BACKSPACE" || !backspaceRepeated)) {
                         listener?.onKey(selected.key.code)
-                        recordSuccessfulTouch(selected, event.x, event.y)
                     }
+                    val down = pointerDownPositions[pointerId]
+                    if (down != null) recordSuccessfulTouch(selected, down.first, down.second, upX, upY)
                     performClick()
                 }
                 clearPressState()
