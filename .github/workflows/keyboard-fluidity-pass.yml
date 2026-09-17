@@ -15,11 +15,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Prepare offline correction dictionaries
+        run: |
+          set -euo pipefail
+          mkdir -p android-keyboard/app/src/main/assets
+          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt -o /tmp/en_50k.txt
+          curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/de/de_50k.txt -o /tmp/de_50k.txt
+          head -n 30000 /tmp/en_50k.txt > android-keyboard/app/src/main/assets/en_freq.txt
+          head -n 30000 /tmp/de_50k.txt > android-keyboard/app/src/main/assets/de_freq.txt
       - name: Apply fluidity pass
         run: python3 scripts/apply-keyboard-fluidity-pass.py
       - name: Build keyboard
         working-directory: android-keyboard
-        run: ./gradlew :app:assembleDebug
+        run: gradle :app:assembleDebug --stacktrace
       - name: Commit fluidity changes
         shell: bash
         run: |
