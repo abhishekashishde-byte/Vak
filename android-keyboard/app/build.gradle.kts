@@ -10,8 +10,8 @@ android {
         applicationId = "com.ana.keyboard"
         minSdk = 28
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.10.0"
+        versionCode = 11
+        versionName = "0.11.0"
     }
 
     compileOptions {
