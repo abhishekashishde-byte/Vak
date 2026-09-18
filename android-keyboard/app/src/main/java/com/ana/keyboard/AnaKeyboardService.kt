@@ -146,8 +146,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun refreshTypingCache() {
         cachedWordSuggestionsEnabled = KeyboardPrefs.wordSuggestionsEnabled(this)
         cachedSmartSentenceEnabled = KeyboardPrefs.smartSentenceCorrectionEnabled(this)
-        cachedAutoCorrectionEnabled = cachedAutoCorrectionEnabled
-        cachedDoubleSpacePeriodEnabled = cachedDoubleSpacePeriodEnabled
+        cachedAutoCorrectionEnabled = KeyboardPrefs.autoCorrectionEnabled(this)
+        cachedDoubleSpacePeriodEnabled = KeyboardPrefs.doubleSpacePeriodEnabled(this)
         cachedAutoSpacePunctuation = KeyboardPrefs.autoSpaceAfterPunctuation(this)
         cachedHapticEnabled = KeyboardPrefs.hapticEnabled(this)
         cachedHapticStrengthMs = KeyboardPrefs.hapticStrengthMs(this)
