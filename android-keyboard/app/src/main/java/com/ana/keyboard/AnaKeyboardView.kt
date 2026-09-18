@@ -84,8 +84,8 @@ class AnaKeyboardView @JvmOverloads constructor(
     )
 
     // Overlapping taps are queued by physical DOWN order and released only
-    // when earlier taps have completed. This prevents both dropped letters and
-    // out-of-order text when two thumbs overlap.
+    // when earlier taps have completed. This prevents dropped or reordered
+    // letters even when two thumbs lift in the opposite order.
     private val pointerPresses = mutableMapOf<Int, PointerPress>()
     private val pointerOrder = mutableListOf<Int>()
     private var gesturePointerId = MotionEvent.INVALID_POINTER_ID
