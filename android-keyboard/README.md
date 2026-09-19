@@ -36,3 +36,7 @@ For Ana actions, type or select text and tap Translate/Fix/Tone/Shorter. If noth
 ## Deliberately not in v0.1
 
 This is a typing-quality MVP, not a full Gboard replacement yet. It does not yet include predictive suggestions, autocorrect dictionaries, swipe typing, emoji search, voice typing, multilingual layouts, clipboard history, or personal typing-model learning.
+
+
+## v0.12 typing engine
+Ana v0.12 adds spatial no-drop tap decoding, ordered multi-touch input, composing text, hot-path performance isolation, adaptive touch learning, and restore-safe learned corrections.
