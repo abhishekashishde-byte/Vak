@@ -54,6 +54,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private val executor = Executors.newSingleThreadExecutor()
     private val smartSentenceExecutor = Executors.newSingleThreadExecutor()
+    private val feedbackExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
@@ -89,6 +90,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var cachedInputBadge = "EN"
     private var cachedPersonalWords: Set<String> = emptySet()
     private var cachedLearnedCorrections: Map<String, String> = emptyMap()
+    private var cachedKnownPrefixes: Set<String> = emptySet()
+    private val composingBuffer = ComposingWordBuffer()
+    private var localCompositionActive = false
     private var typingIdleSawLetter = false
     private var typingIdleSawPunctuation = false
 
@@ -156,17 +160,23 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         cachedPersonalWords = KeyboardPrefs.personalDictionary(this, cachedInputBadge)
             .map { it.lowercase() }.toSet()
         cachedLearnedCorrections = KeyboardPrefs.learnedCorrections(this, cachedInputBadge)
+        cachedKnownPrefixes = TouchLanguageRanker.buildPrefixSet(
+            cachedPersonalWords + cachedLearnedCorrections.keys + cachedLearnedCorrections.values
+        )
     }
 
     private fun scheduleTypingIdleUpdate(letter: Boolean, punctuation: Boolean) {
         typingIdleSawLetter = typingIdleSawLetter || letter
         typingIdleSawPunctuation = typingIdleSawPunctuation || punctuation
         mainHandler.removeCallbacks(typingIdleRunnable)
-        mainHandler.postDelayed(typingIdleRunnable, 55)
+        // Do not wake suggestion/regex work between fast keystrokes.
+        // Wait for a real pause in typing.
+        mainHandler.postDelayed(typingIdleRunnable, 180)
     }
 
     override fun onCreate() {
         super.onCreate()
+        KeyboardPrefs.migrateLearningStore(this)
         suggestionEngine = LocalSuggestionEngine(this) { word, suggestions, typo ->
             mainHandler.post { handleSuggestionResult(word, suggestions, typo) }
         }
@@ -251,7 +261,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             visibility = View.GONE
             listener = object : EmojiPanelView.Listener {
                 override fun onEmoji(emoji: String) {
-                    currentInputConnection?.commitText(emoji, 1)
+                    currentInputConnection?.let { connection ->
+                        finishLocalComposition(connection)
+                        connection.commitText(emoji, 1)
+                    }
                     clearSuggestions()
                 }
 
@@ -267,7 +280,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             visibility = View.GONE
             listener = object : ClipboardPanelView.Listener {
                 override fun onPaste(text: String) {
-                    currentInputConnection?.commitText(text, 1)
+                    currentInputConnection?.let { connection ->
+                        finishLocalComposition(connection)
+                        connection.commitText(text, 1)
+                    }
                     KeyboardPrefs.rememberClipboard(this@AnaKeyboardService, text)
                     showLetterKeyboard()
                     requestSuggestionsSoon()
@@ -357,6 +373,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        composingBuffer.clear()
+        localCompositionActive = false
         stopVoiceTyping(false)
         if (::keyboard.isInitialized) {
             refreshTypingCache()
@@ -375,6 +393,23 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onWindowShown() {
         super.onWindowShown()
         mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        // If the editor/user moved out of Ana's composing region, do not let the
+        // next key replace stale text somewhere else in the document.
+        if (!composingBuffer.isEmpty && candidatesStart < 0) {
+            composingBuffer.clear()
+            localCompositionActive = false
+        }
     }
 
     private fun hidePanels() {
@@ -482,19 +517,37 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onPressFeedback(view: View) {
-        if (cachedHapticEnabled) {
-            vibrator.vibrate(
-                VibrationEffect.createOneShot(
-                    cachedHapticStrengthMs.toLong(),
-                    VibrationEffect.DEFAULT_AMPLITUDE
+        val haptic = cachedHapticEnabled
+        val strength = cachedHapticStrengthMs
+        val sound = cachedSoundEnabled
+        // Binder calls for vibration/audio must not sit in front of character delivery.
+        feedbackExecutor.execute {
+            if (haptic) {
+                vibrator.vibrate(
+                    VibrationEffect.createOneShot(
+                        strength.toLong(),
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    )
                 )
-            )
+            }
+            if (sound) audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.34f)
         }
-        if (cachedSoundEnabled) audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK, 0.34f)
+    }
+
+    override fun onKeyCandidates(candidates: List<SpatialTouchDecoder.Candidate>) {
+        val prefix = if (isPasswordField()) "" else composingBuffer.value()
+        val chosen = TouchLanguageRanker.choose(
+            candidates = candidates,
+            currentPrefix = prefix,
+            languageBadge = cachedInputBadge,
+            knownPrefixes = cachedKnownPrefixes
+        ) ?: return
+        onKey(chosen)
     }
 
     override fun onReplaceLastKey(text: String) {
         val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
         connection.deleteSurroundingText(1, 0)
         connection.commitText(text, 1)
         scheduleTypingIdleUpdate(text.any { it.isLetter() }, text in setOf(",", ".", "?", "!", ":", ";"))
@@ -535,6 +588,38 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         pendingGlideToken++
     }
 
+    private fun appendComposingCharacter(connection: InputConnection, text: String) {
+        if (isPasswordField()) {
+            connection.commitText(text, 1)
+            return
+        }
+        val value = composingBuffer.append(text)
+        localCompositionActive = connection.setComposingText(value, 1)
+    }
+
+    private fun finishLocalComposition(connection: InputConnection): String? {
+        if (composingBuffer.isEmpty) return null
+        val value = composingBuffer.value()
+        if (localCompositionActive) connection.finishComposingText()
+        composingBuffer.clear()
+        localCompositionActive = false
+        return value
+    }
+
+    private fun backspaceLocalComposition(connection: InputConnection): Boolean {
+        if (composingBuffer.isEmpty) return false
+        val value = composingBuffer.backspace()
+        if (value.isEmpty()) {
+            connection.setComposingText("", 1)
+            connection.finishComposingText()
+            localCompositionActive = false
+        } else {
+            localCompositionActive = connection.setComposingText(value, 1)
+        }
+        scheduleTypingIdleUpdate(letter = value.isNotEmpty(), punctuation = false)
+        return true
+    }
+
     override fun onKey(code: String) {
         if (code == "CURSOR_LEFT" || code == "CURSOR_RIGHT") {
             smartSentenceToken++
@@ -567,6 +652,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             "BACKSPACE" -> {
                 if (undoLastSentenceCorrection()) return
                 if (undoLastAutoCorrection()) return
+                if (backspaceLocalComposition(connection)) return
                 val selected = connection.getSelectedText(0)?.toString().orEmpty()
                 if (selected.isNotEmpty()) connection.commitText("", 1)
                 else connection.deleteSurroundingText(1, 0)
@@ -583,12 +669,20 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 var typed = code
                 if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) typed = code.uppercase()
                 val punctuation = typed in setOf(",", ".", "?", "!", ":", ";")
-                if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
-                else connection.commitText(typed, 1)
+                val composingCharacter = typed.length == 1 &&
+                    (typed[0].isLetter() || (typed == "'" && !composingBuffer.isEmpty))
+
+                if (composingCharacter) {
+                    appendComposingCharacter(connection, typed)
+                } else {
+                    finishLocalComposition(connection)
+                    if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
+                    else connection.commitText(typed, 1)
+                }
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
 
                 // Suggestions, regex scans and sentence intelligence only run
-                // after a short typing idle period. The physical key path ends here.
+                // after a real typing idle period. The physical key path ends here.
                 scheduleTypingIdleUpdate(typed.any { it.isLetter() }, punctuation)
             }
         }
@@ -803,6 +897,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun applySuggestion(suggestion: String) {
         val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
         val word = currentWord() ?: return
         vibrateSuggestionTap()
 
@@ -854,6 +949,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun handleSpace() {
         val connection = currentInputConnection ?: return
+        val bufferedWord = finishLocalComposition(connection)
         if (expandTextShortcut(connection)) {
             connection.commitText(" ", 1)
             lastSpaceTap = SystemClock.elapsedRealtime()
@@ -864,7 +960,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("LOCAL • shortcut expanded")
             return
         }
-        val wordBeforeSpace = currentWord()
+        val wordBeforeSpace = bufferedWord?.takeIf { it.isNotBlank() } ?: currentWord()
         var corrected = false
 
         if (!wordBeforeSpace.isNullOrBlank()) {
@@ -953,6 +1049,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun moveCursor(direction: Int) {
         val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
         connection.finishComposingText()
         val keyCode = if (direction > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
@@ -975,6 +1072,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun handleEnter() {
         val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
         val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: EditorInfo.IME_ACTION_NONE
         if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
             connection.performEditorAction(action)
@@ -1264,6 +1362,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         suggestionEngine.close()
         executor.shutdownNow()
         smartSentenceExecutor.shutdownNow()
+        feedbackExecutor.shutdownNow()
         mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

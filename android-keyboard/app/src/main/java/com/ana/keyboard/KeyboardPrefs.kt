@@ -6,6 +6,8 @@ import org.json.JSONObject
 
 object KeyboardPrefs {
     private const val STORE = "ana_keyboard_settings"
+    private const val LEARNING_STORE = "ana_keyboard_learning"
+    private const val LEARNING_MIGRATED = "__learning_migrated_v1"
     private const val KEY_BASE_URL = "ana_base_url"
     private const val DEFAULT_BASE_URL = "https://ana-translate.vercel.app"
     private const val KEY_HAPTIC = "haptic_enabled"
@@ -77,6 +79,38 @@ object KeyboardPrefs {
     )
 
     private fun prefs(context: Context) = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+    private fun learningPrefs(context: Context) = context.getSharedPreferences(LEARNING_STORE, Context.MODE_PRIVATE)
+
+    /**
+     * One-time migration from the legacy all-in-one preference file.
+     * Keeping learning in its own file lets Android back up corrections without
+     * backing up clipboard history or other transient keyboard data.
+     */
+    fun migrateLearningStore(context: Context) {
+        val target = learningPrefs(context)
+        if (target.getBoolean(LEARNING_MIGRATED, false)) return
+
+        val source = prefs(context)
+        val editor = target.edit()
+        val prefixes = listOf(
+            KEY_PERSONAL_DICTIONARY_PREFIX,
+            KEY_LEARNED_CORRECTIONS_PREFIX,
+            KEY_SHORTCUTS_PREFIX,
+            KEY_TOUCH_CALIBRATION_PREFIX
+        )
+        source.all.forEach { (key, value) ->
+            if (prefixes.none { key.startsWith(it) }) return@forEach
+            when (value) {
+                is String -> editor.putString(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+            }
+        }
+        editor.putBoolean(LEARNING_MIGRATED, true).apply()
+    }
 
     fun baseUrl(context: Context): String =
         prefs(context).getString(KEY_BASE_URL, DEFAULT_BASE_URL)?.trim().orEmpty().ifBlank { DEFAULT_BASE_URL }
@@ -197,7 +231,7 @@ object KeyboardPrefs {
     fun setVoiceTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_VOICE_TYPING, enabled).apply()
 
     fun personalDictionary(context: Context, badge: String = inputBadge(context)): List<String> {
-        val raw = prefs(context).getString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, "[]") ?: "[]"
+        val raw = learningPrefs(context).getString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, "[]") ?: "[]"
         return try {
             val array = JSONArray(raw)
             buildList {
@@ -218,17 +252,17 @@ object KeyboardPrefs {
         words.add(clean)
         val array = JSONArray()
         words.sortedBy { it.lowercase() }.forEach { array.put(it) }
-        prefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
     }
 
     fun removePersonalWord(context: Context, word: String, badge: String = inputBadge(context)) {
         val array = JSONArray()
         personalDictionary(context, badge).filterNot { it.equals(word, ignoreCase = true) }.forEach { array.put(it) }
-        prefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
     }
 
     fun learnedCorrections(context: Context, badge: String = inputBadge(context)): Map<String, String> {
-        val raw = prefs(context).getString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, "{}") ?: "{}"
+        val raw = learningPrefs(context).getString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, "{}") ?: "{}"
         return try {
             val json = JSONObject(raw)
             buildMap {
@@ -251,21 +285,21 @@ object KeyboardPrefs {
         val json = JSONObject()
         learnedCorrections(context, badge).forEach { (key, value) -> json.put(key, value) }
         json.put(from, to)
-        prefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
     }
 
     fun removeLearnedCorrection(context: Context, source: String, badge: String = inputBadge(context)) {
         val json = JSONObject()
         learnedCorrections(context, badge).filterKeys { !it.equals(source, ignoreCase = true) }
             .forEach { (key, value) -> json.put(key, value) }
-        prefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
     }
 
     fun clearLearnedCorrections(context: Context, badge: String = inputBadge(context)) =
-        prefs(context).edit().remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge).apply()
+        learningPrefs(context).edit().remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge).apply()
 
     fun textShortcuts(context: Context, badge: String = inputBadge(context)): Map<String, String> {
-        val raw = prefs(context).getString(KEY_SHORTCUTS_PREFIX + badge, "{}") ?: "{}"
+        val raw = learningPrefs(context).getString(KEY_SHORTCUTS_PREFIX + badge, "{}") ?: "{}"
         return try {
             val json = JSONObject(raw)
             buildMap {
@@ -288,32 +322,32 @@ object KeyboardPrefs {
         val json = JSONObject()
         textShortcuts(context, badge).forEach { (existing, replacement) -> json.put(existing, replacement) }
         json.put(key, value)
-        prefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
     }
 
     fun removeTextShortcut(context: Context, trigger: String, badge: String = inputBadge(context)) {
         val json = JSONObject()
         textShortcuts(context, badge).filterKeys { it != trigger }.forEach { (key, value) -> json.put(key, value) }
-        prefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
     }
 
     fun oneHandedMode(context: Context): String {
-        val value = prefs(context).getString(KEY_ONE_HANDED_MODE, "off") ?: "off"
+        val value = learningPrefs(context).getString(KEY_ONE_HANDED_MODE, "off") ?: "off"
         return value.takeIf { it in setOf("off", "left", "right") } ?: "off"
     }
 
     fun setOneHandedMode(context: Context, value: String) {
         val safe = value.takeIf { it in setOf("off", "left", "right") } ?: "off"
-        prefs(context).edit().putString(KEY_ONE_HANDED_MODE, safe).apply()
+        learningPrefs(context).edit().putString(KEY_ONE_HANDED_MODE, safe).apply()
     }
 
-    fun adaptiveTouchEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ADAPTIVE_TOUCH, true)
-    fun setAdaptiveTouchEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_ADAPTIVE_TOUCH, enabled).apply()
+    fun adaptiveTouchEnabled(context: Context): Boolean = learningPrefs(context).getBoolean(KEY_ADAPTIVE_TOUCH, true)
+    fun setAdaptiveTouchEnabled(context: Context, enabled: Boolean) = learningPrefs(context).edit().putBoolean(KEY_ADAPTIVE_TOUCH, enabled).apply()
 
     data class TouchCalibration(val dx: Float, val dy: Float, val count: Int)
 
     fun touchCalibration(context: Context, badge: String = inputBadge(context)): Map<String, TouchCalibration> {
-        val raw = prefs(context).getString(KEY_TOUCH_CALIBRATION_PREFIX + badge, "{}") ?: "{}"
+        val raw = learningPrefs(context).getString(KEY_TOUCH_CALIBRATION_PREFIX + badge, "{}") ?: "{}"
         return try {
             val json = JSONObject(raw)
             buildMap {
@@ -321,8 +355,8 @@ object KeyboardPrefs {
                 while (keys.hasNext()) {
                     val key = keys.next()
                     val item = json.optJSONObject(key) ?: continue
-                    val dx = item.optDouble("dx", 0.0).toFloat().coerceIn(-0.10f, 0.10f)
-                    val dy = item.optDouble("dy", 0.0).toFloat().coerceIn(-0.10f, 0.10f)
+                    val dx = item.optDouble("dx", 0.0).toFloat().coerceIn(-0.16f, 0.16f)
+                    val dy = item.optDouble("dy", 0.0).toFloat().coerceIn(-0.16f, 0.16f)
                     val count = item.optInt("count", 0).coerceIn(0, 100000)
                     if (key.length == 1 && count > 0) put(key.lowercase(), TouchCalibration(dx, dy, count))
                 }
@@ -337,16 +371,16 @@ object KeyboardPrefs {
         values.forEach { (key, value) ->
             if (key.length != 1 || value.count <= 0) return@forEach
             json.put(key.lowercase(), JSONObject().apply {
-                put("dx", value.dx.coerceIn(-0.10f, 0.10f).toDouble())
-                put("dy", value.dy.coerceIn(-0.10f, 0.10f).toDouble())
+                put("dx", value.dx.coerceIn(-0.16f, 0.16f).toDouble())
+                put("dy", value.dy.coerceIn(-0.16f, 0.16f).toDouble())
                 put("count", value.count.coerceIn(1, 100000))
             })
         }
-        prefs(context).edit().putString(KEY_TOUCH_CALIBRATION_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(KEY_TOUCH_CALIBRATION_PREFIX + badge, json.toString()).apply()
     }
 
     fun clearTouchCalibration(context: Context, badge: String = inputBadge(context)) =
-        prefs(context).edit().remove(KEY_TOUCH_CALIBRATION_PREFIX + badge).apply()
+        learningPrefs(context).edit().remove(KEY_TOUCH_CALIBRATION_PREFIX + badge).apply()
 
     fun clipboardHistory(context: Context): List<String> {
         val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"

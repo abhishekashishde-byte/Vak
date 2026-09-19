@@ -29,6 +29,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      - name: Restore stable Ana debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: ana-keyboard-debug-signing-v1
+      - name: Ensure stable Ana debug signing key
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -noprompt \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Ana Debug,O=Ana,C=DE" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - name: Prepare launcher icon
         run: |
           mkdir -p android-keyboard/app/src/main/res/drawable-nodpi
@@ -41,6 +58,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/de/de_50k.txt -o /tmp/de_50k.txt
           head -n 30000 /tmp/en_50k.txt > android-keyboard/app/src/main/assets/en_freq.txt
           head -n 30000 /tmp/de_50k.txt > android-keyboard/app/src/main/assets/de_freq.txt
+      - name: Run keyboard engine tests
+        working-directory: android-keyboard
+        run: gradle :app:testDebugUnitTest --stacktrace
       - name: Build keyboard APK
         working-directory: android-keyboard
         run: gradle :app:assembleDebug --stacktrace
