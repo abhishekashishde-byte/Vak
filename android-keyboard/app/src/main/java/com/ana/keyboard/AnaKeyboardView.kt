@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -35,6 +36,9 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     interface Listener {
         fun onKey(code: String)
+        fun onKeyCandidates(candidates: List<SpatialTouchDecoder.Candidate>) {
+            candidates.firstOrNull()?.let { onKey(it.code) }
+        }
         fun onGlide(trace: GlideTrace)
         fun onPressFeedback(view: View)
         fun onReplaceLastKey(text: String) {}
@@ -78,6 +82,8 @@ class AnaKeyboardView @JvmOverloads constructor(
         val item: PlacedKey,
         val downX: Float,
         val downY: Float,
+        var candidates: List<SpatialTouchDecoder.Candidate>,
+        val downAt: Long = SystemClock.uptimeMillis(),
         var completed: Boolean = false,
         var upX: Float = downX,
         var upY: Float = downY
@@ -90,8 +96,13 @@ class AnaKeyboardView @JvmOverloads constructor(
     private val pointerOrder = mutableListOf<Int>()
     private var gesturePointerId = MotionEvent.INVALID_POINTER_ID
     private var multiTouchTyping = false
+    private var spatialGeometry = emptyList<SpatialTouchDecoder.KeyGeometry>()
+    private var decodedTapCount = 0L
+    private var decodeNanos = 0L
 
     private val repeatHandler = Handler(Looper.getMainLooper())
+    private val calibrationSaveHandler = Handler(Looper.getMainLooper())
+    private val persistCalibrationLater = Runnable { persistTouchCalibration() }
     private val longPressHandler = Handler(Looper.getMainLooper())
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
@@ -270,6 +281,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 x += keyWidth + gap
             }
         }
+        spatialGeometry = buildSpatialGeometry(result)
         return result
     }
 
@@ -533,20 +545,52 @@ class AnaKeyboardView @JvmOverloads constructor(
             y >= item.rect.top + sy - toleranceY && y <= item.rect.bottom + sy + toleranceY
     }
 
-    private fun keyAt(x: Float, y: Float): PlacedKey? {
-        val direct = placed.filter { calibratedContains(it, x, y) }
-        if (direct.isNotEmpty()) {
-            return direct.minByOrNull { item ->
-                val nx = (x - (item.rect.centerX() + shiftX(item))) / item.rect.width().coerceAtLeast(1f)
-                val ny = (y - (item.rect.centerY() + shiftY(item))) / item.rect.height().coerceAtLeast(1f)
-                nx * nx + ny * ny
-            }
+    private fun buildSpatialGeometry(keys: List<PlacedKey>): List<SpatialTouchDecoder.KeyGeometry> =
+        keys.map { item ->
+            val sx = shiftX(item)
+            val sy = shiftY(item)
+            SpatialTouchDecoder.KeyGeometry(
+                code = item.key.code,
+                left = item.rect.left + sx,
+                top = item.rect.top + sy,
+                right = item.rect.right + sx,
+                bottom = item.rect.bottom + sy,
+                letter = item.key.letter
+            )
         }
-        val verticalTolerance = dp(3f)
-        val rowCandidates = placed.filter { calibratedContains(it, x, y, 0f, verticalTolerance) }
-        val nearest = rowCandidates.minByOrNull { abs((it.rect.centerX() + shiftX(it)) - x) } ?: return null
-        val horizontalTolerance = dp(6f)
-        return nearest.takeIf { calibratedContains(it, x, y, horizontalTolerance, verticalTolerance) }
+
+    private fun spatialCandidates(x: Float, y: Float): List<SpatialTouchDecoder.Candidate> {
+        if (spatialGeometry.isEmpty() && placed.isNotEmpty()) spatialGeometry = buildSpatialGeometry(placed)
+        val started = System.nanoTime()
+        val result = SpatialTouchDecoder.decode(x, y, spatialGeometry)
+        decodeNanos += System.nanoTime() - started
+        decodedTapCount++
+        if (BuildConfig.DEBUG && decodedTapCount % 250L == 0L) {
+            val averageUs = decodeNanos / decodedTapCount / 1_000L
+            Log.d("AnaTyping", "spatial decode avg=${averageUs}us taps=$decodedTapCount")
+        }
+        return result
+    }
+
+    private fun keyAt(x: Float, y: Float): PlacedKey? {
+        val candidate = spatialCandidates(x, y).firstOrNull() ?: return null
+        return placed.firstOrNull { it.key.code == candidate.code }
+    }
+
+    private fun resolvePointerCandidates(
+        press: PointerPress,
+        upX: Float,
+        upY: Float
+    ): List<SpatialTouchDecoder.Candidate> {
+        val movement = hypot(upX - press.downX, upY - press.downY)
+        val elapsed = SystemClock.uptimeMillis() - press.downAt
+        if (movement > max(dp(24f), touchSlop * 2.8f) || elapsed > 420L) return press.candidates
+
+        // Fast taps often leave the screen a few pixels away from where they began.
+        // Blend DOWN strongly with UP instead of trusting either coordinate alone.
+        val intentX = press.downX * 0.76f + upX * 0.24f
+        val intentY = press.downY * 0.82f + upY * 0.18f
+        return spatialCandidates(intentX, intentY).ifEmpty { press.candidates }
     }
 
     private fun recordSuccessfulTouch(
@@ -557,25 +601,27 @@ class AnaKeyboardView @JvmOverloads constructor(
         upY: Float
     ) {
         if (!adaptiveTouch || !item.key.letter || symbols) return
-        if (!item.rect.contains(pressX, pressY)) return // avoid reinforcing a previously shifted miss
-        if (hypot(upX - pressX, upY - pressY) > max(dp(14f), touchSlop * 1.8f)) return
+        if (hypot(upX - pressX, upY - pressY) > max(dp(18f), touchSlop * 2.2f)) return
         val width = item.rect.width().coerceAtLeast(1f)
         val height = item.rect.height().coerceAtLeast(1f)
-        val sampleDx = ((pressX - item.rect.centerX()) / width).coerceIn(-0.20f, 0.20f)
-        val sampleDy = ((pressY - item.rect.centerY()) / height).coerceIn(-0.20f, 0.20f)
+        // Include confident edge/gap taps so calibration learns where the user
+        // actually lands instead of learning only already-perfect taps.
+        val sampleDx = ((pressX - item.rect.centerX()) / width).coerceIn(-0.30f, 0.30f)
+        val sampleDy = ((pressY - item.rect.centerY()) / height).coerceIn(-0.30f, 0.30f)
         val key = item.key.code.lowercase()
         val old = touchCalibration[key] ?: KeyboardPrefs.TouchCalibration(0f, 0f, 0)
         val alpha = if (old.count < 18) 0.16f else 0.045f
         val next = KeyboardPrefs.TouchCalibration(
-            dx = (old.dx * (1f - alpha) + sampleDx * alpha).coerceIn(-0.10f, 0.10f),
-            dy = (old.dy * (1f - alpha) + sampleDy * alpha).coerceIn(-0.10f, 0.10f),
+            dx = (old.dx * (1f - alpha) + sampleDx * alpha).coerceIn(-0.16f, 0.16f),
+            dy = (old.dy * (1f - alpha) + sampleDy * alpha).coerceIn(-0.16f, 0.16f),
             count = (old.count + 1).coerceAtMost(100000)
         )
         touchCalibration[key] = next
         calibrationDirty++
-        // Persist less often. JSON/SharedPreferences serialization must not
-        // periodically interrupt a fast typing burst.
-        if (calibrationDirty >= 64) persistTouchCalibration()
+        if (calibrationDirty % 12 == 0) spatialGeometry = buildSpatialGeometry(placed)
+        // Never serialize calibration during an active typing burst.
+        calibrationSaveHandler.removeCallbacks(persistCalibrationLater)
+        calibrationSaveHandler.postDelayed(persistCalibrationLater, 2200L)
     }
 
     private fun persistTouchCalibration() {
@@ -696,9 +742,11 @@ class AnaKeyboardView @JvmOverloads constructor(
         val pointerId = event.getPointerId(index)
         val x = event.getX(index)
         val y = event.getY(index)
-        val item = keyAt(x, y) ?: return null
+        val candidates = spatialCandidates(x, y)
+        val top = candidates.firstOrNull() ?: return null
+        val item = placed.firstOrNull { it.key.code == top.code } ?: return null
 
-        pointerPresses[pointerId] = PointerPress(item, x, y)
+        pointerPresses[pointerId] = PointerPress(item, x, y, candidates)
         pointerOrder += pointerId
         listener?.onPressFeedback(this)
 
@@ -751,7 +799,8 @@ class AnaKeyboardView @JvmOverloads constructor(
             }
             if (!press.completed) return
 
-            listener?.onKey(press.item.key.code)
+            if (press.item.key.code.length == 1) listener?.onKeyCandidates(press.candidates)
+            else listener?.onKey(press.item.key.code)
             recordSuccessfulTouch(
                 press.item,
                 press.downX,
@@ -769,6 +818,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         press.completed = true
         press.upX = upX
         press.upY = upY
+        press.candidates = resolvePointerCandidates(press, upX, upY)
         flushCompletedTypingPointers()
     }
 
@@ -875,7 +925,12 @@ class AnaKeyboardView @JvmOverloads constructor(
                     } else if (selected.key.code == "SPACE" && spaceCursorMoved) {
                         // A horizontal spacebar drag is cursor control, not a Space keypress.
                     } else if (selected.key.code != "BACKSPACE" || !backspaceRepeated) {
-                        listener?.onKey(selected.key.code)
+                        if (selected.key.code.length == 1 && press != null) {
+                            val resolved = resolvePointerCandidates(press, upX, upY)
+                            listener?.onKeyCandidates(resolved)
+                        } else {
+                            listener?.onKey(selected.key.code)
+                        }
                     }
 
                     if (press != null) {
@@ -905,6 +960,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         repeatHandler.removeCallbacksAndMessages(null)
         longPressHandler.removeCallbacksAndMessages(null)
+        calibrationSaveHandler.removeCallbacksAndMessages(null)
         trailAnimator?.cancel()
         persistTouchCalibration()
         super.onDetachedFromWindow()
