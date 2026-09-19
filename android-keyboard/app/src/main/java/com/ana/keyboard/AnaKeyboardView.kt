@@ -565,7 +565,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         val result = SpatialTouchDecoder.decode(x, y, spatialGeometry)
         decodeNanos += System.nanoTime() - started
         decodedTapCount++
-        if (BuildConfig.DEBUG && decodedTapCount % 250L == 0L) {
+        if (decodedTapCount % 250L == 0L) {
             val averageUs = decodeNanos / decodedTapCount / 1_000L
             Log.d("AnaTyping", "spatial decode avg=${averageUs}us taps=$decodedTapCount")
         }
