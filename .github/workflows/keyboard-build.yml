@@ -41,6 +41,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/de/de_50k.txt -o /tmp/de_50k.txt
           head -n 30000 /tmp/en_50k.txt > android-keyboard/app/src/main/assets/en_freq.txt
           head -n 30000 /tmp/de_50k.txt > android-keyboard/app/src/main/assets/de_freq.txt
+      - name: Run keyboard engine tests
+        working-directory: android-keyboard
+        run: gradle :app:testDebugUnitTest --stacktrace
       - name: Build keyboard APK
         working-directory: android-keyboard
         run: gradle :app:assembleDebug --stacktrace
