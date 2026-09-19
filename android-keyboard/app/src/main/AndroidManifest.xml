@@ -11,7 +11,7 @@
     </queries>
 
     <application
-        android:allowBackup="false"
+        android:allowBackup="true"\n        android:fullBackupContent="@xml/backup_rules"\n        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ana_keyboard_icon"
         android:roundIcon="@drawable/ana_keyboard_icon"
         android:label="Ana Keyboard"
