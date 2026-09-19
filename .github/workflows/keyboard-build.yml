@@ -29,6 +29,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      - name: Restore stable Ana debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: ana-keyboard-debug-signing-v1
+      - name: Ensure stable Ana debug signing key
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -noprompt \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Ana Debug,O=Ana,C=DE" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - name: Prepare launcher icon
         run: |
           mkdir -p android-keyboard/app/src/main/res/drawable-nodpi
