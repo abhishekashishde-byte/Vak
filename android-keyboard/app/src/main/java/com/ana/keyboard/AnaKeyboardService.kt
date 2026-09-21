@@ -725,31 +725,28 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
-    private fun currentSentenceCandidate(): SentenceCandidate? {
+    private fun currentParagraphCandidate(): SentenceCandidate? {
         val connection = currentInputConnection ?: return null
-        val before = connection.getTextBeforeCursor(700, 0)?.toString().orEmpty()
+        // Read enough history to include the complete active paragraph, not just
+        // the final sentence. This lets Ana repair an earlier missed typo when
+        // later words make the intended meaning clear.
+        val before = connection.getTextBeforeCursor(2600, 0)?.toString().orEmpty()
         if (before.isBlank()) return null
 
         val trailing = Regex("\\s*$").find(before)?.value.orEmpty()
         val content = if (trailing.isEmpty()) before else before.dropLast(trailing.length)
         if (content.length < 14) return null
 
-        val scan = if (content.lastOrNull() in listOf('.', '!', '?')) content.dropLast(1) else content
-        val boundaries = listOf(scan.lastIndexOf(". "), scan.lastIndexOf("! "), scan.lastIndexOf("? "), scan.lastIndexOf('\n'))
-        val boundary = boundaries.maxOrNull() ?: -1
-        var start = when {
-            boundary < 0 -> 0
-            scan.getOrNull(boundary) == '\n' -> boundary + 1
-            else -> boundary + 2
-        }
+        val lastLineBreak = content.lastIndexOf('\n')
+        var start = if (lastLineBreak >= 0) lastLineBreak + 1 else 0
         while (start < content.length && content[start].isWhitespace()) start++
         if (start >= content.length) return null
 
-        val sentence = content.substring(start)
-        val wordCount = Regex("[\\p{L}']+").findAll(sentence).count()
-        if (wordCount < 4 || sentence.length < 14) return null
+        val paragraph = content.substring(start)
+        val wordCount = Regex("[\\p{L}']+").findAll(paragraph).count()
+        if (wordCount < 4 || paragraph.length < 14) return null
         val suffix = before.substring(start)
-        return SentenceCandidate(sentence, suffix, trailing)
+        return SentenceCandidate(paragraph, suffix, trailing)
     }
 
     private fun runSmartSentenceCorrection() {
@@ -757,18 +754,18 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (smartSentenceInFlight) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
-        val candidate = currentSentenceCandidate() ?: return
+        val candidate = currentParagraphCandidate() ?: return
         if (candidate.text == lastSmartSentenceChecked) return
         lastSmartSentenceChecked = candidate.text
         val connection = currentInputConnection ?: return
         val token = smartSentenceToken
         val languageHint = KeyboardPrefs.inputLanguage(this)
-        showStatus("ANA AI • checking sentence")
+        showStatus("ANA AI • checking paragraph")
         smartSentenceInFlight = true
 
         smartSentenceExecutor.execute {
             try {
-                val corrected = AnaApi.correctSentence(baseUrl, candidate.text, languageHint).trim()
+                val corrected = AnaApi.correctParagraph(baseUrl, candidate.text, languageHint).trim()
                 mainHandler.post {
                     if (token != smartSentenceToken || currentInputConnection !== connection) return@post
                     if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isPasswordField()) return@post
@@ -783,14 +780,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     lastSmartSentenceChecked = corrected
                     clearSuggestions()
                     refreshShiftFromEditor()
-                    showStatus("Sentence corrected")
+                    showStatus("Paragraph corrected")
                 }
             } catch (_: Exception) {
                 // Network/API failure must never interrupt typing, but it should
                 // not fail invisibly either.
                 mainHandler.post {
                     if (token == smartSentenceToken && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
-                        showStatus("Sentence check unavailable")
+                        showStatus("Paragraph check unavailable")
                     }
                 }
             } finally {
@@ -832,7 +829,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         connection.commitText(record.original + record.trailing, 1)
         lastSmartSentenceChecked = record.original
         lastSentenceCorrection = null
-        showStatus("Sentence correction undone")
+        showStatus("Paragraph correction undone")
         return true
     }
 
