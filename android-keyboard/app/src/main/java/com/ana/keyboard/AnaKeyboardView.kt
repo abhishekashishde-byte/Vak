@@ -207,7 +207,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 listOf(
                     KeySpec("", "EMOJI", 0.86f),
                     KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
-                    KeySpec("", "SPACE", 4.45f),
+                    KeySpec("", "SPACE", 5.10f),
                     KeySpec(".", ".", 0.72f),
                     KeySpec("↵", "ENTER", 1.34f)
                 )
@@ -231,7 +231,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.70f))
             add(KeySpec("", "EMOJI", 0.82f))
             add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f))
-            add(KeySpec("", "SPACE", 4.30f))
+            add(KeySpec("", "SPACE", 5.05f))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.70f))
             add(KeySpec("↵", "ENTER", 1.34f))
         })
@@ -572,7 +572,35 @@ class AnaKeyboardView @JvmOverloads constructor(
         return result
     }
 
+    private fun forgivingSpaceAt(x: Float, y: Float): PlacedKey? {
+        val space = placed.firstOrNull { it.key.code == "SPACE" } ?: return null
+        val rowKeys = placed.filter { it.row == space.row }
+        if (rowKeys.isEmpty()) return null
+
+        val rowTop = rowKeys.minOf { it.rect.top }
+        val rowBottom = rowKeys.maxOf { it.rect.bottom }
+        if (y < rowTop - dp(10f) || y > max(height.toFloat(), rowBottom + dp(10f))) return null
+
+        // Direct taps on another visible bottom-row key remain deliberate.
+        // Everything in the dead space immediately surrounding the spacebar
+        // belongs to Space instead of being decoded as a neighbouring control.
+        val exact = rowKeys.firstOrNull { it.rect.contains(x, y) }
+        if (exact != null) return if (exact.key.code == "SPACE") space else null
+
+        val leftNeighbourRight = rowKeys
+            .filter { it.rect.right <= space.rect.left }
+            .maxOfOrNull { it.rect.right } ?: space.rect.left
+        val rightNeighbourLeft = rowKeys
+            .filter { it.rect.left >= space.rect.right }
+            .minOfOrNull { it.rect.left } ?: space.rect.right
+
+        val captureLeft = minOf(space.rect.left - dp(12f), leftNeighbourRight)
+        val captureRight = maxOf(space.rect.right + dp(12f), rightNeighbourLeft)
+        return if (x in captureLeft..captureRight) space else null
+    }
+
     private fun keyAt(x: Float, y: Float): PlacedKey? {
+        forgivingSpaceAt(x, y)?.let { return it }
         val candidate = spatialCandidates(x, y).firstOrNull() ?: return null
         return placed.firstOrNull { it.key.code == candidate.code }
     }
@@ -742,9 +770,14 @@ class AnaKeyboardView @JvmOverloads constructor(
         val pointerId = event.getPointerId(index)
         val x = event.getX(index)
         val y = event.getY(index)
-        val candidates = spatialCandidates(x, y)
+        val spaceIntent = forgivingSpaceAt(x, y)
+        val candidates = if (spaceIntent != null) {
+            listOf(SpatialTouchDecoder.Candidate("SPACE", 1f, 0f, false))
+        } else {
+            spatialCandidates(x, y)
+        }
         val top = candidates.firstOrNull() ?: return null
-        val item = placed.firstOrNull { it.key.code == top.code } ?: return null
+        val item = spaceIntent ?: placed.firstOrNull { it.key.code == top.code } ?: return null
 
         pointerPresses[pointerId] = PointerPress(item, x, y, candidates)
         pointerOrder += pointerId
@@ -844,14 +877,24 @@ class AnaKeyboardView @JvmOverloads constructor(
                 val y = event.getY(pointerIndex)
 
                 if (active?.key?.code == "SPACE") {
+                    // A normal Space tap may drift a little. Cursor mode starts only
+                    // after a deliberate hold + horizontal move, so a sloppy tap
+                    // still produces a space instead of silently disappearing.
+                    val heldLongEnough = event.eventTime - downAt >= 170L
+                    val movedFromDown = abs(x - downX)
+                    if (!spaceCursorMoved) {
+                        if (!heldLongEnough || movedFromDown < dp(12f)) return true
+                        spaceCursorMoved = true
+                        spaceCursorAnchorX = x
+                        longPressHandler.removeCallbacks(showAlternates)
+                    }
+
                     val step = dp(15f)
                     val rawSteps = ((x - spaceCursorAnchorX) / step).toInt().coerceIn(-12, 12)
                     if (rawSteps != 0) {
                         val code = if (rawSteps > 0) "CURSOR_RIGHT" else "CURSOR_LEFT"
                         repeat(kotlin.math.abs(rawSteps)) { listener?.onKey(code) }
                         spaceCursorAnchorX += rawSteps * step
-                        spaceCursorMoved = true
-                        longPressHandler.removeCallbacks(showAlternates)
                     }
                     return true
                 }
