@@ -9,12 +9,23 @@ import java.net.URL
 object AnaApi {
     enum class Action { TRANSLATE, FIX, TONE, SHORTER, WRITE }
 
-    fun correctSentence(baseUrl: String, text: String, languageHint: String): String {
-        require(baseUrl.startsWith("https://")) { "Set the Ana https address in the Ana Keyboard app first." }
-        require(text.isNotBlank()) { "There is no sentence to correct." }
+    private val paragraphCache = object : LinkedHashMap<String, String>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 24
+    }
 
-        val instructions = "You are Ana Keyboard's Smart Sentence Correction. The user is typing in $languageHint. Keep the SAME language; do not translate. Correct only high-confidence keyboard slips, spelling, grammar, punctuation, missing articles or prepositions, and clearly wrong word order. Use the full sentence context to repair an obvious nearby-key typo when the intended word is clear. Preserve the user's meaning, tone, names, numbers, URLs and facts. Do not make stylistic rewrites and do not add new information. Return ONLY the corrected sentence, with no labels, explanations or quotation marks."
-        return request(baseUrl, text, instructions)
+    fun correctParagraph(baseUrl: String, text: String, languageHint: String): String {
+        require(baseUrl.startsWith("https://")) { "Set the Ana https address in the Ana Keyboard app first." }
+        require(text.isNotBlank()) { "There is no paragraph to correct." }
+
+        val cacheKey = "$languageHint\u0000$text"
+        synchronized(paragraphCache) {
+            paragraphCache[cacheKey]?.let { return it }
+        }
+
+        val instructions = "You are Ana Keyboard's Smart Paragraph Correction. The user is typing in $languageHint. Keep the SAME language; do not translate. Review the ENTIRE paragraph, including earlier sentences that may still contain missed keyboard slips. Correct high-confidence spelling mistakes, missing or duplicated letters, nearby-key typos, grammar, punctuation, missing articles or prepositions, and clearly wrong word order. Use the surrounding paragraph to infer an intended word when the typed word is wrong but the meaning is clear. Leave uncertain names, specialist terms and intentional wording unchanged. Preserve the user's meaning, tone, paragraph structure, names, numbers, URLs and facts. Preserve text that is already correct; do not make stylistic rewrites and do not add new information. Return ONLY the corrected paragraph, with no labels, explanations or quotation marks."
+        val corrected = request(baseUrl, text, instructions)
+        synchronized(paragraphCache) { paragraphCache[cacheKey] = corrected }
+        return corrected
     }
 
     private fun request(baseUrl: String, text: String, instructions: String): String {
