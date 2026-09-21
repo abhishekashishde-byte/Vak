@@ -245,7 +245,12 @@ object KeyboardPrefs {
         }
     }
 
-    fun addPersonalWord(context: Context, word: String, badge: String = inputBadge(context)) {
+    fun addPersonalWord(
+        context: Context,
+        word: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
         val clean = word.trim().take(60)
         if (clean.isBlank()) return
         val words = personalDictionary(context, badge).filterNot { it.equals(clean, ignoreCase = true) }.toMutableList()
@@ -253,12 +258,20 @@ object KeyboardPrefs {
         val array = JSONArray()
         words.sortedBy { it.lowercase() }.forEach { array.put(it) }
         learningPrefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
+        if (sync) KeyboardLearningSync.recordPersonalWord(context, badge, clean, false)
     }
 
-    fun removePersonalWord(context: Context, word: String, badge: String = inputBadge(context)) {
+    fun removePersonalWord(
+        context: Context,
+        word: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
+        val clean = word.trim().take(60)
         val array = JSONArray()
-        personalDictionary(context, badge).filterNot { it.equals(word, ignoreCase = true) }.forEach { array.put(it) }
+        personalDictionary(context, badge).filterNot { it.equals(clean, ignoreCase = true) }.forEach { array.put(it) }
         learningPrefs(context).edit().putString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, array.toString()).apply()
+        if (sync && clean.isNotBlank()) KeyboardLearningSync.recordPersonalWord(context, badge, clean, true)
     }
 
     fun learnedCorrections(context: Context, badge: String = inputBadge(context)): Map<String, String> {
@@ -278,7 +291,13 @@ object KeyboardPrefs {
         }
     }
 
-    fun learnCorrection(context: Context, source: String, replacement: String, badge: String = inputBadge(context)) {
+    fun learnCorrection(
+        context: Context,
+        source: String,
+        replacement: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
         val from = source.trim().lowercase().take(60)
         val to = replacement.trim().lowercase().take(60)
         if (from.length < 2 || to.length < 2 || from == to) return
@@ -286,17 +305,35 @@ object KeyboardPrefs {
         learnedCorrections(context, badge).forEach { (key, value) -> json.put(key, value) }
         json.put(from, to)
         learningPrefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
+        if (sync) KeyboardLearningSync.recordCorrection(context, badge, from, to, false)
     }
 
-    fun removeLearnedCorrection(context: Context, source: String, badge: String = inputBadge(context)) {
+    fun removeLearnedCorrection(
+        context: Context,
+        source: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
+        val clean = source.trim().lowercase().take(60)
         val json = JSONObject()
-        learnedCorrections(context, badge).filterKeys { !it.equals(source, ignoreCase = true) }
+        learnedCorrections(context, badge).filterKeys { !it.equals(clean, ignoreCase = true) }
             .forEach { (key, value) -> json.put(key, value) }
         learningPrefs(context).edit().putString(KEY_LEARNED_CORRECTIONS_PREFIX + badge, json.toString()).apply()
+        if (sync && clean.isNotBlank()) KeyboardLearningSync.recordCorrection(context, badge, clean, null, true)
     }
 
-    fun clearLearnedCorrections(context: Context, badge: String = inputBadge(context)) =
+    fun clearLearnedCorrections(
+        context: Context,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
+        if (sync) {
+            learnedCorrections(context, badge).keys.forEach {
+                KeyboardLearningSync.recordCorrection(context, badge, it, null, true)
+            }
+        }
         learningPrefs(context).edit().remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge).apply()
+    }
 
     fun textShortcuts(context: Context, badge: String = inputBadge(context)): Map<String, String> {
         val raw = learningPrefs(context).getString(KEY_SHORTCUTS_PREFIX + badge, "{}") ?: "{}"
@@ -315,7 +352,13 @@ object KeyboardPrefs {
         }
     }
 
-    fun setTextShortcut(context: Context, trigger: String, expansion: String, badge: String = inputBadge(context)) {
+    fun setTextShortcut(
+        context: Context,
+        trigger: String,
+        expansion: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
         val key = trigger.trim().take(24)
         val value = expansion.trim().take(500)
         if (key.isBlank() || value.isBlank() || key.any { it.isWhitespace() }) return
@@ -323,12 +366,20 @@ object KeyboardPrefs {
         textShortcuts(context, badge).forEach { (existing, replacement) -> json.put(existing, replacement) }
         json.put(key, value)
         learningPrefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+        if (sync) KeyboardLearningSync.recordShortcut(context, badge, key, value, false)
     }
 
-    fun removeTextShortcut(context: Context, trigger: String, badge: String = inputBadge(context)) {
+    fun removeTextShortcut(
+        context: Context,
+        trigger: String,
+        badge: String = inputBadge(context),
+        sync: Boolean = true
+    ) {
+        val key = trigger.trim().take(24)
         val json = JSONObject()
-        textShortcuts(context, badge).filterKeys { it != trigger }.forEach { (key, value) -> json.put(key, value) }
+        textShortcuts(context, badge).filterKeys { it != key }.forEach { (existing, value) -> json.put(existing, value) }
         learningPrefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
+        if (sync && key.isNotBlank()) KeyboardLearningSync.recordShortcut(context, badge, key, null, true)
     }
 
     fun oneHandedMode(context: Context): String {
@@ -381,6 +432,20 @@ object KeyboardPrefs {
 
     fun clearTouchCalibration(context: Context, badge: String = inputBadge(context)) =
         learningPrefs(context).edit().remove(KEY_TOUCH_CALIBRATION_PREFIX + badge).apply()
+
+    /**
+     * Clears only account-synced language data when switching Ana accounts.
+     * Device-specific touch calibration is intentionally left untouched.
+     */
+    fun clearAllSyncedLearning(context: Context) {
+        val editor = learningPrefs(context).edit()
+        listOf("EN", "DE", "HIN").forEach { badge ->
+            editor.remove(KEY_PERSONAL_DICTIONARY_PREFIX + badge)
+            editor.remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge)
+            editor.remove(KEY_SHORTCUTS_PREFIX + badge)
+        }
+        editor.apply()
+    }
 
     fun clipboardHistory(context: Context): List<String> {
         val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"
