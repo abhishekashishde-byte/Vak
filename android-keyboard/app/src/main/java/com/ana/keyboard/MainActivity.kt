@@ -146,6 +146,7 @@ class MainActivity : Activity() {
         val root = page("Ana Keyboard settings")
         root.addView(summary("Every visible setting below is connected to real keyboard behaviour."))
 
+        root.addView(menuRow("Ana account", accountSummary()) { renderAccount() })
         root.addView(menuRow("Languages", "Typing languages and Translate-to language") { renderLanguages() })
         root.addView(menuRow("Themes", themeSummary()) { renderTheme() })
         root.addView(menuRow("Typing", "Auto-correction, smart sentence correction and suggestions") { renderTyping() })
@@ -160,6 +161,113 @@ class MainActivity : Activity() {
         root.addView(actionCard("Choose Ana Keyboard") {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         })
+    }
+
+    private fun accountSummary(): String =
+        AnaAccountSync.signedInEmail(this)?.let { "Signed in as $it • keyboard learning sync on" }
+            ?: "Sign in to sync words and corrections across devices"
+
+    private fun renderAccount() {
+        currentScreen = "account"
+        val root = page("Ana account")
+        val signedInEmail = AnaAccountSync.signedInEmail(this)
+
+        if (signedInEmail != null) {
+            root.addView(infoCard("Signed in", signedInEmail))
+            root.addView(infoCard(
+                "Cross-device learning",
+                "Personal words, learned corrections and text shortcuts sync through your Ana account. Touch calibration stays on this device."
+            ))
+            root.addView(actionCard("Sync now") {
+                Thread {
+                    try {
+                        val result = AnaAccountSync.syncNow(this)
+                        runOnUiThread {
+                            Toast.makeText(
+                                this,
+                                "Synced • ${result.remoteEntries} saved entries",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            renderAccount()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Sync failed", Toast.LENGTH_LONG).show()
+                            renderAccount()
+                        }
+                    }
+                }.start()
+            })
+            root.addView(actionCard("Sign out") {
+                AnaAccountSync.signOut(this)
+                Toast.makeText(this, "Signed out", Toast.LENGTH_SHORT).show()
+                renderAccount()
+            })
+            return
+        }
+
+        root.addView(summary("Use the same Ana email and password on another Android device. Your keyboard learning follows the account, not the phone."))
+
+        val email = EditText(this).apply {
+            hint = "Email"
+            setHintTextColor(Color.GRAY)
+            setTextColor(textColor)
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            background = rounded(card2, 14)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        val password = EditText(this).apply {
+            hint = "Password"
+            setHintTextColor(Color.GRAY)
+            setTextColor(textColor)
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            background = rounded(card2, 14)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        root.addView(email, marginParams(dp(5)).apply { height = dp(52) })
+        root.addView(password, marginParams(dp(5)).apply { height = dp(52) })
+
+        root.addView(actionCard("Sign in and sync") {
+            val enteredEmail = email.text.toString().trim()
+            val enteredPassword = password.text.toString()
+            if (enteredEmail.isBlank() || enteredPassword.isBlank()) {
+                Toast.makeText(this, "Enter email and password", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Signing in…", Toast.LENGTH_SHORT).show()
+                Thread {
+                    try {
+                        val result = AnaAccountSync.signInAndSync(this, enteredEmail, enteredPassword)
+                        runOnUiThread {
+                            Toast.makeText(
+                                this,
+                                "Signed in • ${result.remoteEntries} saved entries",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            renderAccount()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Sign in failed", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+        })
+
+        root.addView(actionCard("Create Ana account") {
+            startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    android.net.Uri.parse(KeyboardPrefs.baseUrl(this))
+                )
+            )
+        })
+        root.addView(infoCard(
+            "What is synced",
+            "Only personal words, learned corrections and text shortcuts. Passwords are never stored; the signed-in session is encrypted with Android Keystore."
+        ))
     }
 
     private fun renderLanguages() {
@@ -255,7 +363,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
-        root.addView(switchRow("Smart sentence correction", "Off by default for privacy. If you enable it, Ana sends only the current sentence to your Ana server after a pause; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
+        root.addView(switchRow("Smart paragraph correction", "Off by default for privacy. If enabled, Ana re-checks the active paragraph after a pause so earlier missed errors can also be repaired; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
             KeyboardPrefs.setSmartSentenceCorrectionEnabled(this, it)
         })
         root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
@@ -340,7 +448,7 @@ class MainActivity : Activity() {
         })
 
         root.addView(section("Spacebar"))
-        root.addView(infoCard("Cursor control", "Slide left or right across the spacebar to move the text cursor without inserting a space."))
+        root.addView(infoCard("Forgiving Space", "The spacebar has a larger invisible hit area. Hold briefly and slide left or right only when you intentionally want cursor control."))
 
         root.addView(section("Keys"))
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) {
@@ -416,7 +524,7 @@ class MainActivity : Activity() {
         }
 
         root.addView(section("Text shortcuts"))
-        root.addView(infoCard("Expand as you type", "Create private local shortcuts such as @@ for an email address. Type the shortcut, then press Space."))
+        root.addView(infoCard("Expand as you type", "Create shortcuts such as @@ for an email address. They are local-first and sync to your Ana account when you are signed in."))
         val shortcutTrigger = EditText(this).apply {
             hint = "Shortcut, e.g. @@"
             setHintTextColor(Color.GRAY)
@@ -449,7 +557,7 @@ class MainActivity : Activity() {
         })
         val shortcuts = KeyboardPrefs.textShortcuts(this, badge)
         if (shortcuts.isEmpty()) {
-            root.addView(infoCard("No shortcuts yet", "Shortcuts are stored locally for the selected typing language."))
+            root.addView(infoCard("No shortcuts yet", "Shortcuts are stored locally first and sync with your Ana account when signed in."))
         } else {
             shortcuts.toSortedMap().forEach { (trigger, expansion) ->
                 root.addView(removableRow("$trigger  →  $expansion", "Local text shortcut") {
@@ -503,9 +611,9 @@ class MainActivity : Activity() {
         })
 
         root.addView(section("Privacy"))
-        root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, word correction, personal dictionary, shortcuts and adaptive touch calibration stay on this device."))
-        root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart sentence check."))
-        root.addView(infoCard("Smart sentence AI is opt-in", "Automatic cloud sentence correction is off by default. Turn it on under Typing only if you want it."))
+        root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, local word correction and adaptive touch calibration stay on this device. If you sign in, only your saved words, learned corrections and shortcuts are synced to your Ana account."))
+        root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart paragraph check."))
+        root.addView(infoCard("Smart paragraph AI is opt-in", "Automatic cloud paragraph correction is off by default. Turn it on under Typing only if you want it."))
         root.addView(infoCard("Password fields", "Ana AI, voice, suggestions and clipboard are disabled in password fields."))
     }
 
