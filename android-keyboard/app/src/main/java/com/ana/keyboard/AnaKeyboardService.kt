@@ -756,7 +756,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (baseUrl.isBlank()) return
         val candidate = currentParagraphCandidate() ?: return
         if (candidate.text == lastSmartSentenceChecked) return
-        lastSmartSentenceChecked = candidate.text
         val connection = currentInputConnection ?: return
         val token = smartSentenceToken
         val languageHint = KeyboardPrefs.inputLanguage(this)
@@ -767,15 +766,54 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             try {
                 val corrected = AnaApi.correctParagraph(baseUrl, candidate.text, languageHint).trim()
                 mainHandler.post {
-                    if (token != smartSentenceToken || currentInputConnection !== connection) return@post
-                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isPasswordField()) return@post
-                    if (!isSafeSentenceCorrection(candidate.text, corrected)) return@post
-                    val tail = connection.getTextBeforeCursor(candidate.suffix.length, 0)?.toString().orEmpty()
-                    if (tail != candidate.suffix) return@post
+                    if (token != smartSentenceToken || currentInputConnection !== connection) {
+                        if (currentInputConnection === connection) showStatus(defaultStatus())
+                        return@post
+                    }
+                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isPasswordField()) {
+                        showStatus(defaultStatus())
+                        return@post
+                    }
 
-                    connection.deleteSurroundingText(candidate.suffix.length, 0)
+                    if (corrected == candidate.text) {
+                        lastSmartSentenceChecked = candidate.text
+                        showStatus(defaultStatus())
+                        return@post
+                    }
+                    if (!isSafeSentenceCorrection(candidate.text, corrected)) {
+                        // Do not leave the keyboard stuck on "checking" if the
+                        // model returned something too different to auto-apply.
+                        showStatus(defaultStatus())
+                        return@post
+                    }
+
+                    // Paragraph correction can finish while the final word is
+                    // still owned by Ana's composing region. Finish composing
+                    // before deleting/replacing text or some editors simply
+                    // ignore the replacement request.
+                    finishLocalComposition(connection)
+                    val tail = connection.getTextBeforeCursor(candidate.suffix.length, 0)?.toString().orEmpty()
+                    if (tail != candidate.suffix) {
+                        showStatus(defaultStatus())
+                        scheduleSmartSentenceCorrection()
+                        return@post
+                    }
+
                     val replacement = corrected + candidate.trailing
+                    connection.beginBatchEdit()
+                    val deleted = try {
+                        connection.deleteSurroundingText(candidate.suffix.length, 0)
+                    } finally {
+                        // endBatchEdit is called after commit below when deletion succeeds.
+                    }
+                    if (!deleted) {
+                        connection.endBatchEdit()
+                        showStatus("ANA AI • could not apply correction")
+                        return@post
+                    }
                     connection.commitText(replacement, 1)
+                    connection.endBatchEdit()
+
                     lastSentenceCorrection = SentenceCorrectionRecord(candidate.text, corrected, candidate.trailing)
                     lastSmartSentenceChecked = corrected
                     clearSuggestions()
