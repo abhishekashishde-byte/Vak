@@ -192,7 +192,7 @@ export default async function handler(req, res) {
   const isAnaTranslation = rawInstructions.includes('premium translation engine')
   const isWordRefinement = rawInstructions.includes('bilingual editor refining a translation')
   const isLanguageDetection = rawInstructions.includes("Ana's language detector")
-  const isKeyboardSentenceCorrection = rawInstructions.includes('Smart Sentence Correction')
+  const isKeyboardSentenceCorrection = rawInstructions.includes('Smart Sentence Correction') || rawInstructions.includes('Smart Paragraph Correction')
   const isMeetingNotes = rawInstructions.includes('ANA_MEETING_NOTES')
   const isMeetingEnrichment = rawInstructions.includes('ANA_MEETING_ENRICHMENT')
   const isMeetingQa = rawInstructions.includes('ANA_MEETING_QA')
