@@ -356,6 +356,12 @@ class MainActivity : Activity() {
             })
         }
         root.addView(infoCard("Photo privacy", "The selected background stays on this device."))
+        root.addView(actionCard("Reset visual customizations") {
+            KeyboardPrefs.resetVisualCustomizations(this)
+            activePreview?.refreshFromSettings()
+            Toast.makeText(this, "Visual settings reset", Toast.LENGTH_SHORT).show()
+            renderTheme()
+        })
     }
 
     private fun renderTyping() {
@@ -464,6 +470,9 @@ class MainActivity : Activity() {
         }
 
         root.addView(section("Key feel & appearance"))
+        root.addView(intSliderCard("Key transparency", "Adjust only the key background. Letters, icons and invisible touch targets stay fully visible and unchanged.", KeyboardPrefs.keyOpacityPercent(this), 20, 100, "%") {
+            KeyboardPrefs.setKeyOpacityPercent(this, it)
+        })
         root.addView(intSliderCard("Key spacing", "Distance between visible keys", KeyboardPrefs.keyGapDp(this), 2, 9, " dp") {
             KeyboardPrefs.setKeyGapDp(this, it)
         })

@@ -318,9 +318,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
 
         correctionPreviewText = TextView(this).apply {
-            textSize = 11f
+            textSize = 10.5f
             setTextColor(Color.WHITE)
-            maxLines = 2
+            maxLines = 4
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(5), dp(8), dp(5))
         }
@@ -330,7 +330,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             setPadding(dp(4), dp(3), dp(4), dp(3))
             setBackgroundColor(Color.argb(245, 43, 43, 43))
             visibility = View.GONE
-            addView(correctionPreviewText, LinearLayout.LayoutParams(0, dp(50), 1f))
+            addView(correctionPreviewText, LinearLayout.LayoutParams(0, dp(76), 1f))
             addView(Button(this@AnaKeyboardService).apply {
                 text = "Reject"
                 isAllCaps = false
@@ -352,7 +352,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setOnClickListener { applySentenceProposal() }
             }, LinearLayout.LayoutParams(dp(72), dp(44)))
         }
-        root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+        root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)))
 
         status = TextView(this).apply {
             text = defaultStatus()
@@ -409,6 +409,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 override fun onTogglePin(text: String) {
                     KeyboardPrefs.toggleClipboardPin(this@AnaKeyboardService, text)
                     refreshClipboardPanel()
+                }
+
+                override fun onDelete(text: String) {
+                    KeyboardPrefs.deleteClipboardItem(this@AnaKeyboardService, text)
+                    refreshClipboardPanel()
+                    showStatus("Clipboard item deleted")
                 }
             }
         }
@@ -1015,10 +1021,16 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun showSentenceProposal(candidate: SentenceCandidate, corrected: String, connection: InputConnection, shieldedCount: Int = 0) {
         pendingSentenceProposal = SentenceProposal(candidate.text, corrected, candidate.suffix, candidate.trailing, connection)
         if (::correctionPreviewText.isInitialized) {
-            correctionPreviewText.text = "Ana suggests: " + corrected.replace("\n", " ").take(220)
+            correctionPreviewText.text = buildCorrectionPreview(candidate.text, corrected)
             correctionPreview.visibility = View.VISIBLE
         }
         showStatus(if (shieldedCount > 0) "ANA AI • correction ready • Privacy Shield protected $shieldedCount" else "ANA AI • correction ready for review")
+    }
+
+    private fun buildCorrectionPreview(before: String, after: String): String {
+        val cleanBefore = before.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(180)
+        val cleanAfter = after.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(180)
+        return "Before: $cleanBefore\nAfter:  $cleanAfter"
     }
 
     private fun dismissSentenceProposal(markChecked: Boolean) {

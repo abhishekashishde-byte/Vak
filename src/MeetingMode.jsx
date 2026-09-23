@@ -166,6 +166,8 @@ export default function MeetingMode() {
   const [bookmarks, setBookmarks] = useState(() => Array.isArray(saved.bookmarks) ? saved.bookmarks : [])
   const [missedSummary, setMissedSummary] = useState('')
   const [missedLoading, setMissedLoading] = useState(false)
+  const [preMeetingBrief, setPreMeetingBrief] = useState(null)
+  const [preMeetingLoading, setPreMeetingLoading] = useState(false)
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
@@ -196,6 +198,7 @@ export default function MeetingMode() {
   }, [meetingHistory, historyQuery])
 
   useEffect(() => { meetingModeRef.current = meetingMode; try { localStorage.setItem(MODE_KEY, meetingMode) } catch {} }, [meetingMode])
+  useEffect(() => { setPreMeetingBrief(null) }, [meetingMeta.customer, meetingMeta.project, meetingMeta.topic])
   useEffect(() => { targetRef.current = target }, [target])
   useEffect(() => { originalTextRef.current = originalText }, [originalText])
   useEffect(() => { translatedTextRef.current = translatedText }, [translatedText])
@@ -259,6 +262,61 @@ export default function MeetingMode() {
       .filter(Boolean)
       .slice(0, 25)
     setMeetingMeta(value => ({ ...value, topic: clean(event?.title) || value.topic, attendees }))
+    setPreMeetingBrief(null)
+  }
+
+  const prepareMeetingBrief = async () => {
+    if (preMeetingLoading) return
+    setPreMeetingLoading(true)
+    try {
+      const project = clean(meetingMeta.project).toLocaleLowerCase()
+      const customer = clean(meetingMeta.customer).toLocaleLowerCase()
+      const topic = clean(meetingMeta.topic).toLocaleLowerCase()
+      const words = topic.split(/\s+/).filter(word => word.length >= 4)
+      const matches = meetingHistory
+        .filter(record => {
+          const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+          if (project) return clean(meta.project).toLocaleLowerCase() === project
+          if (customer) return clean(meta.customer).toLocaleLowerCase() === customer
+          if (!words.length) return false
+          const haystack = [record?.title, meta.topic, record?.notes?.summary].map(clean).join(' ').toLocaleLowerCase()
+          return words.some(word => haystack.includes(word))
+        })
+        .sort((a, b) => Number(b.startedAt || 0) - Number(a.startedAt || 0))
+        .slice(0, 5)
+
+      const meetingIds = matches.map(record => String(record.id || '')).filter(Boolean)
+      let openActions = []
+      if (supabase && meetingIds.length) {
+        try {
+          const { data: userData } = await supabase.auth.getUser()
+          const user = userData?.user
+          if (user) {
+            const { data } = await supabase
+              .from('meeting_actions')
+              .select('meeting_client_id,task,owner,deadline,status')
+              .eq('user_id', user.id)
+              .eq('status', 'open')
+              .in('meeting_client_id', meetingIds)
+              .limit(40)
+            openActions = Array.isArray(data) ? data : []
+          }
+        } catch {}
+      }
+
+      const decisions = matches.flatMap(record => Array.isArray(record?.notes?.decisions) ? record.notes.decisions : []).map(clean).filter(Boolean).slice(0, 8)
+      const risks = matches.flatMap(record => Array.isArray(record?.notes?.risks) ? record.notes.risks : []).map(clean).filter(Boolean).slice(0, 8)
+      const questions = matches.flatMap(record => Array.isArray(record?.notes?.openQuestions) ? record.notes.openQuestions : []).map(clean).filter(Boolean).slice(0, 8)
+      setPreMeetingBrief({
+        meetings: matches,
+        decisions,
+        risks,
+        questions,
+        openActions,
+      })
+    } finally {
+      setPreMeetingLoading(false)
+    }
   }
 
   useEffect(() => { loadCalendar() }, [])
@@ -718,6 +776,19 @@ export default function MeetingMode() {
         <label className="meeting-meta-wide"><span>Attendees</span><input value={meetingMeta.attendees.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, attendees: event.target.value.split(',').map(clean).filter(Boolean).slice(0,25) }))} placeholder="Names or email addresses"/></label>
         <label className="meeting-meta-wide"><span>Tags</span><input value={meetingMeta.tags.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, tags: event.target.value.split(',') }))} onBlur={() => setMeetingMeta(value => ({ ...value, tags: cleanTags(value.tags) }))} placeholder="e.g. SAP, MRP, capacity"/></label>
       </div>
+
+      <section className="meeting-prebrief">
+        <div className="meeting-prebrief-head"><div><strong>Prepare me</strong><span>Bring forward previous decisions, actions, risks and open questions before this meeting starts.</span></div><button type="button" onClick={prepareMeetingBrief} disabled={active || processing || preMeetingLoading}>{preMeetingLoading ? 'Preparing…' : 'Prepare me'}</button></div>
+        {preMeetingBrief && <div className="meeting-prebrief-body">
+          {!preMeetingBrief.meetings.length ? <p>No earlier matching meetings were found yet.</p> : <>
+            <div className="meeting-prebrief-stat"><strong>{preMeetingBrief.meetings.length}</strong><span>matching previous meeting{preMeetingBrief.meetings.length === 1 ? '' : 's'}</span></div>
+            {preMeetingBrief.openActions.length > 0 && <div><b>Open actions</b>{preMeetingBrief.openActions.slice(0,6).map((item,index)=><p key={`a-${index}`}>{item.task}{item.owner ? ` · ${item.owner}` : ''}{item.deadline ? ` · ${item.deadline}` : ''}</p>)}</div>}
+            {preMeetingBrief.decisions.length > 0 && <div><b>Recent decisions</b>{preMeetingBrief.decisions.slice(0,5).map((item,index)=><p key={`d-${index}`}>{item}</p>)}</div>}
+            {preMeetingBrief.risks.length > 0 && <div><b>Risks</b>{preMeetingBrief.risks.slice(0,5).map((item,index)=><p key={`r-${index}`}>{item}</p>)}</div>}
+            {preMeetingBrief.questions.length > 0 && <div><b>Open questions</b>{preMeetingBrief.questions.slice(0,5).map((item,index)=><p key={`q-${index}`}>{item}</p>)}</div>}
+          </>}
+        </div>}
+      </section>
 
       <section className="meeting-template-picker">
         <div className="meeting-template-head"><div><strong>MOM template</strong><span>Choose a starting structure or tell Ana your own.</span></div><span>{activeMomTemplate.title}</span></div>
