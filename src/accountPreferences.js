@@ -81,6 +81,38 @@ const sanitiseGlossary = glossary => {
 
 const glossarySignature = glossary => JSON.stringify(sanitiseGlossary(glossary))
 
+const glossaryClientId = item => {
+  if (item?.id) return String(item.id).slice(0, 120)
+  const input = [item?.scope, item?.context, item?.target, item?.source].map(value => String(value || '').toLocaleLowerCase()).join('|')
+  let hash = 5381
+  for (let i = 0; i < input.length; i += 1) hash = ((hash << 5) + hash) ^ input.charCodeAt(i)
+  return `glossary-${(hash >>> 0).toString(16)}`
+}
+
+async function mirrorGlossaryTable(user, glossary) {
+  if (!supabase || !user?.id) return
+  const entries = sanitiseGlossary(glossary)
+  const rows = entries.map(item => ({
+    user_id: user.id,
+    client_id: glossaryClientId(item),
+    target: item.target,
+    source: item.source,
+    preferred: item.preferred,
+    scope: item.scope,
+    context: item.context,
+    rule: item.rule,
+    updated_at: new Date().toISOString(),
+  }))
+  if (rows.length) {
+    const { error } = await supabase.from('glossary_entries').upsert(rows, { onConflict: 'user_id,client_id' })
+    if (error) console.warn('[Ana glossary mirror]', error.message)
+  }
+  const { data: existing } = await supabase.from('glossary_entries').select('client_id').eq('user_id', user.id)
+  const keep = new Set(rows.map(row => row.client_id))
+  const stale = (Array.isArray(existing) ? existing : []).map(row => row.client_id).filter(id => id && !keep.has(id))
+  if (stale.length) await supabase.from('glossary_entries').delete().eq('user_id', user.id).in('client_id', stale)
+}
+
 const mergeGlossaries = (older = [], newer = []) => {
   const map = new Map()
   const keyFor = item => [item.scope, item.context.toLocaleLowerCase(), item.target, item.source.toLocaleLowerCase()].join('\u0000')
@@ -176,6 +208,7 @@ async function uploadPreferences(user, bundle = getLocalPreferenceBundle(), upda
     setSyncState('error')
     return
   }
+  await mirrorGlossaryTable(user, payload.glossary)
   setLocalUpdatedAt(updatedAt)
   setSyncState('synced')
 }
@@ -193,7 +226,32 @@ export async function hydrateAccountPreferences() {
     }
 
     const user = data.user
-    const remote = user.user_metadata?.ana_preferences
+    let remote = user.user_metadata?.ana_preferences
+    try {
+      const { data: glossaryRows } = await supabase
+        .from('glossary_entries')
+        .select('client_id,target,source,preferred,scope,context,rule,updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: true })
+      if (Array.isArray(glossaryRows) && glossaryRows.length) {
+        const tableGlossary = glossaryRows.map(row => ({
+          id: row.client_id,
+          target: row.target,
+          source: row.source,
+          preferred: row.preferred,
+          scope: row.scope || 'personal',
+          context: row.context || '',
+          rule: row.rule || 'preferred',
+        }))
+        const tableUpdatedAt = Math.max(...glossaryRows.map(row => new Date(row.updated_at || 0).getTime()).filter(Number.isFinite), 0)
+        remote = {
+          ...(remote || {}),
+          glossary: mergeGlossaries(remote?.glossary || [], tableGlossary),
+          glossaryUpdatedAt: Math.max(Number(remote?.glossaryUpdatedAt || 0), tableUpdatedAt),
+          updatedAt: Math.max(Number(remote?.updatedAt || 0), tableUpdatedAt),
+        }
+      }
+    } catch {}
     const local = getLocalPreferenceBundle()
     const localTs = localUpdatedAt()
     const remoteTs = Number(remote?.updatedAt || 0) || 0
