@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -115,6 +116,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
+    private var voiceRecognizerOnDevice = false
+    private enum class VoiceMode { DICTATE, EDIT_COMMAND }
+    private var voiceMode = VoiceMode.DICTATE
+    private var voiceEditSource: ActionText? = null
 
     private enum class SuggestionKind { WORD, NEXT_WORD, EMOJI, CLIPBOARD }
     private data class SuggestionEntry(val label: String, val value: String, val kind: SuggestionKind)
@@ -242,6 +247,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Correct") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Shorter") { runAnaAction(AnaApi.Action.SHORTER) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Friendly") { runAnaAction(AnaApi.Action.FRIENDLY) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Formal") { runAnaAction(AnaApi.Action.FORMAL) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Du") { runAnaAction(AnaApi.Action.DU) }.also { aiButtons += it })
+            toolbar.addView(actionButton("Sie") { runAnaAction(AnaApi.Action.SIE) }.also { aiButtons += it })
             toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
             toolbar.addView(actionButton("Undo") { performUndo() })
             toolbar.addView(actionButton("Redo") { sendEditorShortcut(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON) })
@@ -261,6 +271,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 requestSuggestionsSoon()
             })
             if (KeyboardPrefs.voiceTypingEnabled(this)) {
+                toolbar.addView(actionButton("Voice edit") { startVoiceEditCommand() }.also { aiButtons += it })
                 voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
                     .also { toolbar.addView(it) }
             }
@@ -926,12 +937,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val connection = currentInputConnection ?: return
         val token = smartSentenceToken
         val languageHint = KeyboardPrefs.inputLanguage(this)
-        showStatus("ANA AI • checking paragraph")
+        val shieldEnabled = KeyboardPrefs.privacyShieldEnabled(this)
+        showStatus(if (shieldEnabled) "ANA AI • checking paragraph • Privacy Shield active" else "ANA AI • checking paragraph")
         smartSentenceInFlight = true
 
         smartSentenceExecutor.execute {
             try {
-                val corrected = AnaApi.correctParagraph(baseUrl, candidate.text, languageHint).trim()
+                val cloudResult = AnaApi.correctParagraph(baseUrl, candidate.text, languageHint, shieldEnabled, cloudGlossary())
+                val corrected = cloudResult.text.trim()
                 mainHandler.post {
                     if (token != smartSentenceToken || currentInputConnection !== connection) {
                         if (currentInputConnection === connection) showStatus(defaultStatus())
@@ -964,7 +977,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         return@post
                     }
 
-                    showSentenceProposal(candidate, corrected, connection)
+                    showSentenceProposal(candidate, corrected, connection, cloudResult.shieldedCount)
                 }
             } catch (_: Exception) {
                 // Network/API failure must never interrupt typing, but it should
@@ -987,13 +1000,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
-    private fun showSentenceProposal(candidate: SentenceCandidate, corrected: String, connection: InputConnection) {
+    private fun showSentenceProposal(candidate: SentenceCandidate, corrected: String, connection: InputConnection, shieldedCount: Int = 0) {
         pendingSentenceProposal = SentenceProposal(candidate.text, corrected, candidate.suffix, candidate.trailing, connection)
         if (::correctionPreviewText.isInitialized) {
             correctionPreviewText.text = "Ana suggests: " + corrected.replace("\n", " ").take(220)
             correctionPreview.visibility = View.VISIBLE
         }
-        showStatus("ANA AI • correction ready for review")
+        showStatus(if (shieldedCount > 0) "ANA AI • correction ready • Privacy Shield protected $shieldedCount" else "ANA AI • correction ready for review")
     }
 
     private fun dismissSentenceProposal(markChecked: Boolean) {
@@ -1546,7 +1559,31 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun toggleVoiceTyping() {
-        if (voiceListening) stopVoiceTyping(true) else startVoiceTyping()
+        if (voiceListening) stopVoiceTyping(true) else {
+            voiceMode = VoiceMode.DICTATE
+            voiceEditSource = null
+            startVoiceTyping()
+        }
+    }
+
+    private fun startVoiceEditCommand() {
+        if (voiceListening) {
+            stopVoiceTyping(true)
+            return
+        }
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) {
+            showStatus("Voice edit is unavailable in this private context")
+            return
+        }
+        val connection = currentInputConnection ?: return
+        val selected = connection.getSelectedText(0)?.toString().orEmpty()
+        if (selected.isBlank()) {
+            showStatus("Select text first, then tap Voice edit")
+            return
+        }
+        voiceMode = VoiceMode.EDIT_COMMAND
+        voiceEditSource = ActionText(selected.take(8000), true)
+        startVoiceTyping()
     }
 
     private fun setVoiceListeningUi(listening: Boolean) {
@@ -1578,12 +1615,21 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
 
         if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
+            val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+            voiceRecognizerOnDevice = preferOnDevice && canUseOnDevice
+            speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(this)
+            }
+            speechRecognizer = speechRecognizer?.apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         voiceListening = true
                         setVoiceListeningUi(true)
-                        showStatus("Listening…")
+                        showStatus(if (voiceMode == VoiceMode.EDIT_COMMAND) "Listening for edit instruction…" else if (voiceRecognizerOnDevice) "Listening on device…" else "Listening…")
                     }
                     override fun onBeginningOfSpeech() = Unit
                     override fun onRmsChanged(rmsdB: Float) = Unit
@@ -1597,17 +1643,19 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     }
                     override fun onResults(results: Bundle?) {
                         val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                        if (text.isNotBlank()) currentInputConnection?.commitText("$text ", 1)
-                        else currentInputConnection?.finishComposingText()
                         voiceListening = false
                         setVoiceListeningUi(false)
-                        clearSuggestions()
-                        refreshShiftFromEditor()
-                        showStatus(if (text.isBlank()) "Nothing heard" else "Dictation inserted")
+                        if (voiceMode == VoiceMode.EDIT_COMMAND) finishVoiceEditCommand(text)
+                        else finishDictation(text)
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
                         val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                        if (partial.isNotBlank()) currentInputConnection?.setComposingText(partial, 1)
+                        if (partial.isBlank()) return
+                        if (voiceMode == VoiceMode.EDIT_COMMAND) {
+                            showStatus("Voice edit: " + partial.take(80))
+                        } else {
+                            currentInputConnection?.setComposingText(partial, 1)
+                        }
                     }
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
                 })
@@ -1624,6 +1672,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            if (KeyboardPrefs.preferOnDeviceDictation(this@AnaKeyboardService)) {
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            }
         }
         voiceListening = true
         setVoiceListeningUi(true)
@@ -1631,10 +1682,123 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         showStatus("Listening…")
     }
 
+    private fun cloudGlossary(): List<String> =
+        KeyboardPrefs.personalDictionary(this, cachedInputBadge).map { it.trim() }.filter { it.isNotBlank() }.take(40)
+
+    private fun commitDictationText(text: String, message: String) {
+        val connection = currentInputConnection ?: return
+        try {
+            connection.setComposingText("", 1)
+            connection.finishComposingText()
+        } catch (_: Exception) {}
+        if (text.isNotBlank()) connection.commitText(text.trim() + " ", 1)
+        clearSuggestions()
+        refreshShiftFromEditor()
+        showStatus(if (text.isBlank()) "Nothing heard" else message)
+    }
+
+    private fun finishDictation(raw: String) {
+        if (raw.isBlank()) {
+            currentInputConnection?.finishComposingText()
+            showStatus("Nothing heard")
+            return
+        }
+        val cleanMode = KeyboardPrefs.dictationMode(this) == "clean"
+        val baseUrl = KeyboardPrefs.baseUrl(this)
+        val canUseCloud = cleanMode && baseUrl.isNotBlank() && isAppAiAllowed() &&
+            !KeyboardPrefs.incognitoEnabled(this) && !isSensitiveField()
+
+        if (!canUseCloud) {
+            commitDictationText(raw, if (cleanMode) "Exact dictation inserted" else "Dictation inserted")
+            return
+        }
+
+        val connection = currentInputConnection ?: return
+        try {
+            connection.setComposingText("", 1)
+            connection.finishComposingText()
+        } catch (_: Exception) {}
+        val shield = KeyboardPrefs.privacyShieldEnabled(this)
+        showStatus(if (shield) "ANA AI • cleaning dictation • Privacy Shield active" else "ANA AI • cleaning dictation")
+        executor.execute {
+            try {
+                val result = AnaApi.cleanDictation(
+                    baseUrl,
+                    raw,
+                    KeyboardPrefs.inputLanguage(this),
+                    shield,
+                    cloudGlossary()
+                )
+                mainHandler.post {
+                    if (currentInputConnection !== connection) {
+                        showStatus("Text field changed — dictation result was not inserted")
+                        return@post
+                    }
+                    connection.commitText(result.text.trim() + " ", 1)
+                    clearSuggestions()
+                    refreshShiftFromEditor()
+                    showStatus(if (result.shieldedCount > 0) "Clean dictation inserted • Privacy Shield protected ${result.shieldedCount}" else "Clean dictation inserted")
+                }
+            } catch (_: Exception) {
+                mainHandler.post { commitDictationText(raw, "Clean-up unavailable — exact dictation inserted") }
+            }
+        }
+    }
+
+    private fun finishVoiceEditCommand(command: String) {
+        val source = voiceEditSource
+        voiceEditSource = null
+        voiceMode = VoiceMode.DICTATE
+        if (command.isBlank() || source == null) {
+            showStatus(if (command.isBlank()) "No edit instruction heard" else "Select text first")
+            return
+        }
+        val connection = currentInputConnection ?: return
+        val selected = connection.getSelectedText(0)?.toString().orEmpty()
+        if (selected != source.text) {
+            showStatus("Selection changed — Voice edit cancelled")
+            return
+        }
+        val baseUrl = KeyboardPrefs.baseUrl(this)
+        if (baseUrl.isBlank()) {
+            showStatus("Set your Ana address in keyboard settings first")
+            return
+        }
+        val shield = KeyboardPrefs.privacyShieldEnabled(this)
+        setAiBusy(true)
+        showStatus(if (shield) "ANA AI • Voice edit • Privacy Shield active" else "ANA AI • Voice edit")
+        executor.execute {
+            try {
+                val result = AnaApi.voiceEdit(baseUrl, source.text, command, KeyboardPrefs.target(this), shield, cloudGlossary())
+                mainHandler.post {
+                    if (currentInputConnection !== connection || connection.getSelectedText(0)?.toString() != source.text) {
+                        setAiBusy(false)
+                        showStatus("Selection changed — Ana left it untouched")
+                        return@post
+                    }
+                    connection.commitText(result.text, 1)
+                    setAiBusy(false)
+                    showStatus(if (result.shieldedCount > 0) "Voice edit applied • Privacy Shield protected ${result.shieldedCount}" else "Voice edit applied")
+                    clearSuggestions()
+                    refreshShiftFromEditor()
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    setAiBusy(false)
+                    showStatus(error.message ?: "Voice edit failed")
+                }
+            }
+        }
+    }
+
     private fun stopVoiceTyping(showMessage: Boolean) {
         if (!voiceListening) return
         try { speechRecognizer?.stopListening() } catch (_: Exception) { }
         voiceListening = false
+        if (voiceMode == VoiceMode.EDIT_COMMAND) {
+            voiceEditSource = null
+            voiceMode = VoiceMode.DICTATE
+        }
         setVoiceListeningUi(false)
         if (showMessage) showStatus("Voice typing stopped")
     }
@@ -1684,18 +1848,24 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         val connection = currentInputConnection ?: return
         val target = KeyboardPrefs.target(this)
+        val shieldEnabled = KeyboardPrefs.privacyShieldEnabled(this)
         setAiBusy(true)
         val busyMessage = when (action) {
             AnaApi.Action.WRITE -> "ANA AI • writing in $target…"
             AnaApi.Action.FIX -> "ANA AI • correcting to $target…"
             AnaApi.Action.TRANSLATE -> "ANA AI • translating to $target…"
+            AnaApi.Action.SHORTER -> "ANA AI • shortening…"
+            AnaApi.Action.FORMAL -> "ANA AI • making formal…"
+            AnaApi.Action.FRIENDLY -> "ANA AI • making friendly…"
+            AnaApi.Action.DU -> "ANA AI • converting to Du…"
+            AnaApi.Action.SIE -> "ANA AI • converting to Sie…"
             else -> "ANA AI • working…"
         }
-        showStatus(busyMessage)
+        showStatus(if (shieldEnabled) "$busyMessage • Privacy Shield active" else busyMessage)
 
         executor.execute {
             try {
-                val result = AnaApi.transform(baseUrl, source.text, action, target)
+                val result = AnaApi.transform(baseUrl, source.text, action, target, shieldEnabled, cloudGlossary())
                 mainHandler.post {
                     if (currentInputConnection !== connection) {
                         setAiBusy(false)
@@ -1713,13 +1883,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         return@post
                     }
 
-                    if (source.selected) connection.commitText(result, 1)
+                    if (source.selected) connection.commitText(result.text, 1)
                     else {
                         connection.deleteSurroundingText(source.text.length, 0)
-                        connection.commitText(result, 1)
+                        connection.commitText(result.text, 1)
                     }
                     setAiBusy(false)
-                    showStatus("Done")
+                    showStatus(if (result.shieldedCount > 0) "Done • Privacy Shield protected ${result.shieldedCount}" else "Done")
                     clearSuggestions()
                     refreshShiftFromEditor()
                 }
@@ -1744,6 +1914,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun defaultStatus(): String = when {
         KeyboardPrefs.incognitoEnabled(this) -> "INCOGNITO • local typing only"
         !isAppAiAllowed() -> "APP AI OFF • local typing and suggestions only"
+        KeyboardPrefs.privacyShieldEnabled(this) -> "LOCAL • Privacy Shield ON"
         else -> "LOCAL • typing stays on device"
     }
 
