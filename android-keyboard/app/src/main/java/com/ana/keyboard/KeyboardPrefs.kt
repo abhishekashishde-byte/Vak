@@ -38,6 +38,9 @@ object KeyboardPrefs {
     private const val KEY_GLIDE_TYPING = "glide_typing"
     private const val KEY_GLIDE_TRAIL = "glide_trail"
     private const val KEY_VOICE_TYPING = "voice_typing"
+    private const val KEY_DICTATION_MODE = "dictation_mode"
+    private const val KEY_PREFER_ON_DEVICE_DICTATION = "prefer_on_device_dictation"
+    private const val KEY_PRIVACY_SHIELD = "privacy_shield"
     private const val KEY_PERSONAL_DICTIONARY_PREFIX = "personal_dictionary_"
     private const val KEY_LEARNED_CORRECTIONS_PREFIX = "learned_corrections_"
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
@@ -254,6 +257,19 @@ object KeyboardPrefs {
 
     fun voiceTypingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_VOICE_TYPING, true)
     fun setVoiceTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_VOICE_TYPING, enabled).apply()
+
+    fun dictationMode(context: Context): String {
+        val value = prefs(context).getString(KEY_DICTATION_MODE, "clean") ?: "clean"
+        return value.takeIf { it in setOf("exact", "clean") } ?: "clean"
+    }
+    fun setDictationMode(context: Context, value: String) =
+        prefs(context).edit().putString(KEY_DICTATION_MODE, value.takeIf { it in setOf("exact", "clean") } ?: "clean").apply()
+
+    fun preferOnDeviceDictation(context: Context): Boolean = prefs(context).getBoolean(KEY_PREFER_ON_DEVICE_DICTATION, true)
+    fun setPreferOnDeviceDictation(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_PREFER_ON_DEVICE_DICTATION, enabled).apply()
+
+    fun privacyShieldEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_PRIVACY_SHIELD, true)
+    fun setPrivacyShieldEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_PRIVACY_SHIELD, enabled).apply()
 
     fun personalDictionary(context: Context, badge: String = inputBadge(context)): List<String> {
         val raw = learningPrefs(context).getString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, "[]") ?: "[]"
