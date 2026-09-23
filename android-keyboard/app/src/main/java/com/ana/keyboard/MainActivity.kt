@@ -410,7 +410,7 @@ class MainActivity : Activity() {
             KeyboardPrefs.setDictationMode(this, "exact")
             renderRichInput()
         })
-        root.addView(switchRow("Prefer on-device recognition", "Use Android's on-device speech recognizer when the phone supports it; otherwise fall back to the available recognizer.", KeyboardPrefs.preferOnDeviceDictation(this)) {
+        root.addView(switchRow("Prefer on-device recognition", "Optional. Uses Android's on-device recognizer when its language model is available. Leave off for the most compatible voice typing.", KeyboardPrefs.preferOnDeviceDictation(this)) {
             KeyboardPrefs.setPreferOnDeviceDictation(this, it)
         })
         root.addView(infoCard("Voice edit", "Select text in any app, tap Voice edit in Ana's toolbar, then say instructions such as “make this shorter”, “translate to German” or “make it formal”."))
