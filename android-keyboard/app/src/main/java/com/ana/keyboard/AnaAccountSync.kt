@@ -128,18 +128,15 @@ object AnaAccountSync {
     }
 
     internal fun fetchSharedGlossary(session: Session): List<KeyboardPrefs.SharedGlossaryEntry> {
+        val columns = "target,source,preferred,scope,context,rule,updated_at"
         val response = request(
-            url = "$PROJECT_URL/auth/v1/user",
+            url = "$PROJECT_URL/rest/v1/glossary_entries?select=$columns&order=updated_at.asc",
             method = "GET",
             bearer = session.accessToken
         )
         if (response.first !in 200..299) return emptyList()
         return try {
-            val user = JSONObject(response.second.ifBlank { "{}" })
-            val glossary = user.optJSONObject("user_metadata")
-                ?.optJSONObject("ana_preferences")
-                ?.optJSONArray("glossary")
-                ?: JSONArray()
+            val glossary = JSONArray(response.second.ifBlank { "[]" })
             buildList {
                 for (i in 0 until glossary.length()) {
                     val item = glossary.optJSONObject(i) ?: continue
