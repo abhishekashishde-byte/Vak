@@ -76,6 +76,84 @@ object CoreLexicon {
         "HIN" -> hinglish + english.take(180)
         else -> english
     }
+    private val englishNext = mapOf(
+        "thank" to listOf("you", "you!", "you."),
+        "thanks" to listOf("for", "a", "so"),
+        "how" to listOf("are", "is", "was"),
+        "are" to listOf("you", "we", "there"),
+        "can" to listOf("you", "we", "I"),
+        "could" to listOf("you", "we", "I"),
+        "please" to listOf("send", "check", "let"),
+        "let" to listOf("me", "us", "you"),
+        "I" to listOf("will", "am", "have"),
+        "we" to listOf("can", "will", "need"),
+        "meeting" to listOf("today", "tomorrow", "is"),
+        "happy" to listOf("birthday", "to", "for"),
+        "good" to listOf("morning", "luck", "idea"),
+        "see" to listOf("you", "if", "the"),
+        "talk" to listOf("to", "about", "later"),
+        "next" to listOf("week", "time", "meeting"),
+        "very" to listOf("much", "good", "happy"),
+        "will" to listOf("be", "send", "check"),
+        "need" to listOf("to", "the", "more"),
+        "want" to listOf("to", "the", "a"),
+        "have" to listOf("a", "to", "been")
+    )
+
+    private val germanNext = mapOf(
+        "vielen" to listOf("Dank", "Grüße"),
+        "danke" to listOf("für", "dir", "Ihnen"),
+        "guten" to listOf("Morgen", "Tag", "Abend"),
+        "wie" to listOf("geht", "ist", "sieht"),
+        "kannst" to listOf("du", "mir", "bitte"),
+        "können" to listOf("Sie", "wir", "wir uns"),
+        "bitte" to listOf("prüfen", "schicken", "kurz"),
+        "ich" to listOf("werde", "bin", "habe"),
+        "wir" to listOf("können", "werden", "müssen"),
+        "der" to listOf("Termin", "Kunde", "Plan"),
+        "die" to listOf("Besprechung", "Frage", "Lösung"),
+        "das" to listOf("ist", "kann", "Thema"),
+        "nächste" to listOf("Woche", "Besprechung", "Schritt"),
+        "morgen" to listOf("früh", "um", "kann"),
+        "termin" to listOf("ist", "morgen", "verschieben"),
+        "meeting" to listOf("ist", "heute", "morgen"),
+        "vielleicht" to listOf("können", "ist", "morgen")
+    )
+
+    private val hinglishNext = mapOf(
+        "kya" to listOf("hai", "karna", "hua"),
+        "kaise" to listOf("ho", "hai", "karna"),
+        "main" to listOf("kal", "abhi", "check"),
+        "hum" to listOf("kal", "abhi", "check"),
+        "tum" to listOf("kal", "please", "check"),
+        "aap" to listOf("please", "kal", "check"),
+        "kal" to listOf("meeting", "baat", "kar"),
+        "abhi" to listOf("check", "bhej", "kar"),
+        "please" to listOf("check", "bhej", "batana"),
+        "meeting" to listOf("kal", "hai", "mein"),
+        "thanks" to listOf("yaar", "bhai", "a lot"),
+        "bahut" to listOf("acha", "badiya", "thanks"),
+        "theek" to listOf("hai", "h", "rahega"),
+        "mujhe" to listOf("lagta", "bhej", "batana"),
+        "baat" to listOf("karte", "karna", "hui"),
+        "kar" to listOf("do", "lenge", "raha"),
+        "bhej" to listOf("do", "dena", "diya")
+    )
+
+    private val emojiEnglish = mapOf(
+        "birthday" to "🎂", "happy" to "😊", "love" to "❤️", "thanks" to "🙏", "thank" to "🙏",
+        "laugh" to "😂", "funny" to "😂", "great" to "👍", "good" to "👍", "party" to "🎉",
+        "congrats" to "🎉", "congratulations" to "🎉", "sad" to "😔", "sorry" to "🙏", "fire" to "🔥"
+    )
+    private val emojiGerman = mapOf(
+        "geburtstag" to "🎂", "danke" to "🙏", "liebe" to "❤️", "lustig" to "😂", "super" to "👍",
+        "gut" to "👍", "party" to "🎉", "glückwunsch" to "🎉", "traurig" to "😔", "sorry" to "🙏"
+    )
+    private val emojiHinglish = mapOf(
+        "birthday" to "🎂", "thanks" to "🙏", "shukriya" to "🙏", "pyaar" to "❤️", "mast" to "🔥",
+        "badiya" to "👍", "acha" to "👍", "party" to "🎉", "sorry" to "🙏", "yaar" to "😊"
+    )
+
 
     fun suggestions(input: String, badge: String, max: Int = 5): Result {
         val clean = normalize(input)
@@ -104,6 +182,27 @@ object CoreLexicon {
                 (clean.length >= 7 && top.distance == 2 && (second == null || second.distance > top.distance))
             )
         return Result(suggestions, confident)
+    }
+
+    fun nextWords(previous: String, badge: String, max: Int = 3): List<String> {
+        val clean = previous.trim().lowercase()
+        if (clean.isBlank()) return emptyList()
+        val map = when (badge) {
+            "DE" -> germanNext
+            "HIN" -> hinglishNext
+            else -> englishNext
+        }
+        return map[clean].orEmpty().take(max)
+    }
+
+    fun emojiForWord(word: String, badge: String): String? {
+        val clean = word.trim().lowercase()
+        val map = when (badge) {
+            "DE" -> emojiGerman
+            "HIN" -> emojiHinglish
+            else -> emojiEnglish
+        }
+        return map[clean]
     }
 
     fun decodeGlide(sequence: String, badge: String): String? {
