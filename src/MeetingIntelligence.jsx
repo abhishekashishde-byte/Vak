@@ -118,7 +118,7 @@ function meetingText(record) {
   const notes = record?.notes || {}
   const meta = record?.metadata || notes?._ana?.metadata || {}
   const template = record?.momTemplate || notes?._ana?.momTemplate || {}
-  return [record?.title, meta.customer, meta.topic, meta.project, meta.meetingType, ...safeArray(meta.tags), template.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
+  return [record?.title, meta.customer, meta.topic, meta.project, meta.meetingType, ...safeArray(meta.attendees), ...safeArray(meta.tags), template.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
     .filter(Boolean).join(' ').toLocaleLowerCase()
 }
 
