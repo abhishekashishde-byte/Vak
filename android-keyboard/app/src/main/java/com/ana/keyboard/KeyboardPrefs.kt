@@ -601,6 +601,7 @@ object KeyboardPrefs {
             editor.remove(KEY_PERSONAL_DICTIONARY_PREFIX + badge)
             editor.remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge)
             editor.remove(KEY_SHORTCUTS_PREFIX + badge)
+            editor.remove(KEY_NEXT_WORD_PREFIX + badge)
         }
         editor.apply()
     }
