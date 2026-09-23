@@ -3,6 +3,7 @@ const count = document.getElementById('count')
 const source = document.getElementById('source')
 const status = document.getElementById('status')
 const appUrl = document.getElementById('appUrl')
+const projectContext = document.getElementById('projectContext')
 const settingsBody = document.getElementById('settingsBody')
 
 function setStatus(message, type = '') {
@@ -17,8 +18,9 @@ function validAppUrl(value) {
   } catch { return null }
 }
 async function loadSettings() {
-  const saved = await chrome.storage.sync.get('anaAppUrl')
+  const saved = await chrome.storage.sync.get(['anaAppUrl', 'anaGlossaryContext'])
   appUrl.value = saved.anaAppUrl || ''
+  projectContext.value = saved.anaGlossaryContext || ''
   if (!saved.anaAppUrl) settingsBody.hidden = false
 }
 async function loadPendingSelection() {
@@ -51,16 +53,23 @@ async function captureSelection() {
 async function openInAna(action) {
   const text = selection.value.trim().slice(0, 8000)
   if (!text) return setStatus('Select or paste some text first.', 'warn')
-  const stored = await chrome.storage.sync.get('anaAppUrl')
+  const stored = await chrome.storage.sync.get(['anaAppUrl', 'anaGlossaryContext'])
   const url = validAppUrl(stored.anaAppUrl)
   if (!url) {
     settingsBody.hidden = false
     appUrl.focus()
     return setStatus('Set your Ana web app address once, then try again.', 'warn')
   }
-  const payload = encodeURIComponent(JSON.stringify({ version: 1, action, text }))
+  const payload = encodeURIComponent(JSON.stringify({
+    version: 2,
+    action,
+    text,
+    glossaryContext: String(stored.anaGlossaryContext || '').trim().slice(0, 120),
+    sourceTitle: source.textContent || '',
+  }))
   url.hash = `anaExt=${payload}`
   await chrome.tabs.create({ url: url.toString() })
+  setStatus('Opened in Ana. Your Ana privacy and glossary settings apply.', 'ok')
 }
 
 selection.addEventListener('input', updateCount)
@@ -71,7 +80,10 @@ document.getElementById('saveUrl').addEventListener('click', async () => {
   if (!url) return setStatus('Enter a valid http or https Ana address.', 'warn')
   url.hash = ''
   url.search = ''
-  await chrome.storage.sync.set({ anaAppUrl: url.toString().replace(/\/$/, '') })
+  await chrome.storage.sync.set({
+    anaAppUrl: url.toString().replace(/\/$/, ''),
+    anaGlossaryContext: projectContext.value.trim().slice(0, 120),
+  })
   setStatus('Saved.', 'ok')
   settingsBody.hidden = true
 })
