@@ -16,16 +16,24 @@
     </section>
     <section class="actions" aria-label="Ana actions">
       <button data-action="translate">Translate</button>
-      <button data-action="rewrite">Rewrite</button>
+      <button data-action="correct">Correct</button>
+      <button data-action="shorter">Shorter</button>
+      <button data-action="friendly">Friendly</button>
+      <button data-action="formal">Formal</button>
+      <button data-action="du">Du</button>
+      <button data-action="sie">Sie</button>
       <button data-action="explain">Explain</button>
-      <button data-action="reply">Reply</button>
+      <button data-action="reply">Write reply</button>
     </section>
     <section class="settings card">
-      <div class="row between"><strong>Ana web app</strong><button id="toggleSettings" class="link">Settings</button></div>
+      <div class="row between"><strong>Ana settings</strong><button id="toggleSettings" class="link">Settings</button></div>
       <div id="settingsBody" hidden>
-        <p class="hint">Enter your normal Ana web address once. Selected text is passed in a URL fragment, which is not sent to the web server, and Ana clears it after opening.</p>
+        <p class="hint">The extension does not call AI directly. It hands the selected text to your signed-in Ana web app. Ana's glossary, Privacy Shield and account settings apply there.</p>
+        <label for="appUrl">Ana web app</label>
         <input id="appUrl" type="url" placeholder="https://your-ana-domain.example" autocomplete="url" />
-        <button id="saveUrl" class="save">Save</button>
+        <label for="projectContext">Project context <small>(optional)</small></label>
+        <input id="projectContext" type="text" placeholder="e.g. S/4HANA Transformation" autocomplete="off" />
+        <button id="saveUrl" class="save">Save settings</button>
       </div>
       <p id="status" class="status"></p>
     </section>
