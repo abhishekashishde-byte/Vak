@@ -40,7 +40,10 @@ class LocalSuggestionEngine(
         val clean = word.trim().lowercase()
         if (clean in personalWords) return CoreLexicon.Result(emptyList(), false)
         learnedCorrections[clean]?.let { return CoreLexicon.Result(listOf(it), true) }
-        return CoreLexicon.suggestions(clean, badge.ifBlank { "EN" })
+        val result = CoreLexicon.suggestions(clean, badge.ifBlank { "EN" })
+        return result.copy(
+            highConfidenceTypo = TypingQualityPolicy.allowAutomaticCorrection(badge.ifBlank { "EN" }, clean, result.highConfidenceTypo)
+        )
     }
 
     fun request(word: String) {
@@ -63,7 +66,8 @@ class LocalSuggestionEngine(
         worker.execute {
             val result = offline.suggestions(clean, requestBadge)
                 ?: CoreLexicon.suggestions(clean, requestBadge)
-            if (requestBadge == badge) onResult(clean, result.suggestions, result.highConfidenceTypo)
+            val auto = TypingQualityPolicy.allowAutomaticCorrection(requestBadge, clean, result.highConfidenceTypo)
+            if (requestBadge == badge) onResult(clean, result.suggestions, auto)
         }
     }
 
