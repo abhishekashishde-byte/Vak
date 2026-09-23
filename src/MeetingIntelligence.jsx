@@ -502,7 +502,7 @@ export default function MeetingIntelligence() {
     <section className="mi-card mi-outputs">
       <div className="mi-card-head"><MessageSquare size={16}/><div><strong>One-click outputs</strong><small>Reuse the meeting without rewriting it yourself.</small></div></div>
       <div className="mi-output-buttons">
-        <button onClick={copyMom}><Clipboard size={14}/>} {copied ? 'Copied MOM' : 'Copy MOM'}</button>
+        <button onClick={copyMom}><Clipboard size={14}/> {copied ? 'Copied MOM' : 'Copy MOM'}</button>
         <button onClick={downloadMomWord}><Download size={14}/> Word</button>
         <button onClick={printMomPdf}><Printer size={14}/> Print / PDF</button>
         <button onClick={() => generateOutput('email')} disabled={Boolean(outputLoading)}>{outputLoading === 'email' ? <span className="mi-spinner"/> : <Mail size={14}/>} Follow-up email</button>
