@@ -53,8 +53,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var correctionPreviewText: TextView
 
     private var voiceButton: ImageButton? = null
+    private var appAiButton: Button? = null
     private val aiButtons = mutableListOf<Button>()
     private val suggestionButtons = mutableListOf<TextView>()
+    private val suggestionEntries = MutableList<SuggestionEntry?>(3) { null }
 
     private val executor = Executors.newSingleThreadExecutor()
     private val smartSentenceExecutor = Executors.newSingleThreadExecutor()
@@ -62,6 +64,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val vibrator by lazy { getSystemService(Context.VIBRATOR_SERVICE) as Vibrator }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private val clipboardManager by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
+    private var quickClipboardText = ""
+    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        if (!isInputViewShown || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return@OnPrimaryClipChangedListener
+        mainHandler.post {
+            refreshQuickClipboard()
+            requestSuggestionsSoon()
+        }
+    }
 
     private var capsLock = false
     private var lastShiftTap = 0L
@@ -89,6 +100,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var cachedAutoCorrectionEnabled = true
     private var cachedDoubleSpacePeriodEnabled = true
     private var cachedAutoSpacePunctuation = true
+    private var cachedAutoSpaceSuggestion = true
     private var cachedHapticEnabled = true
     private var cachedHapticStrengthMs = 6
     private var cachedSoundEnabled = true
@@ -103,6 +115,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
+
+    private enum class SuggestionKind { WORD, NEXT_WORD, EMOJI, CLIPBOARD }
+    private data class SuggestionEntry(val label: String, val value: String, val kind: SuggestionKind)
 
     private data class AutoCorrectionRecord(val original: String, val corrected: String)
     private data class SentenceCorrectionRecord(val original: String, val corrected: String, val trailing: String)
@@ -149,12 +164,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             return@Runnable
         }
         val word = currentWord()
-        if (word.isNullOrBlank()) {
-            clearSuggestions()
+        suggestionEngine.setLanguage(cachedInputBadge)
+        if (!word.isNullOrBlank()) {
+            suggestionEngine.request(word)
             return@Runnable
         }
-        suggestionEngine.setLanguage(cachedInputBadge)
-        suggestionEngine.request(word)
+        val previous = lastCompletedWord()
+        if (!previous.isNullOrBlank()) suggestionEngine.requestNext(previous)
+        else showEntries(listOfNotNull(clipboardQuickEntry()))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -165,6 +182,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         cachedAutoCorrectionEnabled = KeyboardPrefs.autoCorrectionEnabled(this)
         cachedDoubleSpacePeriodEnabled = KeyboardPrefs.doubleSpacePeriodEnabled(this)
         cachedAutoSpacePunctuation = KeyboardPrefs.autoSpaceAfterPunctuation(this)
+        cachedAutoSpaceSuggestion = KeyboardPrefs.autoSpaceAfterSuggestion(this)
         cachedHapticEnabled = KeyboardPrefs.hapticEnabled(this)
         cachedHapticStrengthMs = KeyboardPrefs.hapticStrengthMs(this)
         cachedSoundEnabled = KeyboardPrefs.soundEnabled(this)
@@ -189,9 +207,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onCreate() {
         super.onCreate()
         KeyboardPrefs.migrateLearningStore(this)
-        suggestionEngine = LocalSuggestionEngine(this) { word, suggestions, typo ->
-            mainHandler.post { handleSuggestionResult(word, suggestions, typo) }
-        }
+        suggestionEngine = LocalSuggestionEngine(
+            this,
+            onResult = { word, suggestions, typo -> mainHandler.post { handleSuggestionResult(word, suggestions, typo) } },
+            onNextResult = { previous, suggestions -> mainHandler.post { handleNextWordResult(previous, suggestions) } }
+        )
+        try { clipboardManager.addPrimaryClipChangedListener(clipboardListener) } catch (_: Exception) {}
     }
 
     override fun onCreateInputView(): View {
