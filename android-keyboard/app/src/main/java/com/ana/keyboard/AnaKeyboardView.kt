@@ -701,7 +701,9 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun scheduleLongPress(item: PlacedKey) {
         longPressHandler.removeCallbacks(showAlternates)
-        if (alternatesFor(item.key) != null) longPressHandler.postDelayed(showAlternates, 300)
+        if (alternatesFor(item.key) != null) {
+            longPressHandler.postDelayed(showAlternates, KeyboardPrefs.longPressDelayMs(context).toLong())
+        }
     }
 
     private fun startGlideIfIntentional(event: MotionEvent) {
