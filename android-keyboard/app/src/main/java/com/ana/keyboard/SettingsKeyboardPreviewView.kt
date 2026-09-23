@@ -28,7 +28,7 @@ class SettingsKeyboardPreviewView(context: Context) : LinearLayout(context), Ana
     private val keyboard = AnaKeyboardView(context).apply {
         listener = this@SettingsKeyboardPreviewView
     }
-    private val suggestionEngine = LocalSuggestionEngine(context) { _, _, _ -> Unit }
+    private val suggestionEngine = LocalSuggestionEngine(context, onResult = { _, _, _ -> Unit })
     private val text = StringBuilder()
     private var lastSpaceAt = 0L
 
