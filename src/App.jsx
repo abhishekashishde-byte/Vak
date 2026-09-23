@@ -333,6 +333,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const [target, setTarget] = useState(() => TARGETS.includes(loadDraft().target) ? loadDraft().target : 'German')
   const [outputMode, setOutputMode] = useState(() => loadDraft().outputMode === 'device' ? 'device' : 'online')
   const [writingMode, setWritingMode] = useState(() => ['write', 'email'].includes(loadDraft().writingMode) ? 'write' : 'translate')
+  const [extensionAction, setExtensionAction] = useState(() => String(loadDraft().extensionAction || ''))
   const [smartLanguageNotice, setSmartLanguageNotice] = useState('')
   const [offlineNotice, setOfflineNotice] = useState('')
   const [register, setRegister] = useState(() => { try { return localStorage.getItem(REGISTER_KEY) || 'formal' } catch { return 'formal' } })
@@ -445,8 +446,8 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
   useEffect(() => { try { localStorage.setItem(GLOSSARY_CONTEXT_KEY, glossaryContext) } catch {} }, [glossaryContext])
   useEffect(() => {
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, writingMode, glossaryContext, updatedAt: Date.now() })) } catch {}
-  }, [input, output, target, outputMode, writingMode, glossaryContext])
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, writingMode, extensionAction, glossaryContext, updatedAt: Date.now() })) } catch {}
+  }, [input, output, target, outputMode, writingMode, extensionAction, glossaryContext])
   useEffect(() => {
     const hydrate = () => {
       try {
@@ -489,6 +490,21 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const translationInstructions = (selectedTarget = target) => {
     const outputTarget = selectedTarget
     let instructions
+    const extensionRules = {
+      rewrite: 'Rewrite the supplied text in the SAME language so it sounds natural and polished. Preserve every fact, request, number, name and commitment. Do not translate. Return ONLY the finished replacement text.',
+      correct: 'Correct the supplied text in the SAME language. Fix spelling, grammar and punctuation without changing meaning, tone, facts or terminology. Do not translate. Return ONLY the corrected text.',
+      shorter: 'Rewrite the supplied text more concisely in the SAME language. Preserve every fact, request, condition and commitment. Do not translate. Return ONLY the shorter text.',
+      friendly: 'Rewrite the supplied text in a friendly, natural tone in the SAME language. Preserve every fact and intention. Do not translate. Return ONLY the finished text.',
+      formal: 'Rewrite the supplied text in a polished professional/formal tone in the SAME language. Preserve every fact and intention. Do not translate. Return ONLY the finished text.',
+      du: 'Rewrite the supplied text in natural German using informal du/dich/dir/dein consistently. If the source is not German, translate it into natural German using du. Preserve every fact and intention. Return ONLY the finished text.',
+      sie: 'Rewrite the supplied text in natural German using formal Sie/Ihnen/Ihr consistently. If the source is not German, translate it into natural German using Sie. Preserve every fact and intention. Return ONLY the finished text.',
+      explain: `Explain the supplied text clearly and simply in ${outputTarget}. Preserve important facts, numbers and terminology. Return ONLY the explanation.`,
+      reply: `Write a suitable reply in ${outputTarget} to the supplied message. Keep it natural and context-appropriate. Do not invent facts, promises or commitments. Return ONLY the reply.`,
+    }
+    if (extensionAction && extensionRules[extensionAction]) {
+      instructions = extensionRules[extensionAction]
+      return instructions + glossaryInstructions(extensionAction === 'du' || extensionAction === 'sie' ? 'German' : outputTarget)
+    }
     if (writingMode === 'write') {
       instructions = `You are Ana Write for me, a multilingual writing assistant. The user will tell you what they need to communicate and may give rough notes, fragments, incomplete sentences, facts, context, tone or purpose in any language. Understand the intent and write the final ready-to-send text in ${outputTarget}. Return ONLY the finished text with no explanation, labels or quotation marks. Choose the appropriate format from the user's intent — for example an email, message, WhatsApp text, letter, reply, request, announcement or short note. Do not force email formatting unless the request is clearly an email or formal correspondence. Preserve every factual detail, name, date, number, URL, request, commitment and intention supplied by the user. Correct spelling, punctuation and grammar. Complete incomplete thoughts when the intended meaning is clear. Make the result natural, coherent and appropriately polite. If the format clearly needs a greeting or closing and the user omitted one, add a neutral suitable one without inventing names. Never invent facts, people, dates, promises, decisions, requests, relationships or other substantive information that the user did not provide.`
       if (isGermanTarget(outputTarget)) {
@@ -639,7 +655,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     setNewSource(''); setNewPreferred(''); setError('')
   }
   const copyOutput = async () => { if (!output) return; await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1400) }
-  const clear = () => { setInput(''); setOutput(''); setAlignmentMap([]); setOutputMode('online'); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
+  const clear = () => { setInput(''); setOutput(''); setAlignmentMap([]); setOutputMode('online'); setExtensionAction(''); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
 
   return <main className="app-shell">
     <header className="topbar">
@@ -650,9 +666,9 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
     <section className="translator-card">
       <div className="toolbar">
         <div className="language-pill"><Languages size={16}/><span>Auto-detect</span></div><ArrowLeftRight size={16} className="muted"/>
-        <select value={target} onChange={e => { setTarget(e.target.value); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
+        <select value={target} onChange={e => { setTarget(e.target.value); setExtensionAction(''); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>{TARGETS.map(lang => <option key={lang}>{lang}</option>)}</select>
         {isGermanTarget(target) && <div className="segmented"><button className={register === 'formal' ? 'active' : ''} onClick={() => setRegister('formal')}>Sie</button><button className={register === 'informal' ? 'active' : ''} onClick={() => setRegister('informal')}>du</button></div>}
-        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' ? 'active' : ''} onClick={() => { setWritingMode('translate'); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'write' ? 'active' : ''} onClick={() => { setWritingMode('write'); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Write for me</button></div>
+        <div className="segmented mode-segmented" aria-label="Writing mode"><button className={writingMode === 'translate' && !extensionAction ? 'active' : ''} onClick={() => { setWritingMode('translate'); setExtensionAction(''); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Translate</button><button className={writingMode === 'write' && !extensionAction ? 'active' : ''} onClick={() => { setWritingMode('write'); setExtensionAction(''); setSmartLanguageNotice(''); setOutput(''); setOutputMode('online'); setOfflineNotice(''); setSelected(null) }}>Write for me</button></div>
         <div className="spacer"/><button className="ghost icon-text" onClick={clear}><RotateCcw size={15}/> Clear</button>
       </div>
       <section className="workspace">
