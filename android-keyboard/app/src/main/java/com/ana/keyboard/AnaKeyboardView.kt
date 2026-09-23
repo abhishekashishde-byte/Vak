@@ -64,6 +64,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var shifted = false
     private var symbols = false
     private var symbolPage = 1
+    private var enterLabel = "Enter"
     private var placed = emptyList<PlacedKey>()
     private var active: PlacedKey? = null
     private var backgroundBitmap: Bitmap? = null
@@ -183,6 +184,14 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     fun isSymbols(): Boolean = symbols
 
+    fun setEnterLabel(value: String) {
+        val next = value.trim().take(10).ifBlank { "Enter" }
+        if (enterLabel == next) return
+        enterLabel = next
+        placed = emptyList()
+        invalidate()
+    }
+
     fun setBackgroundBitmap(bitmap: Bitmap?) {
         backgroundBitmap = bitmap
         invalidate()
@@ -214,7 +223,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
                 KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
                 KeySpec(".", ".", 0.72f),
-                KeySpec("Enter", "ENTER", 1.56f)
+                KeySpec(enterLabel, "ENTER", 1.56f)
             )
             return if (symbolPage == 1) {
                 listOf(
@@ -260,7 +269,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f))
             add(KeySpec("", "SPACE", 5.05f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.70f))
-            add(KeySpec("Enter", "ENTER", 1.56f))
+            add(KeySpec(enterLabel, "ENTER", 1.56f))
         })
         return result
     }
