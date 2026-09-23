@@ -9,6 +9,7 @@ import AnaMark from './AnaMark.jsx'
 
 const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
+const GLOSSARY_CONTEXT_KEY = 'ana-glossary-active-project-v1'
 const REGISTER_KEY = 'ana-german-register'
 const DRAFT_KEY = 'ana-translate-draft-v1'
 const GERMAN_TARGETS = new Set(['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)'])
@@ -345,6 +346,13 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const [glossary, setGlossary] = useState(loadGlossary)
   const [newSource, setNewSource] = useState('')
   const [newPreferred, setNewPreferred] = useState('')
+  const [newGlossaryScope, setNewGlossaryScope] = useState('personal')
+  const [newGlossaryRule, setNewGlossaryRule] = useState('preferred')
+  const [newGlossaryContext, setNewGlossaryContext] = useState('')
+  const [glossaryScopeFilter, setGlossaryScopeFilter] = useState('personal')
+  const [glossaryContext, setGlossaryContext] = useState(() => {
+    try { return String(loadDraft().glossaryContext || localStorage.getItem(GLOSSARY_CONTEXT_KEY) || '') } catch { return '' }
+  })
   const inputRef = useRef(null)
   const refinementCacheRef = useRef(new Map())
   const dictationPositionRef = useRef(null)
@@ -435,9 +443,10 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
   useEffect(() => { try { localStorage.setItem(REGISTER_KEY, register); markAccountPreferencesChanged() } catch {} }, [register])
   useEffect(() => { try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(glossary)); markAccountPreferencesChanged() } catch {} }, [glossary])
+  useEffect(() => { try { localStorage.setItem(GLOSSARY_CONTEXT_KEY, glossaryContext) } catch {} }, [glossaryContext])
   useEffect(() => {
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, writingMode, updatedAt: Date.now() })) } catch {}
-  }, [input, output, target, outputMode, writingMode])
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ input, output, target, outputMode, writingMode, glossaryContext, updatedAt: Date.now() })) } catch {}
+  }, [input, output, target, outputMode, writingMode, glossaryContext])
   useEffect(() => {
     const hydrate = () => {
       try {
@@ -450,15 +459,31 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   }, [])
   useEffect(() => { inputRef.current?.focus() }, [])
 
-  const activeGlossary = glossary.filter(item => item.target === target)
+  const normaliseGlossary = item => ({
+    ...item,
+    scope: ['personal', 'project', 'company'].includes(item?.scope) ? item.scope : 'personal',
+    context: String(item?.context || '').trim(),
+    rule: ['preferred', 'locked'].includes(item?.rule) ? item.rule : 'preferred',
+  })
+  const glossaryForTarget = selectedTarget => glossary.map(normaliseGlossary).filter(item => {
+    if (item.target !== selectedTarget) return false
+    if (item.scope === 'project') return glossaryContext && item.context.toLocaleLowerCase() === glossaryContext.toLocaleLowerCase()
+    return true
+  })
+  const activeGlossary = glossary.map(normaliseGlossary).filter(item => item.target === target && item.scope === glossaryScopeFilter)
   const registerRules = () => register === 'formal'
     ? 'For German, use formal Sie/Ihnen/Ihr consistently. Never switch to du.'
     : 'For German, use informal du/dich/dir/dein consistently. Never switch to Sie.'
   const glossaryInstructions = (selectedTarget = target) => {
-    const terms = glossary.filter(item => item.target === selectedTarget)
-    return terms.length
-      ? `\nPERSONAL GLOSSARY — explicit user preferences override ordinary word choice:\n${terms.map(item => `- "${item.source}" → "${item.preferred}"`).join('\n')}\nPreserve preferred wording unless grammar requires inflection.`
-      : ''
+    const terms = glossaryForTarget(selectedTarget)
+    if (!terms.length) return ''
+    const locked = terms.filter(item => item.rule === 'locked')
+    const preferred = terms.filter(item => item.rule !== 'locked')
+    const blocks = ['\nANA TERMINOLOGY RULES — these user-defined rules override ordinary word choice.']
+    if (preferred.length) blocks.push(`Preferred wording:\n${preferred.map(item => `- "${item.source}" → "${item.preferred}" [${item.scope}${item.context ? `: ${item.context}` : ''}]`).join('\n')}`)
+    if (locked.length) blocks.push(`Locked terms — copy these EXACTLY. Never translate, correct, respell or expand them:\n${locked.map(item => `- "${item.source}" [${item.scope}${item.context ? `: ${item.context}` : ''}]`).join('\n')}`)
+    blocks.push('Apply project rules only for the active project context shown above; company and personal rules apply globally.')
+    return blocks.join('\n')
   }
 
   const translationInstructions = (selectedTarget = target) => {
@@ -581,13 +606,37 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   }
   const useAlways = term => {
     if (!selected?.sourceTerm || !term) return
-    setGlossary(prev => [...prev.filter(item => !(item.target === target && item.source.toLowerCase() === selected.sourceTerm.toLowerCase())), { id: crypto.randomUUID(), target, source: selected.sourceTerm, preferred: term }])
+    const source = selected.sourceTerm.trim()
+    setGlossary(prev => [
+      ...prev.filter(item => {
+        const normalized = normaliseGlossary(item)
+        return !(normalized.scope === 'personal' && item.target === target && item.source.toLowerCase() === source.toLowerCase())
+      }),
+      { id: crypto.randomUUID(), target, source, preferred: term, scope: 'personal', context: '', rule: 'preferred' },
+    ])
     replaceSelected(term)
   }
   const addGlossary = () => {
-    const source = newSource.trim(), preferred = newPreferred.trim(); if (!source || !preferred) return
-    setGlossary(prev => [...prev.filter(item => !(item.target === target && item.source.toLowerCase() === source.toLowerCase())), { id: crypto.randomUUID(), target, source, preferred }])
-    setNewSource(''); setNewPreferred('')
+    const source = newSource.trim()
+    const context = newGlossaryScope === 'personal' ? '' : newGlossaryContext.trim()
+    const preferred = newGlossaryRule === 'locked' ? source : newPreferred.trim()
+    if (!source || !preferred) return
+    if (newGlossaryScope !== 'personal' && !context) {
+      setError(`Enter the ${newGlossaryScope === 'project' ? 'project' : 'company'} name for this terminology rule.`)
+      return
+    }
+    setGlossary(prev => [
+      ...prev.filter(item => {
+        const normalized = normaliseGlossary(item)
+        return !(normalized.scope === newGlossaryScope
+          && normalized.context.toLocaleLowerCase() === context.toLocaleLowerCase()
+          && item.target === target
+          && item.source.toLowerCase() === source.toLowerCase())
+      }),
+      { id: crypto.randomUUID(), target, source, preferred, scope: newGlossaryScope, context, rule: newGlossaryRule },
+    ])
+    if (newGlossaryScope === 'project' && context) setGlossaryContext(context)
+    setNewSource(''); setNewPreferred(''); setError('')
   }
   const copyOutput = async () => { if (!output) return; await navigator.clipboard.writeText(output); setCopied(true); setTimeout(() => setCopied(false), 1400) }
   const clear = () => { setInput(''); setOutput(''); setAlignmentMap([]); setOutputMode('online'); setSmartLanguageNotice(''); setOfflineNotice(''); setSelected(null); setError(''); inputRef.current?.focus() }
@@ -619,6 +668,18 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
     {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{selected.sourceContext && <div className="source-match"><span>Corresponding source</span><p>{selected.sourceContext}</p></div>}{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
 
-    {glossaryOpen && <div className="drawer-backdrop" onMouseDown={() => setGlossaryOpen(false)}><aside className="drawer" onMouseDown={e => e.stopPropagation()}><div className="drawer-head"><div><h2>Personal glossary</h2><p>{glossary.length} saved in total · showing {target} terminology.</p></div><button onClick={() => setGlossaryOpen(false)}><X size={20}/></button></div><div className="add-rule"><input value={newSource} onChange={e => setNewSource(e.target.value)} placeholder="Source term"/><span>→</span><input value={newPreferred} onChange={e => setNewPreferred(e.target.value)} placeholder={`Preferred ${target}`}/><button onClick={addGlossary}><Plus size={17}/></button></div><div className="rules">{activeGlossary.length ? activeGlossary.map(item => <div className="rule" key={item.id}><div><strong>{item.source}</strong><span>→</span><b>{item.preferred}</b></div><button onClick={() => setGlossary(prev => prev.filter(x => x.id !== item.id))}><Trash2 size={16}/></button></div>) : <div className="empty-rules">No saved terms for {target} yet.</div>}</div></aside></div>}
+    {glossaryOpen && <div className="drawer-backdrop" onMouseDown={() => setGlossaryOpen(false)}><aside className="drawer glossary-drawer" onMouseDown={e => e.stopPropagation()}><div className="drawer-head"><div><h2>Ana glossary</h2><p>{glossary.length} rules synced with your Ana account · {target}.</p></div><button onClick={() => setGlossaryOpen(false)}><X size={20}/></button></div>
+      <div className="glossary-context-card"><label>Active project context</label><input value={glossaryContext} onChange={e => setGlossaryContext(e.target.value)} placeholder="e.g. S/4HANA Transformation"/><small>Personal and company rules always apply. Project rules apply only when this context matches.</small></div>
+      <div className="glossary-scope-tabs">{[['personal','Personal'],['project','Project'],['company','Company']].map(([id,label])=><button type="button" className={glossaryScopeFilter===id?'active':''} onClick={()=>{setGlossaryScopeFilter(id);setNewGlossaryScope(id)}} key={id}>{label}</button>)}</div>
+      <div className="add-rule scoped-add-rule">
+        <select value={newGlossaryScope} onChange={e=>setNewGlossaryScope(e.target.value)}><option value="personal">Personal</option><option value="project">Project</option><option value="company">Company</option></select>
+        {newGlossaryScope!=='personal' && <input value={newGlossaryContext} onChange={e=>setNewGlossaryContext(e.target.value)} placeholder={newGlossaryScope==='project'?'Project name':'Company name'}/>}
+        <select value={newGlossaryRule} onChange={e=>setNewGlossaryRule(e.target.value)}><option value="preferred">Preferred wording</option><option value="locked">Never translate / correct</option></select>
+        <input value={newSource} onChange={e=>setNewSource(e.target.value)} placeholder="Term"/>
+        {newGlossaryRule==='preferred' && <><span>→</span><input value={newPreferred} onChange={e=>setNewPreferred(e.target.value)} placeholder={`Preferred ${target}`}/></>}
+        <button onClick={addGlossary}><Plus size={17}/></button>
+      </div>
+      <div className="rules">{activeGlossary.length ? activeGlossary.map(item => <div className="rule scoped-rule" key={item.id}><div><div className="rule-badges"><small>{item.scope}</small>{item.context&&<small>{item.context}</small>}<small>{item.rule==='locked'?'Locked':'Preferred'}</small></div><strong>{item.source}</strong>{item.rule==='locked'?<><span>→</span><b>keep exactly</b></>:<><span>→</span><b>{item.preferred}</b></>}</div><button onClick={() => setGlossary(prev => prev.filter(x => x.id !== item.id))}><Trash2 size={16}/></button></div>) : <div className="empty-rules">No {glossaryScopeFilter} terms for {target} yet.</div>}</div>
+    </aside></div>}
   </main>
 }
