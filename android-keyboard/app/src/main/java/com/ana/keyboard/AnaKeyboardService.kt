@@ -511,6 +511,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         clearSuggestions()
         if (::keyboard.isInitialized) {
             keyboard.setSymbols(false)
+            updateEnterKeyForEditor(attribute)
             refreshShiftFromEditor()
             updateAiAvailability()
         }
@@ -526,6 +527,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showLetterKeyboard()
             applyKeyboardSizing()
             keyboard.refreshPreferences()
+            updateEnterKeyForEditor(info)
             loadBackgroundImage()
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
             suggestionEngine.setLanguage(cachedInputBadge)
@@ -1477,13 +1479,67 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         lastShiftTap = now
     }
 
+    private fun editorRequestsMultiline(info: EditorInfo?): Boolean {
+        if (info == null) return true
+        val inputType = info.inputType
+        val klass = inputType and InputType.TYPE_MASK_CLASS
+        if (klass != InputType.TYPE_CLASS_TEXT) return false
+        return (inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0 ||
+            (inputType and InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE) != 0
+    }
+
+    private fun editorAction(info: EditorInfo?): Int? {
+        if (info == null || editorRequestsMultiline(info)) return null
+
+        val standard = info.imeOptions and EditorInfo.IME_MASK_ACTION
+        if (standard != EditorInfo.IME_ACTION_NONE && standard != EditorInfo.IME_ACTION_UNSPECIFIED) {
+            return standard
+        }
+
+        return info.actionId.takeIf { it > 0 && !info.actionLabel.isNullOrBlank() }
+    }
+
+    private fun editorActionLabel(info: EditorInfo?): String {
+        if (info == null || editorRequestsMultiline(info)) return "Enter"
+
+        return when (editorAction(info)) {
+            EditorInfo.IME_ACTION_SEARCH -> "Search"
+            EditorInfo.IME_ACTION_NEXT -> "Next"
+            EditorInfo.IME_ACTION_GO -> "Go"
+            EditorInfo.IME_ACTION_SEND -> "Send"
+            EditorInfo.IME_ACTION_DONE -> "Done"
+            EditorInfo.IME_ACTION_PREVIOUS -> "Previous"
+            else -> info.actionLabel?.toString()?.trim()?.take(10).orEmpty().ifBlank { "Enter" }
+        }
+    }
+
+    private fun updateEnterKeyForEditor(info: EditorInfo? = currentInputEditorInfo) {
+        if (!::keyboard.isInitialized) return
+        keyboard.setEnterLabel(editorActionLabel(info))
+    }
+
     private fun handleEnter() {
         val connection = currentInputConnection ?: return
+        val info = currentInputEditorInfo
         finishLocalComposition(connection)
-        // Ana deliberately treats the bottom-right key as a real Enter key.
-        // Never call performEditorAction() here: many apps map that to Send,
-        // Go, Search or Post. If the target field refuses new lines, Ana leaves
-        // the text untouched rather than submitting it on the user's behalf.
+
+        val action = editorAction(info)
+        if (action != null) {
+            val handled = try { connection.performEditorAction(action) } catch (_: Exception) { false }
+            if (!handled) {
+                try {
+                    connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                } catch (_: Exception) {
+                    // If the host field refuses its advertised action, do not
+                    // turn a login/search action into an accidental newline.
+                }
+            }
+            return
+        }
+
+        // Multiline writing surfaces (messages, email bodies, notes, documents)
+        // keep Enter as a genuine newline.
         connection.commitText("\n", 1)
         refreshShiftFromEditor()
     }
