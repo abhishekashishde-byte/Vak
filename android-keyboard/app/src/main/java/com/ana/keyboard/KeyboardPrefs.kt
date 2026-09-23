@@ -24,6 +24,7 @@ object KeyboardPrefs {
     private const val KEY_AUTO_CAP = "auto_capitalisation"
     private const val KEY_DOUBLE_SPACE = "double_space_period"
     private const val KEY_AUTO_SPACE_PUNCT = "auto_space_punctuation"
+    private const val KEY_AUTO_SPACE_SUGGESTION = "auto_space_suggestion"
     private const val KEY_TOOLBAR = "ana_toolbar_compact_v2"
     private const val KEY_THEME = "keyboard_theme"
     private const val KEY_BACKGROUND_URI = "background_uri"
@@ -41,6 +42,9 @@ object KeyboardPrefs {
     private const val KEY_LEARNED_CORRECTIONS_PREFIX = "learned_corrections_"
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
     private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
+    private const val KEY_NEXT_WORD_PREFIX = "next_word_model_"
+    private const val KEY_APP_AI_BLOCKLIST = "app_ai_blocklist"
+    private const val KEY_APP_AI_ALLOWLIST = "app_ai_allowlist"
     private const val KEY_ONE_HANDED_MODE = "one_handed_mode"
     private const val KEY_ONE_HANDED_WIDTH = "one_handed_width_percent"
     private const val KEY_KEY_GAP = "key_gap_dp"
@@ -208,6 +212,9 @@ object KeyboardPrefs {
 
     fun autoSpaceAfterPunctuation(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_SPACE_PUNCT, true)
     fun setAutoSpaceAfterPunctuation(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_SPACE_PUNCT, enabled).apply()
+
+    fun autoSpaceAfterSuggestion(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_SPACE_SUGGESTION, true)
+    fun setAutoSpaceAfterSuggestion(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_SPACE_SUGGESTION, enabled).apply()
 
     // Compact toolbar now contains only the useful Ana actions (Translate, Write, clipboard, mic, target language).
     fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, true)
@@ -400,6 +407,105 @@ object KeyboardPrefs {
         if (sync && key.isNotBlank()) KeyboardLearningSync.recordShortcut(context, badge, key, null, true)
     }
 
+    fun nextWordSuggestions(
+        context: Context,
+        previous: String,
+        badge: String = inputBadge(context),
+        max: Int = 3
+    ): List<String> {
+        val key = previous.trim().lowercase().take(40)
+        if (key.isBlank()) return emptyList()
+        val raw = learningPrefs(context).getString(KEY_NEXT_WORD_PREFIX + badge, "{}") ?: "{}"
+        return try {
+            val root = JSONObject(raw)
+            val values = root.optJSONObject(key) ?: return emptyList()
+            buildList {
+                val keys = values.keys()
+                while (keys.hasNext()) {
+                    val next = keys.next()
+                    val count = values.optInt(next, 0)
+                    if (next.isNotBlank() && count > 0) add(next to count)
+                }
+            }.sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+                .take(max).map { it.first }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun learnNextWord(
+        context: Context,
+        previous: String,
+        next: String,
+        badge: String = inputBadge(context)
+    ) {
+        val from = previous.trim().lowercase().take(40)
+        val to = next.trim().lowercase().take(40)
+        if (from.length < 2 || to.length < 2 || from == to) return
+        val store = learningPrefs(context)
+        val prefKey = KEY_NEXT_WORD_PREFIX + badge
+        val root = try { JSONObject(store.getString(prefKey, "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        val row = root.optJSONObject(from) ?: JSONObject()
+        row.put(to, (row.optInt(to, 0) + 1).coerceAtMost(999))
+        val ranked = buildList {
+            val keys = row.keys()
+            while (keys.hasNext()) {
+                val word = keys.next()
+                val count = row.optInt(word, 0)
+                if (word.isNotBlank() && count > 0) add(word to count)
+            }
+        }.sortedByDescending { it.second }.take(8)
+        val compactRow = JSONObject()
+        ranked.forEach { (word, count) -> compactRow.put(word, count) }
+        root.put(from, compactRow)
+        if (root.length() > 180) {
+            val keys = buildList {
+                val iterator = root.keys()
+                while (iterator.hasNext()) add(iterator.next())
+            }
+            keys.take(root.length() - 180).forEach { root.remove(it) }
+        }
+        store.edit().putString(prefKey, root.toString()).apply()
+    }
+
+    fun aiBlockedApps(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_APP_AI_BLOCKLIST, emptySet())?.toSet() ?: emptySet()
+
+    fun aiAllowedApps(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_APP_AI_ALLOWLIST, emptySet())?.toSet() ?: emptySet()
+
+    private fun looksSensitiveAppPackage(packageName: String): Boolean {
+        val value = packageName.lowercase()
+        return listOf(
+            "bank", "banking", "sparkasse", "dkb", "comdirect", "revolut", "n26",
+            "paypal", "wallet", "finanz", "authenticator", "secureid", "tan"
+        ).any { value.contains(it) }
+    }
+
+    fun aiAllowedForPackage(context: Context, packageName: String?): Boolean {
+        val safe = packageName?.trim().orEmpty()
+        if (safe.isBlank()) return true
+        if (safe in aiAllowedApps(context)) return true
+        if (safe in aiBlockedApps(context)) return false
+        return !looksSensitiveAppPackage(safe)
+    }
+
+    fun setAiAllowedForPackage(context: Context, packageName: String, allowed: Boolean) {
+        val safe = packageName.trim()
+        if (safe.isBlank()) return
+        val blocked = aiBlockedApps(context).toMutableSet()
+        val allowedApps = aiAllowedApps(context).toMutableSet()
+        if (allowed) {
+            blocked.remove(safe)
+            allowedApps.add(safe)
+        } else {
+            allowedApps.remove(safe)
+            blocked.add(safe)
+        }
+        prefs(context).edit()
+            .putStringSet(KEY_APP_AI_BLOCKLIST, blocked)
+            .putStringSet(KEY_APP_AI_ALLOWLIST, allowedApps)
+            .apply()
+    }
+
     fun oneHandedMode(context: Context): String {
         val modern = prefs(context).getString(KEY_ONE_HANDED_MODE, null)
         val legacy = learningPrefs(context).getString(KEY_ONE_HANDED_MODE, "off")
@@ -495,6 +601,7 @@ object KeyboardPrefs {
             editor.remove(KEY_PERSONAL_DICTIONARY_PREFIX + badge)
             editor.remove(KEY_LEARNED_CORRECTIONS_PREFIX + badge)
             editor.remove(KEY_SHORTCUTS_PREFIX + badge)
+            editor.remove(KEY_NEXT_WORD_PREFIX + badge)
         }
         editor.apply()
     }

@@ -288,6 +288,8 @@ class MainActivity : Activity() {
             })
         }
 
+        root.addView(infoCard("Prediction follows this language", "Next-word predictions, autocorrect candidates, emoji suggestions and learned word-to-word patterns use the selected typing language. EN, DE and HIN keep separate local learning."))
+
         root.addView(section("Translate to"))
         root.addView(infoCard("Current target", "${KeyboardPrefs.target(this)}  ·  ${KeyboardPrefs.targetBadge(this)}"))
         val search = EditText(this).apply {
@@ -378,6 +380,10 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-space after punctuation", "Add a space after common punctuation", KeyboardPrefs.autoSpaceAfterPunctuation(this)) {
             KeyboardPrefs.setAutoSpaceAfterPunctuation(this, it)
         })
+        root.addView(switchRow("Auto-space after suggestion", "Add a space after tapping a word, next-word or emoji suggestion", KeyboardPrefs.autoSpaceAfterSuggestion(this)) {
+            KeyboardPrefs.setAutoSpaceAfterSuggestion(this, it)
+        })
+        root.addView(infoCard("Language-aware next word", "Ana predicts locally from the selected keyboard language first, then blends in your own local word-to-word learning for that language."))
 
         root.addView(section("Swipe typing"))
         root.addView(infoCard("Paused for stability", "Swipe typing is temporarily disabled. Ana now treats finger movement during fast typing as normal typing only while we prioritise zero-lag typing."))
@@ -654,6 +660,7 @@ class MainActivity : Activity() {
         root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, local word correction and adaptive touch calibration stay on this device. If you sign in, only your saved words, learned corrections and shortcuts are synced to your Ana account."))
         root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart paragraph check."))
         root.addView(infoCard("Smart paragraph AI is opt-in", "Cloud paragraph checking is off by default. When enabled, Ana shows a proposed correction first; it never silently replaces the paragraph."))
+        root.addView(infoCard("Per-app AI switch", "Use the AI app button in the keyboard toolbar to disable or enable Ana AI for the current app. Likely banking, wallet and authenticator apps start with Ana AI off unless you explicitly enable it."))
         root.addView(infoCard("Private fields", "Passwords, OTP / verification-code fields and apps that request no personalised learning automatically disable Ana AI, voice, suggestions and clipboard history."))
         root.addView(infoCard("Clipboard stays local", "Clipboard history is stored only on this device. Unpinned clips expire after 1 hour; pinned clips remain until you clear or unpin them. Incognito mode does not add clipboard history."))
     }
