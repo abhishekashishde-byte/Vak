@@ -531,7 +531,7 @@ class MainActivity : Activity() {
 
         root.addView(section("Default layout"))
         root.addView(infoCard("Number row on", "Ana starts with 1–0 above the letter rows. You can still change this under Layout & keys."))
-        root.addView(infoCard("Enter key is newline-only", "The bottom-right Enter key inserts a new line. It never triggers Send, Go, Search or Post."))
+        root.addView(infoCard("Context-aware Enter", "Ana follows the active field: Search/Go/Next/Done/Send for single-line action fields, while multiline messages, email bodies, notes and documents keep a normal newline."))
 
         root.addView(section("Spacebar"))
         root.addView(infoCard("Forgiving Space", "The spacebar has a larger invisible hit area. Hold briefly and slide left or right only when you intentionally want cursor control."))
