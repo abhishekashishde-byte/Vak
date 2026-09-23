@@ -18,3 +18,12 @@ class VoiceDictationPolicyTest {
         assertTrue(VoiceDictationPolicy.shouldFallbackFromOnDevice(SpeechRecognizer.ERROR_CLIENT))
     }
 }
+
+    @Test fun busyRecognizerMustBeRecreated() {
+        assertTrue(VoiceDictationPolicy.shouldRecycleRecognizer(SpeechRecognizer.ERROR_RECOGNIZER_BUSY))
+    }
+
+    @Test fun clientRecognizerFailureMustBeRecreated() {
+        assertTrue(VoiceDictationPolicy.shouldRecycleRecognizer(SpeechRecognizer.ERROR_CLIENT))
+    }
+
