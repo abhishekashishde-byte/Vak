@@ -57,6 +57,7 @@ object KeyboardPrefs {
     private const val KEY_KEY_RADIUS = "key_radius_dp"
     private const val KEY_KEY_LABEL_SCALE = "key_label_scale_percent"
     private const val KEY_KEY_BORDERS = "key_borders"
+    private const val KEY_KEY_OPACITY = "key_opacity_percent"
     private const val KEY_SPACEBAR_SCALE = "spacebar_scale_percent"
     private const val KEY_ADAPTIVE_TOUCH = "adaptive_touch"
     private const val KEY_TOUCH_CALIBRATION_PREFIX = "touch_calibration_"
@@ -650,6 +651,23 @@ object KeyboardPrefs {
 
     fun keyBordersEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_KEY_BORDERS, false)
     fun setKeyBordersEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_KEY_BORDERS, enabled).apply()
+
+    fun keyOpacityPercent(context: Context): Int = prefs(context).getInt(KEY_KEY_OPACITY, 100).coerceIn(20, 100)
+    fun setKeyOpacityPercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_KEY_OPACITY, value.coerceIn(20, 100)).apply()
+
+    fun resetVisualCustomizations(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_THEME)
+            .remove(KEY_BACKGROUND_URI)
+            .remove(KEY_BACKGROUND_TINT)
+            .remove(KEY_KEY_GAP)
+            .remove(KEY_KEY_RADIUS)
+            .remove(KEY_KEY_LABEL_SCALE)
+            .remove(KEY_KEY_BORDERS)
+            .remove(KEY_KEY_OPACITY)
+            .remove(KEY_SPACEBAR_SCALE)
+            .apply()
+    }
 
     fun spacebarScalePercent(context: Context): Int = prefs(context).getInt(KEY_SPACEBAR_SCALE, 112).coerceIn(90, 135)
     fun setSpacebarScalePercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_SPACEBAR_SCALE, value.coerceIn(90, 135)).apply()
