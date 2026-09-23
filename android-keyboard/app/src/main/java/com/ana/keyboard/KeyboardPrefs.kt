@@ -31,6 +31,8 @@ object KeyboardPrefs {
     private const val KEY_AUTO_CORRECTION = "auto_correction"
     private const val KEY_SMART_SENTENCE_CORRECTION = "smart_sentence_correction"
     private const val KEY_CLIPBOARD_HISTORY = "clipboard_history"
+    private const val KEY_INCOGNITO = "incognito_mode"
+    private const val CLIPBOARD_TTL_MS = 60L * 60L * 1000L
     private const val KEY_GLIDE_TYPING = "glide_typing"
     private const val KEY_GLIDE_TRAIL = "glide_trail"
     private const val KEY_VOICE_TYPING = "voice_typing"
@@ -43,6 +45,7 @@ object KeyboardPrefs {
     private const val KEY_TOUCH_CALIBRATION_PREFIX = "touch_calibration_"
 
     data class TranslationTarget(val name: String, val badge: String)
+    data class ClipboardItem(val text: String, val pinned: Boolean = false, val createdAt: Long = System.currentTimeMillis())
 
     val translationTargets = listOf(
         TranslationTarget("German", "DE"),
@@ -220,6 +223,14 @@ object KeyboardPrefs {
 
     fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, false)
     fun setSmartSentenceCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_SMART_SENTENCE_CORRECTION, enabled).apply()
+
+    fun incognitoEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_INCOGNITO, false)
+    fun setIncognitoEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_INCOGNITO, enabled).apply()
+    fun toggleIncognito(context: Context): Boolean {
+        val next = !incognitoEnabled(context)
+        setIncognitoEnabled(context, next)
+        return next
+    }
 
     fun glideTypingEnabled(context: Context): Boolean = false // Temporarily paused: typing stability takes priority.
     fun setGlideTypingEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_GLIDE_TYPING, enabled).apply()
@@ -447,32 +458,73 @@ object KeyboardPrefs {
         editor.apply()
     }
 
-    fun clipboardHistory(context: Context): List<String> {
+    private fun saveClipboardItems(context: Context, items: List<ClipboardItem>) {
+        val array = JSONArray()
+        items.take(20).forEach { item ->
+            array.put(JSONObject().apply {
+                put("text", item.text)
+                put("pinned", item.pinned)
+                put("createdAt", item.createdAt)
+            })
+        }
+        prefs(context).edit().putString(KEY_CLIPBOARD_HISTORY, array.toString()).apply()
+    }
+
+    fun clipboardItems(context: Context): List<ClipboardItem> {
         val raw = prefs(context).getString(KEY_CLIPBOARD_HISTORY, "[]") ?: "[]"
-        return try {
+        val now = System.currentTimeMillis()
+        val items = try {
             val array = JSONArray(raw)
             buildList {
                 for (i in 0 until array.length()) {
-                    val value = array.optString(i).trim()
-                    if (value.isNotEmpty()) add(value)
+                    val item = array.opt(i)
+                    when (item) {
+                        is JSONObject -> {
+                            val text = item.optString("text").trim()
+                            val pinned = item.optBoolean("pinned", false)
+                            val createdAt = item.optLong("createdAt", now).takeIf { it > 0 } ?: now
+                            if (text.isNotBlank() && (pinned || now - createdAt <= CLIPBOARD_TTL_MS)) {
+                                add(ClipboardItem(text, pinned, createdAt))
+                            }
+                        }
+                        is String -> {
+                            val text = item.trim()
+                            if (text.isNotBlank()) add(ClipboardItem(text, false, now))
+                        }
+                    }
                 }
             }
         } catch (_: Exception) {
             emptyList()
         }
+        val sorted = items.distinctBy { it.text }.sortedWith(compareByDescending<ClipboardItem> { it.pinned }.thenByDescending { it.createdAt }).take(20)
+        saveClipboardItems(context, sorted)
+        return sorted
     }
+
+    fun clipboardHistory(context: Context): List<String> = clipboardItems(context).map { it.text }
 
     fun rememberClipboard(context: Context, text: String) {
+        if (incognitoEnabled(context)) return
         val clean = text.trim().take(800)
         if (clean.isBlank()) return
-        val items = clipboardHistory(context).filterNot { it == clean }.toMutableList()
-        items.add(0, clean)
-        val array = JSONArray()
-        items.take(10).forEach { array.put(it) }
-        prefs(context).edit().putString(KEY_CLIPBOARD_HISTORY, array.toString()).apply()
+        val existing = clipboardItems(context)
+        val previous = existing.firstOrNull { it.text == clean }
+        val item = ClipboardItem(clean, previous?.pinned == true, System.currentTimeMillis())
+        saveClipboardItems(context, listOf(item) + existing.filterNot { it.text == clean })
     }
 
-    fun clearClipboardHistory(context: Context) = prefs(context).edit().remove(KEY_CLIPBOARD_HISTORY).apply()
+    fun toggleClipboardPin(context: Context, text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) return
+        val items = clipboardItems(context).map { item ->
+            if (item.text == clean) item.copy(pinned = !item.pinned) else item
+        }
+        saveClipboardItems(context, items)
+    }
+
+    /** Clear transient clips while preserving anything the user explicitly pinned. */
+    fun clearClipboardHistory(context: Context) = saveClipboardItems(context, clipboardItems(context).filter { it.pinned })
 
     fun setPendingGifUri(context: Context, uri: String) = prefs(context).edit().putString(KEY_PENDING_GIF_URI, uri).apply()
     fun consumePendingGifUri(context: Context): String {
