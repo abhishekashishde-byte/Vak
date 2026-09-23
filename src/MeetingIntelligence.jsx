@@ -36,6 +36,8 @@ function mapRemoteMeeting(row) {
     target: clean(row?.target),
     source: clean(row?.source),
     notes: row?.notes && typeof row.notes === 'object' ? row.notes : null,
+    metadata: row?.notes?._ana?.metadata || {},
+    momTemplate: row?.notes?._ana?.momTemplate || null,
     originalText: clean(row?.original_text),
     translatedText: clean(row?.translated_text),
   }
@@ -75,9 +77,15 @@ function actionKey(item) {
 
 function formatMom(record) {
   const notes = record?.notes || {}
+  const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+  const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}
   const lines = [
     `Meeting: ${record?.title || 'Meeting'}`,
     record?.startedAt ? `Date: ${formatDate(record.startedAt)}` : '',
+    meta.customer ? `Customer: ${meta.customer}` : '',
+    meta.topic ? `Topic: ${meta.topic}` : '',
+    meta.project ? `Project: ${meta.project}` : '',
+    template.title ? `MOM template: ${template.title}` : '',
     '',
     notes.summary ? `Summary\n${notes.summary}` : '',
     safeArray(notes.keyPoints).length ? `Key points\n${notes.keyPoints.map(item => `• ${String(item)}`).join('\n')}` : '',
@@ -107,7 +115,9 @@ function normalizeActions(input) {
 
 function meetingText(record) {
   const notes = record?.notes || {}
-  return [record?.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
+  const meta = record?.metadata || notes?._ana?.metadata || {}
+  const template = record?.momTemplate || notes?._ana?.momTemplate || {}
+  return [record?.title, meta.customer, meta.topic, meta.project, meta.meetingType, ...safeArray(meta.tags), template.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
     .filter(Boolean).join(' ').toLocaleLowerCase()
 }
 
@@ -394,7 +404,7 @@ export default function MeetingIntelligence() {
   return <section className="mi-shell">
     <div className="mi-head">
       <div><Sparkles size={17}/><span><strong>After-meeting intelligence</strong><small>Ask, act, filter and send.</small></span></div>
-      <label className="mi-meeting-select"><span>Meeting</span><select value={selected?.id || ''} onChange={event => { setSelectedId(event.target.value); setAnswer(''); setOutput(null) }}>{history.map(record => <option value={record.id} key={record.id}>{record.title || 'Meeting'} · {formatShortDate(record.startedAt)}</option>)}</select></label>
+      <label className="mi-meeting-select"><span>Meeting</span><select value={selected?.id || ''} onChange={event => { setSelectedId(event.target.value); setAnswer(''); setOutput(null) }}>{history.map(record => { const meta = record?.metadata || record?.notes?._ana?.metadata || {}; return <option value={record.id} key={record.id}>{meta.customer ? `${meta.customer} · ` : ''}{meta.topic || record.title || 'Meeting'} · {formatShortDate(record.startedAt)}</option> })}</select></label>
     </div>
 
     <div className="mi-grid">
