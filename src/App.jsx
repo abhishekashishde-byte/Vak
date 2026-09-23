@@ -13,6 +13,17 @@ const GLOSSARY_CONTEXT_KEY = 'ana-glossary-active-project-v1'
 const REGISTER_KEY = 'ana-german-register'
 const DRAFT_KEY = 'ana-translate-draft-v1'
 const GERMAN_TARGETS = new Set(['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)'])
+const EXTENSION_ACTION_LABELS = {
+  rewrite: 'Rewrite',
+  correct: 'Correct',
+  shorter: 'Make shorter',
+  friendly: 'Make friendly',
+  formal: 'Make formal',
+  du: 'Use du',
+  sie: 'Use Sie',
+  explain: 'Explain',
+  reply: 'Write reply',
+}
 const isGermanTarget = value => GERMAN_TARGETS.has(value)
 const germanVariantRule = value => value === 'Swabian German (Schwäbisch)'
   ? 'Use natural Swabian German (Schwäbisch) as spoken in Baden-Württemberg. Keep it authentic but readable and avoid caricature.'
@@ -354,6 +365,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   const [glossaryContext, setGlossaryContext] = useState(() => {
     try { return String(loadDraft().glossaryContext || localStorage.getItem(GLOSSARY_CONTEXT_KEY) || '') } catch { return '' }
   })
+  const extensionActionLabel = EXTENSION_ACTION_LABELS[extensionAction] || ''
   const inputRef = useRef(null)
   const refinementCacheRef = useRef(new Map())
   const dictationPositionRef = useRef(null)
@@ -673,14 +685,14 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
       </div>
       <section className="workspace">
         <article className={`pane input-pane ${input.length > 900 ? 'dense-text' : ''}`}><div className="pane-label pane-label-row"><span>{writingMode === 'write' ? 'What do you want to say?' : 'Original'}</span><div className="translate-input-actions">{dictationSupported && <button type="button" className={`dictate-btn ${dictationState}`} onClick={handleDictation} disabled={dictationState === 'transcribing'} title={dictationState === 'recording' ? 'Stop voice typing' : 'Voice type instead of typing'}>{dictationState === 'recording' ? <><Square size={12}/> Stop</> : dictationState === 'transcribing' ? <><LoaderCircle size={14} className="dictate-spin"/> Writing…</> : <><Mic size={14}/> Speak</>}</button>}<button type="button" className="dictate-btn" onClick={onOpenCamera}><Camera size={14}/>Camera</button><button type="button" className="dictate-btn" onClick={onOpenDocuments}><FileText size={14}/>Document</button></div></div><textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setAlignmentMap([]); if (smartLanguageNotice) setSmartLanguageNotice('') }} onPaste={handlePaste} placeholder={writingMode === 'write' ? 'Tell Ana what you need to write. Rough notes or incomplete sentences are fine…' : 'Type, paste, or speak anything…'} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate() }}/><div className="pane-foot"><span>{input.length.toLocaleString()} characters</span><span>{dictationState === 'recording' ? 'Listening… tap Stop when finished' : dictationState === 'transcribing' ? 'Writing what you said…' : '⌘/Ctrl + Enter'}</span></div></article>
-        <article className={`pane output-pane ${output.length > 900 ? 'dense-text' : ''}`}><div className="pane-label">{writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> Translating</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Click a word to see its matching source and alternatives') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
+        <article className={`pane output-pane ${output.length > 900 ? 'dense-text' : ''}`}><div className="pane-label">{extensionActionLabel ? `Ana — ${extensionActionLabel}` : writingMode === 'write' ? `${target} — written for you` : target}</div><div className="output-area">{loading ? <div className="thinking"><span></span><span></span><span></span> {extensionActionLabel ? `${extensionActionLabel}…` : writingMode === 'write' ? 'Writing…' : 'Translating…'}</div> : output ? <TranslationText text={output} onWord={inspectWord}/> : <div className="placeholder">{extensionActionLabel ? `Ana will ${extensionActionLabel.toLowerCase()} the selected text here.` : writingMode === 'write' ? 'Ana will write the finished text for you here.' : 'Your translation will appear here.'}</div>}</div><div className="pane-foot"><span>{writingMode === 'write' ? 'Tell Ana the intent and key facts — she turns them into a ready-to-send text' : output ? (outputMode === 'device' ? 'Basic on-device translation' : 'Click a word to see its matching source and alternatives') : 'Context-aware translation'}</span><button className="copy" disabled={!output} onClick={copyOutput}>{copied ? <><Check size={15}/> Copied</> : <><Clipboard size={15}/> Copy</>}</button></div></article>
       </section>
     </section>
 
     {smartLanguageNotice && <div className="smart-language-note">{smartLanguageNotice}</div>}
     {offlineNotice && <div className="ana-offline-note">{offlineNotice}</div>}
     {error && <div className="error">{error}</div>}
-    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (writingMode === 'write' ? 'Writing…' : 'Translating…') : writingMode === 'write' ? 'Write for me' : 'Translate'}</button></div>
+    <div className="action-row"><button className="translate-btn" disabled={!input.trim() || loading} onClick={translate}>{loading ? (extensionActionLabel ? `${extensionActionLabel}…` : writingMode === 'write' ? 'Writing…' : 'Translating…') : extensionActionLabel || (writingMode === 'write' ? 'Write for me' : 'Translate')}</button></div>
 
     {selected && <div className="popover-backdrop" onMouseDown={() => setSelected(null)}><div className="popover" onMouseDown={e => e.stopPropagation()}><div className="popover-head"><div><strong>{selected.word}</strong>{selected.partOfSpeech && <span>{selected.partOfSpeech}</span>}</div><button onClick={() => setSelected(null)}><X size={18}/></button></div>{selected.sourceContext && <div className="source-match"><span>Corresponding source</span><p>{selected.sourceContext}</p></div>}{suggestLoading ? <div className="popover-loading">Finding the best alternatives…</div> : <>{selected.meaning && <div className="meaning">{selected.meaning}{selected.sourceTerm && <small>From: <b>{selected.sourceTerm}</b></small>}</div>}<div className="alternative-list">{selected.alternatives?.length ? selected.alternatives.map(item => <div className="alternative" key={item.term}><button onClick={() => replaceSelected(item.term)}><strong>{item.term}</strong><span>{item.note}</span></button><button className="always" onClick={() => useAlways(item.term)}>Always</button></div>) : <div className="empty-mini">No clean drop-in alternatives found.</div>}</div></>}</div></div>}
 
