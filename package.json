@@ -19,7 +19,8 @@
     "pdfjs-dist": "^4.10.38",
     "react": "latest",
     "react-dom": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {}
 }
