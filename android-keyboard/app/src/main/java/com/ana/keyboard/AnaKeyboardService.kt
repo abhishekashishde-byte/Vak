@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.hardware.SensorPrivacyManager
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -1657,8 +1658,19 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             startActivity(Intent(this, MicrophonePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            showStatus("Allow microphone access, then tap the microphone again")
+            showStatus("Allow microphone permission, then tap the microphone again")
             return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val privacy = getSystemService(SensorPrivacyManager::class.java)
+            val micBlocked = try {
+                privacy?.supportsSensorToggle(SensorPrivacyManager.Sensors.MICROPHONE) == true &&
+                    privacy.isSensorPrivacyEnabled(SensorPrivacyManager.Sensors.MICROPHONE)
+            } catch (_: Exception) { false }
+            if (micBlocked) {
+                showStatus("Android Mic access is OFF — turn it on in Quick Settings")
+                return
+            }
         }
         val standardAvailable = SpeechRecognizer.isRecognitionAvailable(this)
         val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
