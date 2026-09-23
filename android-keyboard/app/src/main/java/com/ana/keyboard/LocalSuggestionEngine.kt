@@ -26,9 +26,10 @@ class LocalSuggestionEngine(
 
     fun refreshUserData() {
         val effectiveBadge = badge.ifBlank { "EN" }
-        personalWords = KeyboardPrefs.personalDictionary(context, effectiveBadge)
-            .map { it.lowercase() }
-            .toSet()
+        personalWords = (
+            KeyboardPrefs.personalDictionary(context, effectiveBadge) +
+            KeyboardPrefs.sharedGlossaryTerms(context, effectiveBadge)
+        ).map { it.lowercase() }.toSet()
         learnedCorrections = KeyboardPrefs.learnedCorrections(context, effectiveBadge)
             .mapKeys { it.key.lowercase() }
             .mapValues { it.value.lowercase() }
