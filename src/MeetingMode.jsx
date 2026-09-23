@@ -198,6 +198,7 @@ export default function MeetingMode() {
   }, [meetingHistory, historyQuery])
 
   useEffect(() => { meetingModeRef.current = meetingMode; try { localStorage.setItem(MODE_KEY, meetingMode) } catch {} }, [meetingMode])
+  useEffect(() => { setPreMeetingBrief(null) }, [meetingMeta.customer, meetingMeta.project, meetingMeta.topic])
   useEffect(() => { targetRef.current = target }, [target])
   useEffect(() => { originalTextRef.current = originalText }, [originalText])
   useEffect(() => { translatedTextRef.current = translatedText }, [translatedText])
