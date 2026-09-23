@@ -188,15 +188,15 @@ async function pushPlanner(payload) {
   }
 }
 
-async function saveReceipt(token, userId, actionId, provider, result) {
+async function saveReceipt(token, userId, actionId, provider, result, status = 'sent') {
   const body = [{
     user_id: userId,
     action_id: actionId,
     provider,
-    status: 'sent',
-    external_id: result.externalId || '',
-    external_url: result.externalUrl || '',
-    response_meta: result.meta || {},
+    status,
+    external_id: result?.externalId || '',
+    external_url: result?.externalUrl || '',
+    response_meta: result?.meta || {},
     updated_at: new Date().toISOString(),
   }]
   const data = await rest(
@@ -227,10 +227,11 @@ export default async function handler(req, res) {
   const actionId = clean(req.body?.actionId, 80)
   if (!actionId) return res.status(400).json({ error: 'Action ID is required.' })
 
+  let payload = null
   try {
-    const payload = await fetchAction(token, user.id, actionId)
+    payload = await fetchAction(token, user.id, actionId)
     const result = provider === 'jira' ? await pushJira(payload) : await pushPlanner(payload)
-    const receipt = await saveReceipt(token, user.id, actionId, provider, result)
+    const receipt = await saveReceipt(token, user.id, actionId, provider, result, 'sent')
     return res.status(200).json({
       ok: true,
       provider,
@@ -239,7 +240,13 @@ export default async function handler(req, res) {
       receipt,
     })
   } catch (error) {
-    console.error('[action-route]', provider, actionId, error?.message || error)
-    return res.status(502).json({ error: error?.message || 'Could not route this action.' })
+    const message = error?.message || 'Could not route this action.'
+    console.error('[action-route]', provider, actionId, message)
+    if (payload) {
+      await saveReceipt(token, user.id, actionId, provider, {
+        meta: { provider, error: clean(message, 500) },
+      }, 'failed').catch(() => null)
+    }
+    return res.status(502).json({ error: message })
   }
 }
