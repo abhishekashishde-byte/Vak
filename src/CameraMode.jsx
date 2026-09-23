@@ -89,7 +89,18 @@ async function normalizeImageFile(file) {
   }
 }
 
-function blockStyle(block) {
+function visualFontFamily(family) {
+  if (family === 'serif') return 'Georgia, Times New Roman, serif'
+  if (family === 'monospace') return 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  if (family === 'handwritten') return 'cursive'
+  return 'Inter, ui-sans-serif, system-ui, sans-serif'
+}
+
+function targetDirection(target) {
+  return target === 'Urdu' ? 'rtl' : 'ltr'
+}
+
+function blockStyle(block, target) {
   const x = Math.max(0, Math.min(1000, Number(block.x) || 0))
   const y = Math.max(0, Math.min(1000, Number(block.y) || 0))
   const width = Math.max(12, Math.min(1000 - x, Number(block.width) || 120))
@@ -98,12 +109,20 @@ function blockStyle(block) {
   const translatedLength = Math.max(1, String(block.translation || '').length)
   const expansion = Math.max(1, translatedLength / sourceLength)
   const fontSize = Math.max(9, Math.min(24, (height / 3.4) / Math.sqrt(expansion)))
+  const style = block.style || {}
   return {
     left: (x / 10) + '%',
     top: (y / 10) + '%',
     width: (width / 10) + '%',
     minHeight: (height / 10) + '%',
     fontSize: fontSize + 'px',
+    color: style.textColor || '#ffffff',
+    backgroundColor: style.backgroundColor || 'rgba(20,20,20,.84)',
+    textAlign: style.align || 'left',
+    fontWeight: style.weight === 'bold' ? 700 : style.weight === 'semibold' ? 600 : 400,
+    fontStyle: style.italic ? 'italic' : 'normal',
+    fontFamily: visualFontFamily(style.family),
+    direction: targetDirection(target),
   }
 }
 
@@ -302,24 +321,32 @@ export default function CameraMode() {
       const w = (Math.max(12, Number(block.width) || 120) / 1000) * canvas.width
       const h = (Math.max(18, Number(block.height) || 50) / 1000) * canvas.height
 
-      ctx.fillStyle = 'rgba(20,20,20,.84)'
+      const style = block.style || {}
+      ctx.fillStyle = style.backgroundColor || 'rgba(20,20,20,.84)'
       ctx.fillRect(x, y, w, Math.max(h, 22))
 
       let fontSize = Math.max(11, Math.min(30, h * 0.42))
-      ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif'
-      ctx.fillStyle = '#fff'
+      const weight = style.weight === 'bold' ? '700' : style.weight === 'semibold' ? '600' : '400'
+      const italic = style.italic ? 'italic ' : ''
+      const family = visualFontFamily(style.family)
+      const setFont = () => { ctx.font = italic + weight + ' ' + fontSize + 'px ' + family }
+      setFont()
+      ctx.fillStyle = style.textColor || '#ffffff'
       ctx.textBaseline = 'top'
+      ctx.textAlign = style.align === 'center' ? 'center' : style.align === 'right' ? 'right' : 'left'
+      ctx.direction = targetDirection(target)
       let lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
 
       while (lines.length * fontSize * 1.2 > Math.max(h, 30) && fontSize > 9) {
         fontSize -= 1
-        ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif'
+        setFont()
         lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
       }
 
+      const drawX = ctx.textAlign === 'center' ? x + w / 2 : ctx.textAlign === 'right' ? x + w - 5 : x + 5
       const maxLines = Math.max(1, Math.floor(Math.max(h, 30) / (fontSize * 1.2)))
       lines.slice(0, maxLines).forEach((line, index) => {
-        ctx.fillText(line, x + 5, y + 4 + index * fontSize * 1.2)
+        ctx.fillText(line, drawX, y + 4 + index * fontSize * 1.2, Math.max(20, w - 10))
       })
     }
 
@@ -409,7 +436,7 @@ export default function CameraMode() {
               {blocks.map(block => <button
                 key={block.id}
                 className={'camera-visual-block ' + (block.confidence === 'low' || block.handwritten ? 'review' : '')}
-                style={blockStyle(block)}
+                style={blockStyle(block, target)}
                 onClick={() => document.getElementById('camera-detail-' + block.id)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })}
                 title={block.confidence === 'low' ? 'This text was hard to read — check the original.' : block.translation}
               >
