@@ -35,6 +35,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.inputmethodservice.InputMethodService
 import java.util.concurrent.Executors
@@ -330,11 +331,20 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
 
         correctionPreviewText = TextView(this).apply {
-            textSize = 10.5f
+            textSize = 11f
             setTextColor(Color.WHITE)
-            maxLines = 4
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(5), dp(8), dp(5))
+            maxLines = Int.MAX_VALUE
+            gravity = Gravity.TOP
+            setPadding(dp(10), dp(7), dp(8), dp(9))
+        }
+        val correctionTextScroller = ScrollView(this).apply {
+            isFillViewport = true
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(correctionPreviewText, ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
         }
         correctionPreview = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -342,7 +352,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             setPadding(dp(4), dp(3), dp(4), dp(3))
             setBackgroundColor(Color.argb(245, 43, 43, 43))
             visibility = View.GONE
-            addView(correctionPreviewText, LinearLayout.LayoutParams(0, dp(76), 1f))
+            addView(correctionTextScroller, LinearLayout.LayoutParams(0, dp(112), 1f))
             addView(Button(this@AnaKeyboardService).apply {
                 text = "Reject"
                 isAllCaps = false
@@ -352,7 +362,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setTextColor(Color.WHITE)
                 backgroundTintList = ColorStateList.valueOf(Color.rgb(72, 72, 72))
                 setOnClickListener { rejectSentenceProposal() }
-            }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { marginEnd = dp(5) })
+            }, LinearLayout.LayoutParams(dp(72), dp(48)).apply { marginEnd = dp(5) })
             addView(Button(this@AnaKeyboardService).apply {
                 text = "Accept"
                 isAllCaps = false
@@ -362,9 +372,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setTextColor(Color.BLACK)
                 backgroundTintList = ColorStateList.valueOf(Color.rgb(230, 181, 65))
                 setOnClickListener { applySentenceProposal() }
-            }, LinearLayout.LayoutParams(dp(72), dp(44)))
+            }, LinearLayout.LayoutParams(dp(72), dp(48)))
         }
-        root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(82)))
+        root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(118)))
 
         status = TextView(this).apply {
             text = defaultStatus()
@@ -818,6 +828,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 keyboard.setSymbols(true)
                 clearSuggestions()
             }
+            "SYMBOL_PAGE" -> {
+                keyboard.toggleSymbolPage()
+                clearSuggestions()
+            }
             "ABC" -> {
                 keyboard.setSymbols(false)
                 refreshShiftFromEditor()
@@ -1032,6 +1046,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun showSentenceProposal(candidate: SentenceCandidate, corrected: String, connection: InputConnection, shieldedCount: Int = 0) {
         pendingSentenceProposal = SentenceProposal(candidate.text, corrected, candidate.suffix, candidate.trailing, connection)
+        if (KeyboardPrefs.smartCorrectionMode(this) == "auto") {
+            applySentenceProposal(auto = true)
+            return
+        }
         if (::correctionPreviewText.isInitialized) {
             correctionPreviewText.text = buildCorrectionPreview(candidate.text, corrected)
             correctionPreview.visibility = View.VISIBLE
@@ -1040,9 +1058,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun buildCorrectionPreview(before: String, after: String): String {
-        val cleanBefore = before.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(180)
-        val cleanAfter = after.replace("\n", " ").replace(Regex("\\s+"), " ").trim().take(180)
-        return "Before: $cleanBefore\nAfter:  $cleanAfter"
+        val cleanBefore = before.replace("\n", " ").replace(Regex("\\s+"), " ").trim()
+        val cleanAfter = after.replace("\n", " ").replace(Regex("\\s+"), " ").trim()
+        return "Before: $cleanBefore\n\nAfter:  $cleanAfter"
     }
 
     private fun dismissSentenceProposal(markChecked: Boolean) {
@@ -1059,7 +1077,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         showStatus("Correction rejected")
     }
 
-    private fun applySentenceProposal() {
+    private fun applySentenceProposal(auto: Boolean = false) {
         val proposal = pendingSentenceProposal ?: return
         val connection = currentInputConnection
         if (connection == null || connection !== proposal.connection || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) {
@@ -1094,7 +1112,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         dismissSentenceProposal(markChecked = false)
         clearSuggestions()
         refreshShiftFromEditor()
-        showStatus("Paragraph corrected")
+        showStatus(if (auto) "ANA AI • correction applied automatically" else "Paragraph corrected")
     }
 
     private fun isSafeSentenceCorrection(original: String, corrected: String): Boolean {
