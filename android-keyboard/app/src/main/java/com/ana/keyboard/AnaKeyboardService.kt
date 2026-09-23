@@ -5,6 +5,7 @@ import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
@@ -44,6 +45,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var translationPicker: TranslationLanguagePickerView
     private lateinit var inputLanguagePicker: InputLanguagePickerView
     private lateinit var contentHost: FrameLayout
+    private lateinit var bottomSpacer: View
     private lateinit var status: TextView
     private lateinit var targetButton: Button
     private lateinit var suggestionEngine: LocalSuggestionEngine
@@ -402,8 +404,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(KeyboardSizing.keyboardHeightDp(this)))
         )
 
+        bottomSpacer = View(this).apply { setBackgroundColor(keyboardShellColor()) }
         root.addView(
-            View(this).apply { setBackgroundColor(keyboardShellColor()) },
+            bottomSpacer,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(KeyboardSizing.bottomSpacerDp(this)))
         )
 
@@ -445,6 +448,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (::keyboard.isInitialized) {
             refreshTypingCache()
             showLetterKeyboard()
+            applyKeyboardSizing()
             keyboard.refreshPreferences()
             loadBackgroundImage()
             if (::targetButton.isInitialized) targetButton.text = "→ ${KeyboardPrefs.targetBadge(this)}"
@@ -453,6 +457,39 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             shortcutCache = KeyboardPrefs.textShortcuts(this)
             requestSuggestionsSoon()
             mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
+        }
+    }
+
+    private fun applyKeyboardSizing() {
+        if (::contentHost.isInitialized) {
+            contentHost.layoutParams = (contentHost.layoutParams ?: LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(KeyboardSizing.keyboardHeightDp(this))
+            )).apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = dp(KeyboardSizing.keyboardHeightDp(this@AnaKeyboardService))
+            }
+        }
+        if (::bottomSpacer.isInitialized) {
+            bottomSpacer.layoutParams = (bottomSpacer.layoutParams ?: LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(KeyboardSizing.bottomSpacerDp(this))
+            )).apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = dp(KeyboardSizing.bottomSpacerDp(this@AnaKeyboardService))
+            }
+        }
+        if (::keyboard.isInitialized) {
+            keyboard.requestLayout()
+            keyboard.invalidate()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::keyboard.isInitialized) {
+            applyKeyboardSizing()
+            keyboard.refreshPreferences()
         }
     }
 
