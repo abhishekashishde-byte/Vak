@@ -807,6 +807,12 @@ object KeyboardPrefs {
         saveClipboardItems(context, items)
     }
 
+    fun deleteClipboardItem(context: Context, text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) return
+        saveClipboardItems(context, clipboardItems(context).filterNot { it.text == clean })
+    }
+
     /** Clear transient clips while preserving anything the user explicitly pinned. */
     fun clearClipboardHistory(context: Context) = saveClipboardItems(context, clipboardItems(context).filter { it.pinned })
 
