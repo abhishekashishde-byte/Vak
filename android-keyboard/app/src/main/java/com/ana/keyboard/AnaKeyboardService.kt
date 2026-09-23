@@ -242,6 +242,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Correct") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
             toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
+            toolbar.addView(actionButton("Undo") { performUndo() })
+            toolbar.addView(actionButton("Redo") { sendEditorShortcut(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON) })
+            toolbar.addView(actionButton("Select all") { performSelectAll() })
+            appAiButton = actionButton(if (isAppAiAllowed()) "AI app ✓" else "AI app off") { toggleCurrentAppAi() }
+                .also { toolbar.addView(it) }
             toolbar.addView(actionButton(if (KeyboardPrefs.incognitoEnabled(this)) "Private ✓" else "Private") {
                 val enabled = KeyboardPrefs.toggleIncognito(this)
                 if (enabled) {
@@ -272,17 +277,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setPadding(dp(4), dp(1), dp(4), dp(1))
                 setBackgroundColor(Color.argb(232, 31, 31, 31))
             }
-            repeat(3) {
+            repeat(3) { index ->
                 val cell = TextView(this).apply {
                     textSize = 16f
                     setTextColor(Color.WHITE)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     setPadding(dp(5), 0, dp(5), 0)
-                    setOnClickListener {
-                        val suggestion = text.toString().trim()
-                        if (suggestion.isNotEmpty()) applySuggestion(suggestion)
-                    }
+                    contentDescription = "Suggestion ${index + 1}"
+                    setOnClickListener { applySuggestionEntry(index) }
                 }
                 suggestionButtons += cell
                 suggestionStrip.addView(cell, LinearLayout.LayoutParams(0, dp(38), 1f))
@@ -476,6 +479,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             suggestionEngine.setLanguage(cachedInputBadge)
             suggestionEngine.refreshUserData()
             shortcutCache = KeyboardPrefs.textShortcuts(this)
+            refreshQuickClipboard()
+            if (appAiButton != null) appAiButton?.text = if (isAppAiAllowed()) "AI app ✓" else "AI app off"
+            updateAiAvailability()
             requestSuggestionsSoon()
             mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
         }
@@ -838,6 +844,42 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
+    private fun lastCompletedWord(): String? {
+        val before = currentInputConnection?.getTextBeforeCursor(180, 0)?.toString().orEmpty()
+        if (before.isBlank()) return null
+        return Regex("([\\p{L}']{2,})[\\s.,!?;:]+$").find(before)?.groupValues?.getOrNull(1)
+    }
+
+    private fun recentWordsBeforeCursor(): List<String> {
+        val before = currentInputConnection?.getTextBeforeCursor(220, 0)?.toString().orEmpty()
+        return Regex("[\\p{L}']{2,}").findAll(before).map { it.value }.toList().takeLast(2)
+    }
+
+    private fun learnTransitionFromContext() {
+        val words = recentWordsBeforeCursor()
+        if (words.size == 2) suggestionEngine.learnTransition(words[0], words[1])
+    }
+
+    private fun refreshQuickClipboard() {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) {
+            quickClipboardText = ""
+            return
+        }
+        try {
+            val clip = clipboardManager.primaryClip
+            quickClipboardText = if (clip != null && clip.itemCount > 0) {
+                clip.getItemAt(0).coerceToText(this)?.toString()?.trim()?.take(800).orEmpty()
+            } else ""
+        } catch (_: Exception) { quickClipboardText = "" }
+    }
+
+    private fun clipboardQuickEntry(): SuggestionEntry? {
+        val value = quickClipboardText.trim()
+        if (value.isBlank() || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return null
+        val label = "📋 " + value.replace('\n', ' ').replace(Regex("\\s+"), " ").take(22)
+        return SuggestionEntry(label, value, SuggestionKind.CLIPBOARD)
+    }
+
     private fun requestSuggestionsSoon() {
         mainHandler.removeCallbacks(suggestionRunnable)
         if (!cachedWordSuggestionsEnabled || isSensitiveField()) {
@@ -850,7 +892,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun scheduleSmartSentenceCorrection() {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
-        if (!cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+        if (!cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
@@ -879,7 +921,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun runSmartSentenceCorrection() {
-        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
         if (smartSentenceInFlight || pendingSentenceProposal != null) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
@@ -1047,6 +1089,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             if (!correction.isNullOrBlank() && replaceDelimitedWordNearCursor(delimited, correction)) {
                 pendingDelimitedWord = null
                 clearSuggestions()
+                requestSuggestionsSoon()
                 return
             }
         }
@@ -1063,10 +1106,79 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         lastLooksLikeTypo = looksLikeTypo
         bestCorrection = clean.firstOrNull()
 
-        val display = listOf(word) + clean
+        val emoji = CoreLexicon.emojiForWord(word, cachedInputBadge)
+        val entries = mutableListOf(SuggestionEntry(word, word, SuggestionKind.WORD))
+        clean.take(if (emoji != null) 1 else 2).forEach { entries += SuggestionEntry(it, it, SuggestionKind.WORD) }
+        if (emoji != null && entries.size < 3) entries += SuggestionEntry(emoji, emoji, SuggestionKind.EMOJI)
+        showEntries(entries)
+    }
+
+    private fun handleNextWordResult(previous: String, suggestions: List<String>) {
+        if (isSensitiveField() || !cachedWordSuggestionsEnabled || currentWord() != null) return
+        val currentPrevious = lastCompletedWord()
+        if (!previous.equals(currentPrevious, ignoreCase = true)) return
+        val clipboard = clipboardQuickEntry()
+        val limit = if (clipboard != null) 2 else 3
+        val entries = suggestions
+            .distinctBy { it.lowercase() }
+            .take(limit)
+            .map { SuggestionEntry(it, it, SuggestionKind.NEXT_WORD) }
+            .toMutableList()
+        if (clipboard != null && entries.size < 3) entries += clipboard
+        showEntries(entries)
+    }
+
+    private fun showEntries(entries: List<SuggestionEntry>) {
         suggestionButtons.forEachIndexed { index, button ->
-            button.text = display.getOrNull(index).orEmpty()
-            button.alpha = if (button.text.isNullOrEmpty()) 0f else 1f
+            val entry = entries.getOrNull(index)
+            suggestionEntries[index] = entry
+            button.text = entry?.label.orEmpty()
+            button.alpha = if (entry == null) 0f else 1f
+            button.contentDescription = entry?.let {
+                when (it.kind) {
+                    SuggestionKind.CLIPBOARD -> "Paste " + it.value.take(40)
+                    SuggestionKind.EMOJI -> "Insert emoji " + it.value
+                    SuggestionKind.NEXT_WORD -> "Next word " + it.value
+                    SuggestionKind.WORD -> "Word suggestion " + it.value
+                }
+            } ?: "Empty suggestion"
+        }
+    }
+
+    private fun applySuggestionEntry(index: Int) {
+        val entry = suggestionEntries.getOrNull(index) ?: return
+        val connection = currentInputConnection ?: return
+        vibrateSuggestionTap()
+        when (entry.kind) {
+            SuggestionKind.WORD -> applyWordSuggestion(entry.value)
+            SuggestionKind.NEXT_WORD -> {
+                finishLocalComposition(connection)
+                val previous = lastCompletedWord()
+                val before = connection.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+                val prefix = if (before.isNotEmpty() && !before.last().isWhitespace()) " " else ""
+                val suffix = if (cachedAutoSpaceSuggestion) " " else ""
+                connection.commitText(prefix + entry.value + suffix, 1)
+                if (!previous.isNullOrBlank()) suggestionEngine.learnTransition(previous, entry.value)
+                clearSuggestions()
+                refreshShiftFromEditor()
+                if (cachedAutoSpaceSuggestion) requestSuggestionsSoon()
+            }
+            SuggestionKind.EMOJI -> {
+                finishLocalComposition(connection)
+                val before = connection.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+                val prefix = if (before.isNotEmpty() && !before.last().isWhitespace()) " " else ""
+                val suffix = if (cachedAutoSpaceSuggestion) " " else ""
+                connection.commitText(prefix + entry.value + suffix, 1)
+                clearSuggestions()
+                if (cachedAutoSpaceSuggestion) requestSuggestionsSoon()
+            }
+            SuggestionKind.CLIPBOARD -> {
+                finishLocalComposition(connection)
+                connection.commitText(entry.value, 1)
+                KeyboardPrefs.rememberClipboard(this, entry.value)
+                clearSuggestions()
+                refreshShiftFromEditor()
+            }
         }
     }
 
@@ -1090,26 +1202,27 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun clearSuggestions() {
-        suggestionButtons.forEach {
-            it.text = ""
-            it.alpha = 0f
+        suggestionButtons.forEachIndexed { index, button ->
+            button.text = ""
+            button.alpha = 0f
+            suggestionEntries[index] = null
         }
         lastSuggestedWord = ""
         bestCorrection = null
         lastLooksLikeTypo = false
     }
 
-    private fun applySuggestion(suggestion: String) {
+    private fun applyWordSuggestion(suggestion: String) {
         val connection = currentInputConnection ?: return
         finishLocalComposition(connection)
         val word = currentWord() ?: return
-        vibrateSuggestionTap()
+        val suffix = if (cachedAutoSpaceSuggestion) " " else ""
 
         if (suggestion.equals(word, ignoreCase = true)) {
             KeyboardPrefs.addPersonalWord(this, word)
             refreshTypingCache()
             suggestionEngine.refreshUserData()
-            connection.commitText(" ", 1)
+            connection.commitText(suffix, 1)
             pendingDelimitedWord = null
             clearSuggestions()
             refreshShiftFromEditor()
@@ -1119,7 +1232,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         val replacement = adjustCase(word, suggestion)
         connection.deleteSurroundingText(word.length, 0)
-        connection.commitText("$replacement ", 1)
+        connection.commitText(replacement + suffix, 1)
         KeyboardPrefs.learnCorrection(this, word, suggestion)
         refreshTypingCache()
         suggestionEngine.refreshUserData()
@@ -1178,6 +1291,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }
         }
 
+        learnTransitionFromContext()
+
         val now = SystemClock.elapsedRealtime()
         val before = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
         val canPeriod = cachedDoubleSpacePeriodEnabled && now - lastSpaceTap < 420 &&
@@ -1203,6 +1318,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         clearSuggestions()
         refreshShiftFromEditor()
+        requestSuggestionsSoon()
         scheduleSmartSentenceCorrection()
     }
 
@@ -1259,6 +1375,30 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
         clearSuggestions()
+    }
+
+    private fun performUndo() {
+        if (undoLastSentenceCorrection()) return
+        if (undoLastAutoCorrection()) return
+        sendEditorShortcut(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON)
+    }
+
+    private fun sendEditorShortcut(keyCode: Int, metaState: Int) {
+        val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
+        val now = SystemClock.uptimeMillis()
+        connection.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
+        connection.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, metaState))
+        clearSuggestions()
+        requestSuggestionsSoon()
+    }
+
+    private fun performSelectAll() {
+        val connection = currentInputConnection ?: return
+        finishLocalComposition(connection)
+        connection.performContextMenuAction(android.R.id.selectAll)
+        clearSuggestions()
+        showStatus("Selected all")
     }
 
     private fun handleShift() {
@@ -1366,12 +1506,33 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         return isPasswordField() || isOtpField() || noLearning
     }
 
+    private fun currentAppPackage(): String = currentInputEditorInfo?.packageName?.trim().orEmpty()
+
+    private fun isAppAiAllowed(): Boolean =
+        KeyboardPrefs.aiAllowedForPackage(this, currentAppPackage())
+
+    private fun toggleCurrentAppAi() {
+        val packageName = currentAppPackage()
+        if (packageName.isBlank()) {
+            showStatus("App privacy setting is unavailable here")
+            return
+        }
+        val next = !isAppAiAllowed()
+        KeyboardPrefs.setAiAllowedForPackage(this, packageName, next)
+        appAiButton?.text = if (next) "AI app ✓" else "AI app off"
+        updateAiAvailability()
+        showStatus(if (next) "Ana AI enabled for this app" else "Ana AI disabled for this app")
+    }
+
     private fun updateAiAvailability() {
         if (!::status.isInitialized) return
         val privateField = isSensitiveField()
         val incognito = KeyboardPrefs.incognitoEnabled(this)
-        aiButtons.forEach { it.isEnabled = !privateField && !incognito }
+        val appAllowed = isAppAiAllowed()
+        aiButtons.forEach { it.isEnabled = !privateField && !incognito && appAllowed }
         if (::targetButton.isInitialized) targetButton.isEnabled = !privateField
+        appAiButton?.isEnabled = !privateField
+        appAiButton?.text = if (appAllowed) "AI app ✓" else "AI app off"
         voiceButton?.isEnabled = !privateField && !incognito
         if (privateField) {
             dismissSentenceProposal(markChecked = false)
@@ -1380,6 +1541,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         } else if (incognito) {
             dismissSentenceProposal(markChecked = false)
             status.text = "INCOGNITO • learning, clipboard history and Ana AI are off"
+        } else if (!appAllowed) {
+            dismissSentenceProposal(markChecked = false)
+            status.text = "APP AI OFF • local typing and suggestions only"
         } else {
             status.text = defaultStatus()
         }
@@ -1502,6 +1666,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Ana AI is disabled in Incognito mode")
             return
         }
+        if (!isAppAiAllowed()) {
+            showStatus("Ana AI is off for this app")
+            return
+        }
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) {
             showStatus("Open Ana Keyboard settings and set your Ana address")
@@ -1569,11 +1737,19 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun setAiBusy(busy: Boolean) {
-        aiButtons.forEach { it.isEnabled = !busy }
-        if (::targetButton.isInitialized) targetButton.isEnabled = !busy
+        if (busy) {
+            aiButtons.forEach { it.isEnabled = false }
+            if (::targetButton.isInitialized) targetButton.isEnabled = false
+        } else {
+            updateAiAvailability()
+        }
     }
 
-    private fun defaultStatus(): String = if (KeyboardPrefs.incognitoEnabled(this)) "INCOGNITO • local typing only" else "LOCAL • typing stays on device"
+    private fun defaultStatus(): String = when {
+        KeyboardPrefs.incognitoEnabled(this) -> "INCOGNITO • local typing only"
+        !isAppAiAllowed() -> "APP AI OFF • local typing and suggestions only"
+        else -> "LOCAL • typing stays on device"
+    }
 
     private fun showStatus(message: String) {
         if (!::status.isInitialized) return
@@ -1589,6 +1765,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         stopVoiceTyping(false)
         speechRecognizer?.destroy()
         speechRecognizer = null
+        try { clipboardManager.removePrimaryClipChangedListener(clipboardListener) } catch (_: Exception) {}
         suggestionEngine.close()
         executor.shutdownNow()
         smartSentenceExecutor.shutdownNow()
