@@ -127,6 +127,37 @@ object AnaAccountSync {
         return next
     }
 
+    internal fun fetchSharedGlossary(session: Session): List<KeyboardPrefs.SharedGlossaryEntry> {
+        val response = request(
+            url = "$PROJECT_URL/auth/v1/user",
+            method = "GET",
+            bearer = session.accessToken
+        )
+        if (response.first !in 200..299) return emptyList()
+        return try {
+            val user = JSONObject(response.second.ifBlank { "{}" })
+            val glossary = user.optJSONObject("user_metadata")
+                ?.optJSONObject("ana_preferences")
+                ?.optJSONArray("glossary")
+                ?: JSONArray()
+            buildList {
+                for (i in 0 until glossary.length()) {
+                    val item = glossary.optJSONObject(i) ?: continue
+                    val source = item.optString("source").trim()
+                    if (source.isBlank()) continue
+                    add(KeyboardPrefs.SharedGlossaryEntry(
+                        target = item.optString("target").trim(),
+                        source = source,
+                        preferred = item.optString("preferred").trim(),
+                        scope = item.optString("scope", "personal").trim().ifBlank { "personal" },
+                        context = item.optString("context").trim(),
+                        rule = item.optString("rule", "preferred").trim().ifBlank { "preferred" }
+                    ))
+                }
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     internal fun fetchLearning(session: Session): List<KeyboardLearningSync.Entry> {
         val columns = "entry_key,entry_type,language,source,preferred,deleted,client_updated_at"
         val response = request(
@@ -404,6 +435,7 @@ object KeyboardLearningSync {
 
         val finalRemote = AnaAccountSync.fetchLearning(session)
         finalRemote.sortedBy { instant(it.clientUpdatedAt) }.forEach { applyRemote(app, it) }
+        KeyboardPrefs.setSharedGlossary(app, AnaAccountSync.fetchSharedGlossary(session))
 
         writePending(app, emptyMap())
         prefs.edit().putString(KEY_BOUND_USER, session.userId).apply()
