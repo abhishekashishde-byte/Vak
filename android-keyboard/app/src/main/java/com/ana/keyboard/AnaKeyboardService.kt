@@ -111,7 +111,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         typingIdleSawLetter = false
         typingIdleSawPunctuation = false
 
-        if (cachedWordSuggestionsEnabled && !isPasswordField()) {
+        if (cachedWordSuggestionsEnabled && !isSensitiveField()) {
             showTypedWordCandidate()
             requestSuggestionsSoon()
         } else {
@@ -132,7 +132,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private val suggestionRunnable = Runnable {
-        if (!cachedWordSuggestionsEnabled || isPasswordField()) {
+        if (!cachedWordSuggestionsEnabled || isSensitiveField()) {
             clearSuggestions()
             return@Runnable
         }
@@ -209,6 +209,18 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
             toolbar.addView(actionButton("Correct") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
             toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
+            toolbar.addView(actionButton(if (KeyboardPrefs.incognitoEnabled(this)) "Private ✓" else "Private") {
+                val enabled = KeyboardPrefs.toggleIncognito(this)
+                if (enabled) {
+                    stopVoiceTyping(false)
+                    clearSuggestions()
+                    hidePanels()
+                    keyboard.visibility = View.VISIBLE
+                }
+                updateAiAvailability()
+                showStatus(if (enabled) "INCOGNITO • learning, clipboard history and Ana AI are off" else defaultStatus())
+                requestSuggestionsSoon()
+            })
             if (KeyboardPrefs.voiceTypingEnabled(this)) {
                 voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
                     .also { toolbar.addView(it) }
@@ -294,7 +306,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 override fun onClearHistory() {
                     KeyboardPrefs.clearClipboardHistory(this@AnaKeyboardService)
                     refreshClipboardPanel()
-                    showStatus("Clipboard history cleared")
+                    showStatus("Unpinned clipboard history cleared")
+                }
+
+                override fun onTogglePin(text: String) {
+                    KeyboardPrefs.toggleClipboardPin(this@AnaKeyboardService, text)
+                    refreshClipboardPanel()
                 }
             }
         }
@@ -428,8 +445,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun showClipboardPanel() {
-        if (isPasswordField()) {
-            showStatus("Clipboard is hidden in password fields")
+        if (isSensitiveField()) {
+            showStatus("Clipboard is hidden in private fields")
+            return
+        }
+        if (KeyboardPrefs.incognitoEnabled(this)) {
+            showStatus("Clipboard history is paused in Incognito mode")
             return
         }
         stopVoiceTyping(false)
@@ -440,7 +461,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun showTranslationPicker() {
-        if (isPasswordField()) return
+        if (isSensitiveField()) return
         stopVoiceTyping(false)
         translationPicker.refresh()
         hidePanels()
@@ -457,14 +478,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun refreshClipboardPanel() {
-        if (isPasswordField()) return
+        if (isSensitiveField()) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val primary = clipboard.primaryClip
         if (primary != null && primary.itemCount > 0) {
             val text = primary.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
             if (text.isNotBlank()) KeyboardPrefs.rememberClipboard(this, text)
         }
-        clipboardPanel.setItems(KeyboardPrefs.clipboardHistory(this))
+        clipboardPanel.setItems(KeyboardPrefs.clipboardItems(this))
     }
 
     private fun showLetterKeyboard() {
@@ -535,7 +556,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onKeyCandidates(candidates: List<SpatialTouchDecoder.Candidate>) {
-        val prefix = if (isPasswordField()) "" else composingBuffer.value()
+        val prefix = if (isSensitiveField()) "" else composingBuffer.value()
         val chosen = TouchLanguageRanker.choose(
             candidates = candidates,
             currentPrefix = prefix,
@@ -589,7 +610,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun appendComposingCharacter(connection: InputConnection, text: String) {
-        if (isPasswordField()) {
+        if (isSensitiveField()) {
             connection.commitText(text, 1)
             return
         }
@@ -695,7 +716,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun showTypedWordCandidate() {
-        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isPasswordField() || suggestionButtons.isEmpty()) return
+        if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isSensitiveField() || suggestionButtons.isEmpty()) return
         val word = currentWord()
         if (word.isNullOrBlank()) {
             clearSuggestions()
@@ -711,7 +732,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun requestSuggestionsSoon() {
         mainHandler.removeCallbacks(suggestionRunnable)
-        if (!cachedWordSuggestionsEnabled || isPasswordField()) {
+        if (!cachedWordSuggestionsEnabled || isSensitiveField()) {
             clearSuggestions()
             return
         }
@@ -721,7 +742,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun scheduleSmartSentenceCorrection() {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
-        if (!cachedSmartSentenceEnabled || isPasswordField()) return
+        if (!cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
@@ -750,7 +771,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun runSmartSentenceCorrection() {
-        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isPasswordField()) return
+        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
         if (smartSentenceInFlight) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
@@ -770,7 +791,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         if (currentInputConnection === connection) showStatus(defaultStatus())
                         return@post
                     }
-                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isPasswordField()) {
+                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this@AnaKeyboardService)) {
                         showStatus(defaultStatus())
                         return@post
                     }
@@ -882,7 +903,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }
         }
 
-        if (isPasswordField()) return
+        if (isSensitiveField()) return
         if (currentWord() != word || !cachedWordSuggestionsEnabled) return
 
         val clean = suggestions
@@ -1072,7 +1093,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun expandTextShortcut(connection: InputConnection): Boolean {
-        if (isPasswordField() || shortcutCache.isEmpty()) return false
+        if (isSensitiveField() || shortcutCache.isEmpty()) return false
         val before = connection.getTextBeforeCursor(80, 0)?.toString().orEmpty()
         val trigger = Regex("([^\\s]{1,24})$").find(before)?.groupValues?.getOrNull(1) ?: return false
         val expansion = shortcutCache[trigger] ?: return false
@@ -1151,7 +1172,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun commitPendingGifIfAny() {
         val raw = KeyboardPrefs.consumePendingGifUri(this)
-        if (raw.isBlank() || isPasswordField()) return
+        if (raw.isBlank() || isSensitiveField()) return
         val uri = try { Uri.parse(raw) } catch (_: Exception) { return }
         val supported = currentInputEditorInfo?.contentMimeTypes.orEmpty()
         if (supported.none { it == "image/gif" || it == "image/*" || it == "image/*;" }) {
@@ -1184,15 +1205,32 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
+    private fun isOtpField(): Boolean {
+        val info = currentInputEditorInfo ?: return false
+        val hint = listOfNotNull(info.hintText?.toString(), info.label?.toString(), info.fieldName, info.privateImeOptions)
+            .joinToString(" ").lowercase()
+        return Regex("""\b(otp|one[ -]?time(?: password| code)?|verification[ -]?code|sms[ -]?code|auth(?:entication)?[ -]?code|security[ -]?code|passcode)\b""")
+            .containsMatchIn(hint)
+    }
+
+    private fun isSensitiveField(): Boolean {
+        val info = currentInputEditorInfo
+        val noLearning = info != null && (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        return isPasswordField() || isOtpField() || noLearning
+    }
+
     private fun updateAiAvailability() {
         if (!::status.isInitialized) return
-        val password = isPasswordField()
-        aiButtons.forEach { it.isEnabled = !password }
-        if (::targetButton.isInitialized) targetButton.isEnabled = !password
-        voiceButton?.isEnabled = !password
-        if (password) {
-            status.text = "Ana AI, voice, suggestions and clipboard are disabled in password fields"
+        val privateField = isSensitiveField()
+        val incognito = KeyboardPrefs.incognitoEnabled(this)
+        aiButtons.forEach { it.isEnabled = !privateField && !incognito }
+        if (::targetButton.isInitialized) targetButton.isEnabled = !privateField
+        voiceButton?.isEnabled = !privateField && !incognito
+        if (privateField) {
+            status.text = "PRIVATE FIELD • Ana AI, voice, learning and clipboard are off"
             clearSuggestions()
+        } else if (incognito) {
+            status.text = "INCOGNITO • learning, clipboard history and Ana AI are off"
         } else {
             status.text = defaultStatus()
         }
@@ -1212,8 +1250,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Voice typing is turned off in settings")
             return
         }
-        if (isPasswordField()) {
-            showStatus("Voice typing is disabled in password fields")
+        if (isSensitiveField()) {
+            showStatus("Voice typing is disabled in private fields")
+            return
+        }
+        if (KeyboardPrefs.incognitoEnabled(this)) {
+            showStatus("Voice typing is disabled in Incognito mode")
             return
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1303,8 +1345,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun runAnaAction(action: AnaApi.Action) {
-        if (isPasswordField()) {
-            showStatus("Ana AI is disabled in password fields")
+        if (isSensitiveField()) {
+            showStatus("Ana AI is disabled in private fields")
+            return
+        }
+        if (KeyboardPrefs.incognitoEnabled(this)) {
+            showStatus("Ana AI is disabled in Incognito mode")
             return
         }
         val baseUrl = KeyboardPrefs.baseUrl(this)
@@ -1378,14 +1424,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (::targetButton.isInitialized) targetButton.isEnabled = !busy
     }
 
-    private fun defaultStatus(): String = "LOCAL • typing stays on device"
+    private fun defaultStatus(): String = if (KeyboardPrefs.incognitoEnabled(this)) "INCOGNITO • local typing only" else "LOCAL • typing stays on device"
 
     private fun showStatus(message: String) {
         if (!::status.isInitialized) return
         status.text = message
         mainHandler.removeCallbacksAndMessages(STATUS_TOKEN)
         mainHandler.postAtTime({
-            if (!isPasswordField() && !voiceListening) status.text = defaultStatus()
+            if (!isSensitiveField() && !voiceListening) status.text = defaultStatus()
         }, STATUS_TOKEN, SystemClock.uptimeMillis() + 2600)
     }
 
