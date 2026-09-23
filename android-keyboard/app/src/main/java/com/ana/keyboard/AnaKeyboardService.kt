@@ -92,6 +92,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var smartSentenceToken = 0
     private var lastSmartSentenceChecked = ""
     @Volatile private var smartSentenceInFlight = false
+    @Volatile private var explicitAiActionInFlight = false
     private var shortcutCache: Map<String, String> = emptyMap()
 
     // Cached once per input session so physical key taps never need to query
@@ -122,6 +123,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var lastVoicePartial = ""
     private var voiceRecognizerOnDevice = false
     private var onDeviceVoiceFailedThisSession = false
+    private var voiceSessionId = 0L
     private enum class VoiceMode { DICTATE, EDIT_COMMAND }
     private var voiceMode = VoiceMode.DICTATE
     private var voiceEditSource: ActionText? = null
@@ -927,7 +929,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun scheduleSmartSentenceCorrection() {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
-        if (!cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
+        if (explicitAiActionInFlight || !cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
@@ -956,7 +958,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun runSmartSentenceCorrection() {
-        if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
+        if (explicitAiActionInFlight || !KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
         if (smartSentenceInFlight || pendingSentenceProposal != null) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
@@ -1020,7 +1022,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     smartSentenceInFlight = false
                     // If the user continued typing while an older request was in
                     // flight, schedule one fresh check for the latest sentence.
-                    if (token != smartSentenceToken && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
+                    if (token != smartSentenceToken && !explicitAiActionInFlight && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
                         scheduleSmartSentenceCorrection()
                     }
                 }
@@ -1633,6 +1635,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceButton?.contentDescription = if (listening) "Stop voice typing" else "Voice typing"
     }
 
+    private fun recycleSpeechRecognizer() {
+        val old = speechRecognizer
+        speechRecognizer = null
+        try { old?.cancel() } catch (_: Exception) {}
+        try { old?.destroy() } catch (_: Exception) {}
+    }
+
     private fun startVoiceTyping() {
         if (!KeyboardPrefs.voiceTypingEnabled(this)) {
             showStatus("Voice typing is turned off in settings")
@@ -1648,28 +1657,36 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             startActivity(Intent(this, MicrophonePermissionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            showStatus("Allow microphone access, then tap the microphone again")
+            showStatus("Allow microphone permission, then tap the microphone again")
             return
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            showStatus("No Android speech recognizer is available on this device")
+        val standardAvailable = SpeechRecognizer.isRecognitionAvailable(this)
+        val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        if (!standardAvailable && !canUseOnDevice) {
+            showStatus("Android speech service is unavailable — microphone permission is already separate")
             return
         }
 
-        if (speechRecognizer == null) {
-            val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
-            val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-            voiceRecognizerOnDevice = preferOnDevice && canUseOnDevice && !onDeviceVoiceFailedThisSession
-            speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-            } else {
-                SpeechRecognizer.createSpeechRecognizer(this)
-            }
-            speechRecognizer = speechRecognizer?.apply {
-                setRecognitionListener(object : RecognitionListener {
+        // Build a fresh recognizer for every dictation session. Some Android
+        // speech services remain BUSY/CLIENT-broken after a completed/cancelled
+        // session even though microphone permission is still granted.
+        voiceSessionId += 1
+        val sessionId = voiceSessionId
+        recycleSpeechRecognizer()
+
+        val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
+        voiceRecognizerOnDevice = (preferOnDevice && canUseOnDevice && !onDeviceVoiceFailedThisSession) ||
+            (!standardAvailable && canUseOnDevice)
+        speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        }
+        speechRecognizer = speechRecognizer?.apply {
+            setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         if (voiceStopRequested) {
                             voiceListening = false
                             voiceFinalizing = true
@@ -1685,6 +1702,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     override fun onRmsChanged(rmsdB: Float) = Unit
                     override fun onBufferReceived(buffer: ByteArray?) = Unit
                     override fun onEndOfSpeech() {
+                        if (sessionId != voiceSessionId) return
                         if (!voiceResultHandled) {
                             voiceFinalizing = true
                             voiceListening = false
@@ -1694,9 +1712,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         }
                     }
                     override fun onError(error: Int) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         if (voiceRecognizerOnDevice && VoiceDictationPolicy.shouldFallbackFromOnDevice(error)) {
                             onDeviceVoiceFailedThisSession = true
+                        }
+                        if (VoiceDictationPolicy.shouldRecycleRecognizer(error)) {
                             val failedRecognizer = speechRecognizer
                             speechRecognizer = null
                             mainHandler.post { try { failedRecognizer?.destroy() } catch (_: Exception) {} }
@@ -1718,12 +1738,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         }
                     }
                     override fun onResults(results: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         val finalText = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                         completeVoiceRecognition(VoiceDictationPolicy.bestText(finalText, lastVoicePartial))
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                         if (partial.isBlank()) return
                         lastVoicePartial = partial
@@ -1736,7 +1756,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
                 })
             }
-        }
 
         val localeTag = when (KeyboardPrefs.inputBadge(this)) {
             "DE" -> "de-DE"
@@ -1763,8 +1782,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus(if (voiceRecognizerOnDevice) "Listening on device…" else "Listening…")
         } catch (_: Exception) {
             voiceListening = false
+            voiceFinalizing = false
+            voiceSessionId += 1
+            recycleSpeechRecognizer()
             setVoiceListeningUi(false)
-            showStatus("Could not start voice typing — tap the mic and try again")
+            showStatus("Speech service did not start — Ana reset it; tap the mic again")
         }
     }
 
@@ -1924,10 +1946,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun voiceErrorMessage(error: Int): String = when (error) {
-        SpeechRecognizer.ERROR_NO_MATCH -> "Nothing understood — tap the mic and try again"
+        SpeechRecognizer.ERROR_NO_MATCH -> "Nothing understood — if this repeats, check Android Mic access"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy — try again"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                "Ana permission is allowed — check Android Mic access in Quick Settings"
+            else "Microphone permission is required"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech service was busy — Ana reset it; tap the mic again"
+        SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER -> "Speech service reset — tap the mic again"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network error"
         else -> if (voiceRecognizerOnDevice && onDeviceVoiceFailedThisSession) {
             "On-device speech failed — Ana will use Android speech recognition next time"
@@ -1944,7 +1970,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceFinalizing = false
         voiceStopRequested = false
         lastVoicePartial = ""
-        try { speechRecognizer?.cancel() } catch (_: Exception) { }
+        voiceSessionId += 1
+        recycleSpeechRecognizer()
         try {
             currentInputConnection?.setComposingText("", 1)
             currentInputConnection?.finishComposingText()
@@ -1958,6 +1985,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private data class ActionText(val text: String, val selected: Boolean)
+    private data class ExplicitActionText(val editorText: String, val aiText: String, val selected: Boolean)
 
     private fun actionText(): ActionText? {
         val connection = currentInputConnection ?: return null
@@ -1969,6 +1997,38 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val lineStart = before.lastIndexOf('\n') + 1
         val draft = before.substring(lineStart).takeLast(8000)
         return if (draft.isBlank()) null else ActionText(draft, false)
+    }
+
+    private fun explicitActionText(): ExplicitActionText? {
+        val source = actionText() ?: return null
+        val connection = currentInputConnection ?: return null
+        val proposal = pendingSentenceProposal
+        var aiText = source.text
+
+        if (!source.selected && proposal != null && proposal.connection === connection) {
+            val tail = connection.getTextBeforeCursor(proposal.suffix.length, 0)?.toString().orEmpty()
+            val sameDraft = tail == proposal.suffix &&
+                source.text.trimEnd().equals(proposal.original.trimEnd(), ignoreCase = false)
+            if (sameDraft) aiText = proposal.corrected
+        }
+
+        // An explicit toolbar command owns this text now. Invalidate any
+        // background paragraph check and remove its proposal so it cannot
+        // compete with Translate / Write / tone actions later.
+        smartSentenceToken++
+        mainHandler.removeCallbacks(smartSentenceRunnable)
+        dismissSentenceProposal(markChecked = false)
+        explicitAiActionInFlight = true
+        return ExplicitActionText(source.text, aiText, source.selected)
+    }
+
+    private fun finishExplicitAiAction() {
+        explicitAiActionInFlight = false
+        // Do not immediately re-run Smart Correction on the result of an
+        // explicit action. Normal typing will schedule the next check.
+        smartSentenceToken++
+        mainHandler.removeCallbacks(smartSentenceRunnable)
+        dismissSentenceProposal(markChecked = false)
     }
 
     private fun runAnaAction(action: AnaApi.Action) {
@@ -1989,7 +2049,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Open Ana Keyboard settings and set your Ana address")
             return
         }
-        val source = actionText()
+        val source = explicitActionText()
         if (source == null) {
             val message = when (action) {
                 AnaApi.Action.WRITE -> "Type or dictate what you want to write, then tap Write"
@@ -2019,19 +2079,21 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         executor.execute {
             try {
-                val result = AnaApi.transform(baseUrl, source.text, action, target, shieldEnabled, cloudGlossary())
+                val result = AnaApi.transform(baseUrl, source.aiText, action, target, shieldEnabled, cloudGlossary())
                 mainHandler.post {
                     if (currentInputConnection !== connection) {
+                        finishExplicitAiAction()
                         setAiBusy(false)
                         showStatus("Text field changed — result was not inserted")
                         return@post
                     }
                     val stillMatches = if (source.selected) {
-                        connection.getSelectedText(0)?.toString() == source.text
+                        connection.getSelectedText(0)?.toString() == source.editorText
                     } else {
-                        connection.getTextBeforeCursor(source.text.length, 0)?.toString() == source.text
+                        connection.getTextBeforeCursor(source.editorText.length, 0)?.toString() == source.editorText
                     }
                     if (!stillMatches) {
+                        finishExplicitAiAction()
                         setAiBusy(false)
                         showStatus("Draft changed — Ana left it untouched")
                         return@post
@@ -2039,9 +2101,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
                     if (source.selected) connection.commitText(result.text, 1)
                     else {
-                        connection.deleteSurroundingText(source.text.length, 0)
+                        connection.deleteSurroundingText(source.editorText.length, 0)
                         connection.commitText(result.text, 1)
                     }
+                    finishExplicitAiAction()
                     setAiBusy(false)
                     showStatus(if (result.shieldedCount > 0) "Done • Privacy Shield protected ${result.shieldedCount}" else "Done")
                     clearSuggestions()
@@ -2049,6 +2112,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 }
             } catch (error: Exception) {
                 mainHandler.post {
+                    finishExplicitAiAction()
                     setAiBusy(false)
                     showStatus(error.message ?: "Ana request failed")
                 }
@@ -2084,8 +2148,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onDestroy() {
         cancelPendingGlide()
         stopVoiceTyping(false)
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        voiceSessionId += 1
+        recycleSpeechRecognizer()
         try { clipboardManager.removePrimaryClipChangedListener(clipboardListener) } catch (_: Exception) {}
         suggestionEngine.close()
         executor.shutdownNow()

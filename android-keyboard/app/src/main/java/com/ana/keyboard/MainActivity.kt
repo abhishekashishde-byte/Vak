@@ -414,6 +414,7 @@ class MainActivity : Activity() {
             KeyboardPrefs.setPreferOnDeviceDictation(this, it)
         })
         root.addView(infoCard("Voice edit", "Select text in any app, tap Voice edit in Ana's toolbar, then say instructions such as “make this shorter”, “translate to German” or “make it formal”."))
+        root.addView(infoCard("Mic permission vs Mic access", "Android has two controls. Ana needs microphone permission, and Android's global Mic access switch must also be ON. If permission is already allowed but the mic cannot listen, check Mic access in Quick Settings."))
         root.addView(actionCard("Microphone permission") {
             startActivity(Intent(this, MicrophonePermissionActivity::class.java))
         })
