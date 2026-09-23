@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, Check, Circle, Clipboard, Download, FileText, ListTodo, Mail, MessageSquare, Printer, Search, Send, Sparkles } from 'lucide-react'
+import { Bot, Check, Circle, Clipboard, Download, FileText, ListTodo, Mail, MessageSquare, Printer, Search, Send, Sparkles, TriangleAlert } from 'lucide-react'
 import { supabase } from './lib/supabase.js'
 import './meeting-intelligence.css'
 
 const HISTORY_KEY = 'ana-meeting-history-v1'
-const LABELS = new Set(['Decision', 'Action', 'Important', 'Question', 'Chatter'])
+const LABELS = new Set(['Decision', 'Action', 'Risk', 'Important', 'Question', 'Chatter'])
 
 const clean = value => String(value || '').trim()
 const safeArray = value => Array.isArray(value) ? value : []
@@ -107,6 +107,10 @@ function transcriptSections(record) {
     .filter(item => item.text)
 }
 
+function normalizeStrings(input) {
+  return safeArray(input).map(item => clean(item)).filter(Boolean)
+}
+
 function normalizeActions(input) {
   return safeArray(input).map(item => {
     if (typeof item === 'string') return { task: clean(item), owner: '', deadline: '' }
@@ -178,6 +182,20 @@ export default function MeetingIntelligence() {
       openActions: actions.filter(item => item.status !== 'done').length,
     }
   }, [history, actions])
+  const relatedMeetings = useMemo(() => {
+    if (!selected) return []
+    const selectedMeta = selected?.metadata || selected?.notes?._ana?.metadata || {}
+    const project = clean(selectedMeta.project).toLocaleLowerCase()
+    const customer = clean(selectedMeta.customer).toLocaleLowerCase()
+    const sameContext = history.filter(record => {
+      const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+      if (project) return clean(meta.project).toLocaleLowerCase() === project
+      if (customer) return clean(meta.customer).toLocaleLowerCase() === customer
+      return String(record.id) === String(selected.id)
+    })
+    return sameContext.sort((a, b) => Number(a.startedAt || 0) - Number(b.startedAt || 0))
+  }, [selected, history])
+
   const relatedOpenActions = useMemo(() => {
     if (!selected) return []
     const selectedMeta = selected?.metadata || selected?.notes?._ana?.metadata || {}
@@ -192,6 +210,17 @@ export default function MeetingIntelligence() {
     }).map(record => String(record.id)))
     return actions.filter(item => item.status !== 'done' && relatedIds.has(String(item.meeting_client_id))).slice(0, 12)
   }, [selected, history, actions])
+
+  const timelineItems = useMemo(() => relatedMeetings.map(record => {
+    const notes = record?.notes || {}
+    return {
+      record,
+      decisions: normalizeStrings(notes.decisions),
+      risks: normalizeStrings(notes.risks),
+      questions: normalizeStrings(notes.openQuestions),
+      actions: normalizeActions(notes.actions),
+    }
+  }).filter(item => item.decisions.length || item.risks.length || item.questions.length || item.actions.length), [relatedMeetings])
 
   const refreshCloud = async () => {
     if (!supabase) return
@@ -248,9 +277,11 @@ export default function MeetingIntelligence() {
   }
 
   const ensureEnriched = async record => {
-    if (!record?.id || clean(record.originalText).length < 20 || transcriptSections(record).length || enrichedRef.current.has(record.id)) return
+    const hasSections = transcriptSections(record).length > 0
+    const hasRisks = Array.isArray(record?.notes?.risks)
+    if (!record?.id || clean(record.originalText).length < 20 || (hasSections && hasRisks) || enrichedRef.current.has(record.id)) return
     enrichedRef.current.add(record.id)
-    const instructions = `ANA_MEETING_ENRICHMENT. Analyse this meeting transcript without changing the raw transcript. Return JSON only with transcriptSections and actions. transcriptSections must be an array of logical chunks, each object containing label and text. label must be exactly one of Decision, Action, Important, Question, Chatter. Keep meaningful technical/business discussion under Important even if no decision was made. Chatter means greetings, jokes, filler, repeated remarks, private/off-topic conversation that does not affect the meeting outcome. Do not over-fragment: use coherent chunks. actions must be an array of objects with task, owner, deadline. Never invent an owner or deadline; use empty strings when absent. Understand English, German, Hindi and Hinglish code-switching.`
+    const instructions = `ANA_MEETING_ENRICHMENT. Analyse this meeting transcript without changing the raw transcript. Return JSON only with transcriptSections, decisions, risks, openQuestions and actions. transcriptSections must be an array of logical chunks, each object containing label and text. label must be exactly one of Decision, Action, Risk, Important, Question, Chatter. Keep meaningful technical/business discussion under Important even if no decision was made. Risk means an explicit blocker, dependency, concern or exposure stated in the meeting; never invent a risk. Chatter means greetings, jokes, filler, repeated remarks, private/off-topic conversation that does not affect the meeting outcome. Do not over-fragment: use coherent chunks. decisions, risks and openQuestions must each be arrays of concise strings grounded in the transcript. actions must be an array of objects with task, owner, deadline. Never invent an owner or deadline; use empty strings when absent. Understand English, German, Hindi and Hinglish code-switching.`
     try {
       const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: record.originalText, instructions }) })
       const data = await response.json()
@@ -260,9 +291,15 @@ export default function MeetingIntelligence() {
       const existingNotes = record.notes && typeof record.notes === 'object' ? record.notes : {}
       const normalizedSections = safeArray(parsed.transcriptSections).map(item => ({ label: LABELS.has(item?.label) ? item.label : 'Important', text: clean(item?.text) })).filter(item => item.text)
       const enrichedActions = normalizeActions(parsed.actions)
+      const enrichedDecisions = normalizeStrings(parsed.decisions)
+      const enrichedRisks = normalizeStrings(parsed.risks)
+      const enrichedQuestions = normalizeStrings(parsed.openQuestions)
       const notes = {
         ...existingNotes,
         ...(normalizedSections.length ? { transcriptSections: normalizedSections } : {}),
+        decisions: normalizeStrings(existingNotes.decisions).length ? normalizeStrings(existingNotes.decisions) : enrichedDecisions,
+        risks: enrichedRisks,
+        openQuestions: normalizeStrings(existingNotes.openQuestions).length ? normalizeStrings(existingNotes.openQuestions) : enrichedQuestions,
         actions: enrichedActions.length ? enrichedActions : normalizeActions(existingNotes.actions),
       }
       await updateRecordNotes(record, notes)
@@ -278,7 +315,7 @@ export default function MeetingIntelligence() {
     const timer = setInterval(() => {
       if (!mounted) return
       const local = readHistory()
-      const signature = JSON.stringify(local.map(item => [item?.id, item?.title, item?.notes?.summary, safeArray(item?.notes?.actions).length, safeArray(item?.notes?.transcriptSections).length]))
+      const signature = JSON.stringify(local.map(item => [item?.id, item?.title, item?.notes?.summary, safeArray(item?.notes?.actions).length, safeArray(item?.notes?.risks).length, safeArray(item?.notes?.transcriptSections).length]))
       if (signature !== localSignatureRef.current) {
         localSignatureRef.current = signature
         setHistory(previous => mergeHistory(local, previous))
@@ -344,7 +381,7 @@ export default function MeetingIntelligence() {
     if (!q || !history.length) return
     setAsking(true); setAnswer('')
     try {
-      let meetings = scope === 'meeting' && selected ? [selected] : [...history]
+      let meetings = scope === 'meeting' && selected ? [selected] : scope === 'related' ? [...relatedMeetings] : [...history]
       if (scope === 'all') {
         meetings = meetings.map(record => ({ record, score: scoreMeeting(record, q) })).sort((a, b) => b.score - a.score || Number(b.record.startedAt || 0) - Number(a.record.startedAt || 0)).slice(0, 8).map(item => item.record)
       }
@@ -354,6 +391,8 @@ export default function MeetingIntelligence() {
           `MEETING: ${record.title || 'Meeting'} | ${formatDate(record.startedAt)}`,
           notes.summary ? `SUMMARY: ${notes.summary}` : '',
           safeArray(notes.decisions).length ? `DECISIONS: ${notes.decisions.join(' | ')}` : '',
+          safeArray(notes.risks).length ? `RISKS: ${notes.risks.join(' | ')}` : '',
+          safeArray(notes.openQuestions).length ? `OPEN QUESTIONS: ${notes.openQuestions.join(' | ')}` : '',
           normalizeActions(notes.actions).length ? `ACTIONS: ${normalizeActions(notes.actions).map(item => `${item.task}${item.owner ? ` [Owner: ${item.owner}]` : ''}${item.deadline ? ` [Deadline: ${item.deadline}]` : ''}`).join(' | ')}` : '',
           `TRANSCRIPT: ${clean(record.originalText).slice(0, 6500)}`,
         ].filter(Boolean).join('\n')
@@ -479,7 +518,7 @@ export default function MeetingIntelligence() {
     <div className="mi-grid">
       <section className="mi-card mi-ask">
         <div className="mi-card-head"><Bot size={16}/><div><strong>Ask Ana</strong><small>Current meeting or all saved meetings</small></div></div>
-        <div className="mi-scope"><button className={scope === 'meeting' ? 'active' : ''} onClick={() => setScope('meeting')}>This meeting</button><button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>All meetings</button></div>
+        <div className="mi-scope"><button className={scope === 'meeting' ? 'active' : ''} onClick={() => setScope('meeting')}>This meeting</button><button className={scope === 'related' ? 'active' : ''} onClick={() => setScope('related')}>Same project / customer</button><button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>All meetings</button></div>
         <div className="mi-ask-row"><input value={question} onChange={event => setQuestion(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') askAna() }} placeholder="What did we decide about inspection plans?"/><button onClick={askAna} disabled={asking || !clean(question)}>{asking ? <span className="mi-spinner"/> : <Search size={15}/>} Ask</button></div>
         {answer && <div className="mi-answer">{answer}</div>}
       </section>
@@ -493,6 +532,19 @@ export default function MeetingIntelligence() {
         }) : <p className="mi-muted">No extracted actions yet.</p>}</div>
       </section>
     </div>
+
+    {timelineItems.length > 0 && <section className="mi-card mi-timeline">
+      <div className="mi-card-head"><Sparkles size={16}/><div><strong>Project / customer timeline</strong><small>Durable decisions, risks, open questions and actions — meeting by meeting.</small></div></div>
+      <div className="mi-timeline-list">{timelineItems.map(({ record, decisions, risks, questions, actions: itemActions }) => <article key={record.id}>
+        <div className="mi-timeline-date"><strong>{record.title || 'Meeting'}</strong><span>{formatShortDate(record.startedAt)}</span></div>
+        <div className="mi-timeline-content">
+          {decisions.length > 0 && <div><b>Decisions</b>{decisions.map((item,index)=><p key={`d-${index}`}>{item}</p>)}</div>}
+          {risks.length > 0 && <div className="risk"><b><TriangleAlert size={12}/> Risks</b>{risks.map((item,index)=><p key={`r-${index}`}>{item}</p>)}</div>}
+          {questions.length > 0 && <div><b>Open questions</b>{questions.map((item,index)=><p key={`q-${index}`}>{item}</p>)}</div>}
+          {itemActions.length > 0 && <div><b>Actions</b>{itemActions.slice(0,6).map((item,index)=><p key={`a-${index}`}>{item.task}{item.owner ? ` · ${item.owner}` : ''}{item.deadline ? ` · ${item.deadline}` : ''}</p>)}</div>}
+        </div>
+      </article>)}</div>
+    </section>}
 
     <section className="mi-card mi-transcript">
       <div className="mi-card-head mi-between"><div><FileText size={16}/><span><strong>Smart transcript</strong><small>Chatter stays in the evidence, but you can hide it.</small></span></div><div className="mi-toggle"><button className={transcriptView === 'important' ? 'active' : ''} onClick={() => setTranscriptView('important')}>Important only</button><button className={transcriptView === 'full' ? 'active' : ''} onClick={() => setTranscriptView('full')}>Full</button></div></div>
