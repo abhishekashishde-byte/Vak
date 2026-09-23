@@ -194,7 +194,7 @@ async function uploadPreferences(user, bundle = getLocalPreferenceBundle(), upda
 
   setSyncState('syncing')
   const payload = {
-    version: 2,
+    version: 3,
     updatedAt,
     memory: bundle.memory || {},
     glossary: sanitiseGlossary(bundle.glossary),
