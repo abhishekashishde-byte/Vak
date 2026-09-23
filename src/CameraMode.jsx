@@ -131,7 +131,7 @@ function canvasWrapText(ctx, text, maxWidth) {
   return lines
 }
 
-export default function CameraMode() {export default function CameraMode() {
+export default function CameraMode() {
   const [target, setTarget] = useState(initialTarget)
   const [stage, setStage] = useState('ready')
   const [imageData, setImageData] = useState('')
