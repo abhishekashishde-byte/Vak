@@ -63,6 +63,7 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private var shifted = false
     private var symbols = false
+    private var symbolPage = 1
     private var placed = emptyList<PlacedKey>()
     private var active: PlacedKey? = null
     private var backgroundBitmap: Bitmap? = null
@@ -164,8 +165,17 @@ class AnaKeyboardView @JvmOverloads constructor(
     fun isShifted(): Boolean = shifted
 
     fun setSymbols(value: Boolean) {
-        if (symbols == value) return
+        if (symbols == value && (!value || symbolPage == 1)) return
         symbols = value
+        if (value) symbolPage = 1
+        clearPressState()
+        placed = emptyList()
+        invalidate()
+    }
+
+    fun toggleSymbolPage() {
+        if (!symbols) return
+        symbolPage = if (symbolPage == 1) 2 else 1
         clearPressState()
         placed = emptyList()
         invalidate()
@@ -199,21 +209,36 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun rows(): List<List<KeySpec>> {
         if (symbols) {
-            return listOf(
-                "1234567890".map { KeySpec(it.toString()) },
-                listOf("@", "#", "€", "_", "%", "&", "-", "+", "(", ")").map { KeySpec(it) },
-                listOf(
-                    KeySpec("ABC", "ABC", 1.48f), KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
-                    KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("⌫", "BACKSPACE", 1.55f)
-                ),
-                listOf(
-                    KeySpec("", "EMOJI", 0.86f),
-                    KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
-                    KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
-                    KeySpec(".", ".", 0.72f),
-                    KeySpec("Enter", "ENTER", 1.56f)
-                )
+            val commonBottom = listOf(
+                KeySpec("", "EMOJI", 0.86f),
+                KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
+                KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
+                KeySpec(".", ".", 0.72f),
+                KeySpec("Enter", "ENTER", 1.56f)
             )
+            return if (symbolPage == 1) {
+                listOf(
+                    "1234567890".map { KeySpec(it.toString()) },
+                    listOf("@", "#", "€", "_", "%", "&", "-", "+", "(", ")").map { KeySpec(it) },
+                    listOf(
+                        KeySpec("ABC", "ABC", 1.35f), KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
+                        KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("2/2", "SYMBOL_PAGE", 1.10f),
+                        KeySpec("⌫", "BACKSPACE", 1.48f)
+                    ),
+                    commonBottom
+                )
+            } else {
+                listOf(
+                    listOf("[", "]", "{", "}", "<", ">", "=", "×", "÷", "±").map { KeySpec(it) },
+                    listOf("£", "$", "¥", "₹", "¢", "©", "®", "™", "°", "•").map { KeySpec(it) },
+                    listOf(
+                        KeySpec("ABC", "ABC", 1.35f), KeySpec("\\"), KeySpec("|"), KeySpec("~"), KeySpec("^"),
+                        KeySpec("§"), KeySpec("¶"), KeySpec("…"), KeySpec("1/2", "SYMBOL_PAGE", 1.10f),
+                        KeySpec("⌫", "BACKSPACE", 1.48f)
+                    ),
+                    commonBottom
+                )
+            }
         }
 
         val (r1, r2, r3Letters) = letterRows()
