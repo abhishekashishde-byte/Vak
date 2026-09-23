@@ -419,6 +419,14 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Clipboard history cleared", Toast.LENGTH_SHORT).show()
         })
 
+        root.addView(section("Toolbar"))
+        root.addView(infoCard("Keep it compact", "Choose only the actions you use regularly. This keeps Ana's toolbar from getting wider every time new capabilities are added."))
+        KeyboardPrefs.toolbarActionOptions.forEach { (id, label) ->
+            root.addView(switchRow(label, "Show $label in the keyboard toolbar", KeyboardPrefs.toolbarActionEnabled(this, id)) {
+                KeyboardPrefs.setToolbarActionEnabled(this, id, it)
+            })
+        }
+
         root.addView(section("Writing Tool"))
         root.addView(infoCard("Write", "Type or dictate what you want to say, then tap Write. Ana drafts the finished message in the currently selected Translate-to language."))
         root.addView(infoCard("Inline actions", "Translate, Correct, Shorter, Friendly, Formal, Du and Sie work directly on selected text—or on the current line when nothing is selected."))
@@ -484,6 +492,11 @@ class MainActivity : Activity() {
         })
         root.addView(intSliderCard("One-handed width", "How much of the screen the compact keyboard uses", KeyboardPrefs.oneHandedWidthPercent(this), 68, 92, "%") {
             KeyboardPrefs.setOneHandedWidthPercent(this, it)
+        })
+
+        root.addView(section("Long press"))
+        root.addView(intSliderCard("Long-press delay", "Higher values reduce accidental alternate-character popups during fast typing", KeyboardPrefs.longPressDelayMs(this), 260, 520, " ms") {
+            KeyboardPrefs.setLongPressDelayMs(this, it)
         })
 
         root.addView(section("Adaptive touch"))
