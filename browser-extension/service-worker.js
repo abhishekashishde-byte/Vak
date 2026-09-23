@@ -1,6 +1,11 @@
 const MENU = [
   ['ana-translate', 'Translate with Ana', 'translate'],
-  ['ana-rewrite', 'Rewrite with Ana', 'rewrite'],
+  ['ana-correct', 'Correct with Ana', 'correct'],
+  ['ana-shorter', 'Make shorter with Ana', 'shorter'],
+  ['ana-friendly', 'Make friendly with Ana', 'friendly'],
+  ['ana-formal', 'Make formal with Ana', 'formal'],
+  ['ana-du', 'German: use du', 'du'],
+  ['ana-sie', 'German: use Sie', 'sie'],
   ['ana-explain', 'Explain with Ana', 'explain'],
   ['ana-reply', 'Reply with Ana', 'reply'],
 ]
