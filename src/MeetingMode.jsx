@@ -464,7 +464,7 @@ export default function MeetingMode() {
     setMeetingHistory(next)
     void persistMeetingRecord(record)
   }
-  const generateMeetingNotes = async ({ transcript, translation, start, end, mode, recordId = '', segments = transcriptSegments, names = speakerNames }) => {
+  const generateMeetingNotes = async ({ transcript, translation, start, end, mode, recordId = '', segments = transcriptSegments, names = speakerNames, audioPath = '', meetingBookmarks = bookmarks }) => {
     const outputLanguage = targetRef.current
     setNotesStatus('preparing'); setNotesError('')
     const manualMetadata = { ...meetingMeta, tags: cleanTags(meetingMeta.tags) }
@@ -480,11 +480,12 @@ export default function MeetingMode() {
       manualMetadata.meetingType ? `Meeting type: ${manualMetadata.meetingType}` : '',
       manualMetadata.attendees?.length ? `Attendees: ${manualMetadata.attendees.join(', ')}` : '',
       manualMetadata.tags?.length ? `Tags: ${manualMetadata.tags.join(', ')}` : '',
+      meetingBookmarks?.length ? `User bookmarks: ${meetingBookmarks.map(item => formatSegmentTime(item.at || 0)).join(', ')}` : '',
     ].filter(Boolean).join('; ')
     const instructions = `ANA_MEETING_NOTES. Create post-meeting notes from this raw transcript. Write in ${outputLanguage}. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions, labels, sections. actions must be objects with task, owner and deadline. labels must be an object with customer, topic, project, meetingType and tags. Respect user-supplied labels and only infer missing labels when clearly supported; otherwise use empty values. sections must be an array of objects with title, content and items and MUST follow this MOM template: "${template.title}". Required/custom structure: ${template.instruction || 'Use the most useful concise meeting structure.'}. Keep the standard summary/keyPoints/decisions/actions/openQuestions fields populated too so Ana can search and route actions later. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the actual meeting topic. User-supplied meeting context: ${suppliedContext || 'none'}. IMPORTANT SIGNAL FILTER: greetings, jokes, filler, repetitions, private chatter, side conversations and off-topic discussion must stay out of MOM sections unless they materially affect a decision, commitment, risk, requirement or important context. Understand natural code-switching between English, German, Hindi and Hinglish.`
     const normalizedSegments = normalizeSegments(segments)
     const evidenceTranscript = normalizedSegments.length ? transcriptFromSegments(normalizedSegments, names) : transcript
-    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names }
+    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath) }
     try {
       const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: evidenceTranscript, instructions }) }), data = await response.json(); if (!response.ok) throw new Error(data?.error || 'Could not prepare meeting notes.')
       const raw = String(data?.content || '').replace(/```json|```/g, '').trim(), jsonStart = raw.indexOf('{'), jsonEnd = raw.lastIndexOf('}'), parsed = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw)
@@ -496,12 +497,12 @@ export default function MeetingMode() {
         meetingType: manualMetadata.meetingType || clean(suggested.meetingType),
         tags: cleanTags([...(manualMetadata.tags || []), ...cleanTags(suggested.tags)]),
       }
-      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names } }
-      const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(parsed?.title) || metadata.topic || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, notes, originalText: transcript, translatedText: translation }
+      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath) } }
+      const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(parsed?.title) || metadata.topic || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), notes, originalText: transcript, translatedText: translation }
       setMeetingNotes(record); saveMeetingRecord(record); setNotesStatus('ready')
     } catch (err) {
       const notes = { _ana: baseAna }
-      const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: manualMetadata.topic || `Meeting · ${formatMeetingDate(start || end)}`, startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, notes, originalText: transcript, translatedText: translation }
+      const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: manualMetadata.topic || `Meeting · ${formatMeetingDate(start || end)}`, startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), notes, originalText: transcript, translatedText: translation }
       saveMeetingRecord(record); setNotesError(err.message || 'The transcript was saved, but Ana could not create notes.'); setNotesStatus('error')
     }
   }
@@ -511,18 +512,19 @@ export default function MeetingMode() {
     const mode = meetingModeRef.current, liveOriginalFinal = mode === 'translate' ? appendText(originalTextRef.current, originalBufferRef.current) : appendText(originalTextRef.current, liveOriginal), liveTranslationFinal = appendText(translatedTextRef.current, translatedBufferRef.current), start = startedAtRef.current || Date.now(), end = Date.now()
     activeRef.current = false; pausedRef.current = false; setPaused(false); setSessionState('processing'); setNotesStatus('transcribing')
     let recording = null; try { recording = await stopRecorder() } catch {}; closeRealtime(false); stopTracks()
-    let finalTranscript = clean(liveOriginalFinal), finalSegments = [], finalTranscriptError = ''
+    let finalTranscript = clean(liveOriginalFinal), finalSegments = [], finalTranscriptError = '', retainedAudioPath = ''
     try {
       if (recording?.size) {
-        const result = await transcribeRecording(recording)
+        const result = await transcribeRecording(recording, keepAudio)
         finalTranscript = result.text
         finalSegments = result.segments
+        retainedAudioPath = clean(result.audioPath)
       }
     } catch (err) { finalTranscriptError = err.message || 'Final high-quality transcription failed.' }
     setTranscriptSegments(finalSegments); setSpeakerNames({}); setTranscriptDirty(false)
     setOriginalText(finalTranscript); originalTextRef.current = finalTranscript; setTranslatedText(mode === 'translate' ? liveTranslationFinal : ''); translatedTextRef.current = mode === 'translate' ? liveTranslationFinal : ''
     setLiveOriginal(''); setLiveTranslation(''); originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setSessionState('ended')
-    if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode, segments: finalSegments, names: {} }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
+    if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode, segments: finalSegments, names: {}, audioPath: retainedAudioPath, meetingBookmarks: bookmarks }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
     else { setNotesStatus('error'); setNotesError(finalTranscriptError || 'Not enough speech was captured to create meeting notes.') }
     setConsentVerified(false)
   }
@@ -564,7 +566,7 @@ export default function MeetingMode() {
     if (transcript.length < 20 || processing) return
     const start = meetingNotes?.startedAt || startedAt || Date.now()
     const end = meetingNotes?.endedAt || Date.now()
-    await generateMeetingNotes({ transcript, translation: translatedText, start, end, mode: meetingNotes?.source || meetingMode, recordId: meetingNotes?.id || '', segments: transcriptSegments, names: speakerNames })
+    await generateMeetingNotes({ transcript, translation: translatedText, start, end, mode: meetingNotes?.source || meetingMode, recordId: meetingNotes?.id || '', segments: transcriptSegments, names: speakerNames, audioPath: meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath || '', meetingBookmarks: meetingNotes?.notes?._ana?.bookmarks || bookmarks })
     setTranscriptDirty(false)
   }
 
@@ -577,7 +579,7 @@ export default function MeetingMode() {
     setImportingAudio(true); setError(''); setNotesError(''); setNotesStatus('transcribing'); setSessionState('processing')
     const end = Date.now()
     try {
-      const result = await transcribeRecording(file)
+      const result = await transcribeRecording(file, keepAudio)
       const segments = result.segments
       const durationMs = segments.length ? Math.max(...segments.map(item => Number(item.end) || 0)) * 1000 : 0
       const start = durationMs ? end - durationMs : end
@@ -586,7 +588,7 @@ export default function MeetingMode() {
       setOriginalText(result.text); originalTextRef.current = result.text
       setTranslatedText(''); translatedTextRef.current = ''
       setSessionState('ended')
-      await generateMeetingNotes({ transcript: result.text, translation: '', start, end, mode: 'import', segments, names: {} })
+      await generateMeetingNotes({ transcript: result.text, translation: '', start, end, mode: 'import', segments, names: {}, audioPath: result.audioPath || '', meetingBookmarks: bookmarks })
       setConsentVerified(false)
     } catch (err) {
       setSessionState('idle'); setNotesStatus('error'); setNotesError(err?.message || 'Could not import this meeting audio.')
