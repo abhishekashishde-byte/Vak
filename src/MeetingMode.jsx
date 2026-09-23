@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, Sparkles, Square, Trash2 } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
@@ -12,6 +12,16 @@ const MODE_KEY = 'ana-meeting-mode-v1'
 const GLOSSARY_KEY = 'ana-glossary-v1'
 const AUDIO_BUCKET = 'ana-meeting-audio'
 const MAX_FINAL_AUDIO_BYTES = 24 * 1024 * 1024
+const MOM_PREFS_KEY = 'ana-mom-template-prefs-v1'
+
+const MEETING_TYPES = ['Customer meeting', 'Project / status', 'Workshop / technical', 'Internal meeting', 'Other']
+const MOM_TEMPLATES = [
+  { id: 'standard', title: 'Standard Meeting', description: 'A clean general-purpose MOM.', sections: ['Summary', 'Decisions', 'Action Items', 'Open Points', 'Next Steps'] },
+  { id: 'customer', title: 'Customer Meeting', description: 'Separates customer and internal commitments.', sections: ['Customer Requirements', 'Discussion', 'Decisions', 'Customer Actions', 'Internal Actions', 'Open Questions'] },
+  { id: 'project', title: 'Project / Status Meeting', description: 'Built for recurring project governance.', sections: ['Progress', 'Risks / Issues', 'Decisions', 'Actions', 'Dependencies', 'Upcoming Milestones'] },
+  { id: 'technical', title: 'Workshop / Technical', description: 'Keeps technical choices and gaps visible.', sections: ['Topics Discussed', 'Current Situation', 'Proposed Solution', 'Decisions', 'Technical Open Points', 'Actions'] },
+  { id: 'custom', title: 'My Template', description: 'Tell Ana exactly how you want the MOM structured.', sections: [] },
+]
 
 const MEETING_MODES = [
   { id: 'translate', title: 'Live translate', description: 'Live transcript + translation', icon: Languages },
@@ -39,6 +49,11 @@ function readJson(key, fallback) {
 }
 function readMeetingHistory() { const value = readJson(HISTORY_KEY, []); return Array.isArray(value) ? value : [] }
 function readSavedMeeting() { const value = readJson(STORAGE_KEY, {}); return value && typeof value === 'object' ? value : {} }
+function readMomPrefs() { const value = readJson(MOM_PREFS_KEY, {}); return value && typeof value === 'object' ? value : {} }
+function cleanTags(value) {
+  const input = Array.isArray(value) ? value : String(value || '').split(',')
+  return [...new Set(input.map(item => clean(item)).filter(Boolean))].slice(0, 12)
+}
 function initialMode() {
   try { const value = localStorage.getItem(MODE_KEY); return MEETING_MODES.some(item => item.id === value) ? value : 'translate' } catch { return 'translate' }
 }
@@ -87,6 +102,8 @@ function glossaryHints() {
   return { keywords: terms.slice(0, 40), context: mappings.slice(0, 24).join('; ').slice(0, 1200) }
 }
 
+function SearchFallback() { return <span className="meeting-search-icon" aria-hidden="true">⌕</span> }
+
 export default function MeetingMode() {
   const saved = readSavedMeeting()
   const [meetingMode, setMeetingMode] = useState(initialMode)
@@ -106,6 +123,19 @@ export default function MeetingMode() {
   const [meetingNotes, setMeetingNotes] = useState(null)
   const [notesError, setNotesError] = useState('')
   const [meetingHistory, setMeetingHistory] = useState(readMeetingHistory)
+  const momPrefs = readMomPrefs()
+  const [meetingMeta, setMeetingMeta] = useState(() => ({
+    customer: clean(saved?.metadata?.customer),
+    topic: clean(saved?.metadata?.topic),
+    project: clean(saved?.metadata?.project),
+    meetingType: clean(saved?.metadata?.meetingType) || 'Customer meeting',
+    tags: cleanTags(saved?.metadata?.tags),
+  }))
+  const [selectedMomTemplate, setSelectedMomTemplate] = useState(() => saved.momTemplateId || momPrefs.selectedTemplateId || 'standard')
+  const [customMomName, setCustomMomName] = useState(() => clean(saved.customMomName || momPrefs.customName) || 'My Template')
+  const [customMomInstruction, setCustomMomInstruction] = useState(() => clean(saved.customMomInstruction || momPrefs.customInstruction))
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [consentVerified, setConsentVerified] = useState(false)
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
@@ -117,6 +147,22 @@ export default function MeetingMode() {
   const active = ['connecting', 'listening', 'recovering', 'paused'].includes(sessionState)
   const processing = ['transcribing', 'preparing'].includes(notesStatus)
   const screenSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
+  const activeMomTemplate = MOM_TEMPLATES.find(item => item.id === selectedMomTemplate) || MOM_TEMPLATES[0]
+  const momTemplateInstruction = selectedMomTemplate === 'custom'
+    ? customMomInstruction
+    : activeMomTemplate.sections.join(', ')
+  const filteredMeetingHistory = useMemo(() => {
+    const query = clean(historyQuery).toLocaleLowerCase()
+    if (!query) return meetingHistory
+    return meetingHistory.filter(record => {
+      const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+      const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}
+      return [
+        record?.title, record?.target, meta.customer, meta.topic, meta.project, meta.meetingType,
+        ...(Array.isArray(meta.tags) ? meta.tags : []), template.title, record?.notes?.summary,
+      ].filter(Boolean).join(' ').toLocaleLowerCase().includes(query)
+    })
+  }, [meetingHistory, historyQuery])
 
   useEffect(() => { meetingModeRef.current = meetingMode; try { localStorage.setItem(MODE_KEY, meetingMode) } catch {} }, [meetingMode])
   useEffect(() => { targetRef.current = target }, [target])
@@ -130,9 +176,14 @@ export default function MeetingMode() {
     return () => clearInterval(timer)
   }, [startedAt])
   useEffect(() => {
-    if (!originalText && !translatedText) return
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ target, meetingMode, startedAt, originalText, translatedText, updatedAt: Date.now() })) } catch {}
-  }, [target, meetingMode, startedAt, originalText, translatedText])
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        target, meetingMode, startedAt, originalText, translatedText, metadata: meetingMeta,
+        momTemplateId: selectedMomTemplate, customMomName, customMomInstruction, updatedAt: Date.now(),
+      }))
+      localStorage.setItem(MOM_PREFS_KEY, JSON.stringify({ selectedTemplateId: selectedMomTemplate, customName: customMomName, customInstruction: customMomInstruction }))
+    } catch {}
+  }, [target, meetingMode, startedAt, originalText, translatedText, meetingMeta, selectedMomTemplate, customMomName, customMomInstruction])
   useEffect(() => { const node = translationPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [translatedText, liveTranslation])
   useEffect(() => { const node = hearingPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [originalText, liveOriginal])
   useEffect(() => () => discardActiveMeeting(), [])
@@ -254,6 +305,7 @@ export default function MeetingMode() {
   }
 
   const startMeeting = async () => {
+    if (!consentVerified) { setError('Confirm that participants have been informed and you have permission to record/process this meeting.'); return }
     if (!navigator.mediaDevices?.getUserMedia) { setError('Meeting capture is not supported in this browser.'); return }
     setError(''); setNotesError(''); setMeetingNotes(null); setNotesStatus('idle'); setSessionState('connecting'); setPaused(false); pausedRef.current = false; activeRef.current = true
     originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setLiveOriginal(''); setLiveTranslation('')
@@ -289,20 +341,69 @@ export default function MeetingMode() {
     } finally { try { await supabase.storage.from(AUDIO_BUCKET).remove([path]) } catch {} }
   }
 
+  const persistMeetingRecord = async record => {
+    if (!supabase || !record?.id) return
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const user = userData?.user
+      if (!user) return
+      const { error } = await supabase.from('meeting_records').upsert({
+        user_id: user.id,
+        client_id: String(record.id),
+        title: record.title || 'Meeting',
+        started_at: record.startedAt ? new Date(record.startedAt).toISOString() : null,
+        ended_at: record.endedAt ? new Date(record.endedAt).toISOString() : null,
+        duration_ms: Number(record.durationMs) || 0,
+        target: record.target || '',
+        source: record.source || '',
+        notes: record.notes || null,
+        original_text: record.originalText || '',
+        translated_text: record.translatedText || '',
+      }, { onConflict: 'user_id,client_id' })
+      if (error) console.warn('[Ana meeting save]', error.message)
+    } catch (error) { console.warn('[Ana meeting save]', error?.message || error) }
+  }
   const saveMeetingRecord = record => {
     const next = [record, ...readMeetingHistory().filter(item => item?.id !== record.id)].slice(0, 50)
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch {}; setMeetingHistory(next)
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch {}
+    setMeetingHistory(next)
+    void persistMeetingRecord(record)
   }
   const generateMeetingNotes = async ({ transcript, translation, start, end, mode }) => {
-    const outputLanguage = targetRef.current; setNotesStatus('preparing'); setNotesError('')
-    const instructions = `ANA_MEETING_NOTES. Create concise post-meeting notes from this raw transcript. Write in ${outputLanguage}. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions. Each action must contain task, owner and deadline. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the actual meeting topic. IMPORTANT SIGNAL FILTER: the raw transcript can contain greetings, jokes, filler words, repetitions, private chatter, side conversations and off-topic discussion. Keep the raw transcript unchanged, but EXCLUDE that chatter from the summary, key points, decisions and actions unless it materially changes a decision, commitment, risk, requirement or important context. Understand natural code-switching between English, German, Hindi and Hinglish.`
+    const outputLanguage = targetRef.current
+    setNotesStatus('preparing'); setNotesError('')
+    const manualMetadata = { ...meetingMeta, tags: cleanTags(meetingMeta.tags) }
+    const template = {
+      id: activeMomTemplate.id,
+      title: selectedMomTemplate === 'custom' ? (clean(customMomName) || 'My Template') : activeMomTemplate.title,
+      instruction: clean(momTemplateInstruction),
+    }
+    const suppliedContext = [
+      manualMetadata.customer ? `Customer: ${manualMetadata.customer}` : '',
+      manualMetadata.topic ? `Topic: ${manualMetadata.topic}` : '',
+      manualMetadata.project ? `Project: ${manualMetadata.project}` : '',
+      manualMetadata.meetingType ? `Meeting type: ${manualMetadata.meetingType}` : '',
+      manualMetadata.tags?.length ? `Tags: ${manualMetadata.tags.join(', ')}` : '',
+    ].filter(Boolean).join('; ')
+    const instructions = `ANA_MEETING_NOTES. Create post-meeting notes from this raw transcript. Write in ${outputLanguage}. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions, labels, sections. actions must be objects with task, owner and deadline. labels must be an object with customer, topic, project, meetingType and tags. Respect user-supplied labels and only infer missing labels when clearly supported; otherwise use empty values. sections must be an array of objects with title, content and items and MUST follow this MOM template: "${template.title}". Required/custom structure: ${template.instruction || 'Use the most useful concise meeting structure.'}. Keep the standard summary/keyPoints/decisions/actions/openQuestions fields populated too so Ana can search and route actions later. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the actual meeting topic. User-supplied meeting context: ${suppliedContext || 'none'}. IMPORTANT SIGNAL FILTER: greetings, jokes, filler, repetitions, private chatter, side conversations and off-topic discussion must stay out of MOM sections unless they materially affect a decision, commitment, risk, requirement or important context. Understand natural code-switching between English, German, Hindi and Hinglish.`
+    const baseAna = { metadata: manualMetadata, momTemplate: template }
     try {
       const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: transcript, instructions }) }), data = await response.json(); if (!response.ok) throw new Error(data?.error || 'Could not prepare meeting notes.')
-      const raw = String(data?.content || '').replace(/```json|```/g, '').trim(), jsonStart = raw.indexOf('{'), jsonEnd = raw.lastIndexOf('}'), notes = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw)
-      const record = { id: `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(notes?.title) || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, notes, originalText: transcript, translatedText: translation }
+      const raw = String(data?.content || '').replace(/```json|```/g, '').trim(), jsonStart = raw.indexOf('{'), jsonEnd = raw.lastIndexOf('}'), parsed = JSON.parse(jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw)
+      const suggested = parsed?.labels && typeof parsed.labels === 'object' ? parsed.labels : {}
+      const metadata = {
+        customer: manualMetadata.customer || clean(suggested.customer),
+        topic: manualMetadata.topic || clean(suggested.topic),
+        project: manualMetadata.project || clean(suggested.project),
+        meetingType: manualMetadata.meetingType || clean(suggested.meetingType),
+        tags: cleanTags([...(manualMetadata.tags || []), ...cleanTags(suggested.tags)]),
+      }
+      const notes = { ...parsed, _ana: { metadata, momTemplate: template } }
+      const record = { id: `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(parsed?.title) || metadata.topic || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata, momTemplate: template, notes, originalText: transcript, translatedText: translation }
       setMeetingNotes(record); saveMeetingRecord(record); setNotesStatus('ready')
     } catch (err) {
-      const record = { id: `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: `Meeting · ${formatMeetingDate(start || end)}`, startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, notes: null, originalText: transcript, translatedText: translation }
+      const notes = { _ana: baseAna }
+      const record = { id: `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: manualMetadata.topic || `Meeting · ${formatMeetingDate(start || end)}`, startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata: manualMetadata, momTemplate: template, notes, originalText: transcript, translatedText: translation }
       saveMeetingRecord(record); setNotesError(err.message || 'The transcript was saved, but Ana could not create notes.'); setNotesStatus('error')
     }
   }
@@ -318,6 +419,7 @@ export default function MeetingMode() {
     setLiveOriginal(''); setLiveTranslation(''); originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setSessionState('ended')
     if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
     else { setNotesStatus('error'); setNotesError(finalTranscriptError || 'Not enough speech was captured to create meeting notes.') }
+    setConsentVerified(false)
   }
 
   const togglePause = () => {
@@ -357,6 +459,22 @@ export default function MeetingMode() {
         <label><span>Listen to</span><select value={source} onChange={event => setSource(event.target.value)} disabled={active || processing}><option value="microphone">Microphone / speakers</option>{screenSupported && <option value="screen">Computer / tab audio</option>}</select></label>
         <label><span>{meetingMode === 'translate' ? 'Translate to' : 'MOM language'}</span><select value={target} onChange={event => changeTarget(event.target.value)} disabled={processing}>{TARGETS.map(value => <option key={value}>{value}</option>)}</select></label>
       </div>
+
+      <div className="meeting-meta-grid">
+        <label><span>Customer</span><input value={meetingMeta.customer} onChange={event => setMeetingMeta(value => ({ ...value, customer: event.target.value }))} placeholder="Customer / organisation" disabled={active || processing}/></label>
+        <label><span>Topic</span><input value={meetingMeta.topic} onChange={event => setMeetingMeta(value => ({ ...value, topic: event.target.value }))} placeholder="Main meeting topic" disabled={active || processing}/></label>
+        <label><span>Project</span><input value={meetingMeta.project} onChange={event => setMeetingMeta(value => ({ ...value, project: event.target.value }))} placeholder="Project (optional)" disabled={active || processing}/></label>
+        <label><span>Meeting type</span><select value={meetingMeta.meetingType} onChange={event => setMeetingMeta(value => ({ ...value, meetingType: event.target.value }))} disabled={active || processing}>{MEETING_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="meeting-meta-wide"><span>Tags</span><input value={meetingMeta.tags.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, tags: event.target.value.split(',') }))} onBlur={() => setMeetingMeta(value => ({ ...value, tags: cleanTags(value.tags) }))} placeholder="e.g. SAP, MRP, capacity"/></label>
+      </div>
+
+      <section className="meeting-template-picker">
+        <div className="meeting-template-head"><div><strong>MOM template</strong><span>Choose a starting structure or tell Ana your own.</span></div><span>{activeMomTemplate.title}</span></div>
+        <div className="meeting-template-grid">{MOM_TEMPLATES.map(template => <button type="button" key={template.id} className={selectedMomTemplate === template.id ? 'active' : ''} onClick={() => setSelectedMomTemplate(template.id)} disabled={active || processing}><strong>{template.title}</strong><small>{template.description}</small>{template.sections.length ? <em>{template.sections.slice(0, 3).join(' · ')}{template.sections.length > 3 ? ' …' : ''}</em> : null}</button>)}</div>
+        {selectedMomTemplate === 'custom' && <div className="meeting-custom-template"><input value={customMomName} onChange={event => setCustomMomName(event.target.value)} placeholder="Template name"/><textarea value={customMomInstruction} onChange={event => setCustomMomInstruction(event.target.value)} placeholder="Example: Business requirement, SAP solution, gaps, decisions and follow-up actions."/></div>}
+      </section>
+
+      <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Consent verified</strong> I confirm participants have been informed and I have the necessary permission to record/process this meeting.</span></label>
       <div className={`meeting-single-card ${active ? 'active' : ''}`}>
         <div className="meeting-status-row meeting-live-status"><div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div><span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span></div>
 
@@ -368,7 +486,7 @@ export default function MeetingMode() {
         {meetingMode === 'mom' && <div className="meeting-mom-only-screen"><FileAudio size={28}/><strong>{active ? 'Recording the meeting' : sessionState === 'ended' ? 'Meeting processed' : 'No live transcript on screen'}</strong><p>{active ? 'Ana is recording the audio. When you end the meeting, Ana will create a high-quality transcript and prepare the MOM.' : 'Start the meeting and keep this screen quiet. The transcript is prepared only after you press End meeting.'}</p></div>}
         {error && <div className="error meeting-error">{error}</div>}
         <div className="meeting-single-footer">
-          <div className="meeting-controls">{!active ? <button className="meeting-start" onClick={startMeeting} disabled={processing}><Headphones size={18}/> Start meeting</button> : <><button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button><button className="meeting-stop" onClick={endMeeting} disabled={processing}><Square size={16}/> End meeting</button></>}</div>
+          <div className="meeting-controls">{!active ? <button className="meeting-start" onClick={startMeeting} disabled={processing || !consentVerified}><Headphones size={18}/> Start meeting</button> : <><button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button><button className="meeting-stop" onClick={endMeeting} disabled={processing}><Square size={16}/> End meeting</button></>}</div>
           <div className="meeting-transcript-actions meeting-single-actions"><button onClick={copyTranscript} disabled={!copyValue}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadTranscript} disabled={!fullOriginal && !fullTranslation}><Download size={15}/> Download</button><button onClick={clearTranscript} disabled={active || processing || (!fullOriginal && !fullTranslation)}><Trash2 size={15}/> Clear</button></div>
         </div>
       </div>
@@ -379,19 +497,21 @@ export default function MeetingMode() {
       {notesStatus === 'transcribing' && <div className="meeting-notes-loading"><i/>Ana is preparing the final transcript from the meeting audio…</div>}
       {notesStatus === 'preparing' && <div className="meeting-notes-loading"><i/>Ana is separating meeting signal from chatter and preparing the MOM…</div>}
       {meetingNotes?.notes && <div className="meeting-notes-body"><h2 className="meeting-notes-title">{meetingNotes.title}</h2><div className="meeting-notes-meta">{formatMeetingDate(meetingNotes.startedAt)} · {formatTime(meetingNotes.durationMs)} · {meetingNotes.target}</div>
-        {meetingNotes.notes.summary && <section className="meeting-notes-section"><h3>Summary</h3><p>{meetingNotes.notes.summary}</p></section>}
-        {!!meetingNotes.notes.keyPoints?.length && <section className="meeting-notes-section"><h3>Key points</h3><ul>{meetingNotes.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
-        {!!meetingNotes.notes.decisions?.length && <section className="meeting-notes-section"><h3>Decisions</h3><ul>{meetingNotes.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+        <div className="meeting-label-chips">{[meetingNotes.metadata?.customer, meetingNotes.metadata?.topic, meetingNotes.metadata?.project, meetingNotes.metadata?.meetingType, meetingNotes.momTemplate?.title, ...(meetingNotes.metadata?.tags || [])].filter(Boolean).map((item,index)=><span key={index}>{item}</span>)}</div>
+        {!!meetingNotes.notes.sections?.length && <div className="meeting-template-output">{meetingNotes.notes.sections.map((section,index)=><section className="meeting-notes-section" key={index}><h3>{clean(section?.title) || `Section ${index + 1}`}</h3>{clean(section?.content) && <p>{section.content}</p>}{Array.isArray(section?.items) && section.items.length ? <ul>{section.items.map((item,itemIndex)=><li key={itemIndex}>{String(item)}</li>)}</ul> : null}</section>)}</div>}
+        {!meetingNotes.notes.sections?.length && meetingNotes.notes.summary && <section className="meeting-notes-section"><h3>Summary</h3><p>{meetingNotes.notes.summary}</p></section>}
+        {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.keyPoints?.length && <section className="meeting-notes-section"><h3>Key points</h3><ul>{meetingNotes.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+        {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.decisions?.length && <section className="meeting-notes-section"><h3>Decisions</h3><ul>{meetingNotes.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
         {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item === 'string' ? item : item?.task}</strong>{typeof item !== 'string' && (item?.owner || item?.deadline) && <small>{item?.owner ? `Owner: ${item.owner}` : 'Owner: not specified'}{item?.deadline ? ` · Deadline: ${item.deadline}` : ''}</small>}</div>)}</div></section>}
-        {!!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
+        {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
         {meetingMode === 'mom' && originalText && <details className="meeting-final-transcript"><summary>Final transcript</summary><p>{originalText}</p></details>}
       </div>}
       {notesError && <div className="meeting-notes-error">{notesError}</div>}
     </section>}
 
-    {!!meetingHistory.length && <section className="meeting-history"><div className="meeting-history-head"><div><History size={16}/><h2>Meeting history</h2></div><span>{meetingHistory.length} saved</span></div><div className="meeting-history-list">{meetingHistory.map(record => <details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title || 'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs || 0)}</span></div><span>{record.target}</span></summary><div className="meeting-history-detail">
+    {!!meetingHistory.length && <section className="meeting-history"><div className="meeting-history-head"><div><History size={16}/><h2>Meeting history</h2></div><span>{filteredMeetingHistory.length} of {meetingHistory.length}</span></div><div className="meeting-history-filter"><SearchFallback/><input value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Filter by customer, topic, project, tag or template"/></div><div className="meeting-history-list">{filteredMeetingHistory.map(record => { const meta = record?.metadata || record?.notes?._ana?.metadata || {}; const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}; return <details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title || 'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs || 0)}</span><div className="meeting-label-chips compact">{[meta.customer, meta.topic, meta.project, template.title, ...(meta.tags || [])].filter(Boolean).slice(0,5).map((item,index)=><span key={index}>{item}</span>)}</div></div><span>{record.target}</span></summary><div className="meeting-history-detail">
       {record.notes?.summary && <div><h4>Summary</h4><p>{record.notes.summary}</p></div>}{!!record.notes?.keyPoints?.length && <div><h4>Key points</h4><ul>{record.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.decisions?.length && <div><h4>Decisions</h4><ul>{record.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.actions?.length && <div><h4>To-do / actions</h4><ul>{record.notes.actions.map((item,index)=><li key={index}>{typeof item === 'string' ? item : [item?.task, item?.owner ? `Owner: ${item.owner}` : '', item?.deadline ? `Deadline: ${item.deadline}` : ''].filter(Boolean).join(' · ')}</li>)}</ul></div>}{!!record.notes?.openQuestions?.length && <div><h4>Open questions</h4><ul>{record.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}
-      <div className="meeting-history-transcripts">{!!record.translatedText && <details><summary>Translated transcript</summary><p>{record.translatedText}</p></details>}<details><summary>Original transcript</summary><p>{record.originalText || '—'}</p></details></div></div></details>)}</div></section>}
+      <div className="meeting-history-transcripts">{!!record.translatedText && <details><summary>Translated transcript</summary><p>{record.translatedText}</p></details>}<details><summary>Original transcript</summary><p>{record.originalText || '—'}</p></details></div></div></details> })}</div></section>}
 
     <p className="meeting-footnote">All three modes keep the complete final transcript as evidence. Ana filters greetings, filler and off-topic chatter only when preparing the MOM. The temporary meeting-audio upload is removed after the final transcription pass.</p>
   </section>

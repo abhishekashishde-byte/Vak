@@ -611,10 +611,14 @@ class MainActivity : Activity() {
         })
 
         root.addView(section("Privacy"))
+        root.addView(switchRow("Incognito mode", "Local typing stays available, but Ana AI, voice typing, learning and clipboard history are paused.", KeyboardPrefs.incognitoEnabled(this)) {
+            KeyboardPrefs.setIncognitoEnabled(this, it)
+        })
         root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, local word correction and adaptive touch calibration stay on this device. If you sign in, only your saved words, learned corrections and shortcuts are synced to your Ana account."))
         root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart paragraph check."))
         root.addView(infoCard("Smart paragraph AI is opt-in", "Automatic cloud paragraph correction is off by default. Turn it on under Typing only if you want it."))
-        root.addView(infoCard("Password fields", "Ana AI, voice, suggestions and clipboard are disabled in password fields."))
+        root.addView(infoCard("Private fields", "Passwords, OTP / verification-code fields and apps that request no personalised learning automatically disable Ana AI, voice, suggestions and clipboard history."))
+        root.addView(infoCard("Clipboard stays local", "Clipboard history is stored only on this device. Unpinned clips expire after 1 hour; pinned clips remain until you clear or unpin them. Incognito mode does not add clipboard history."))
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

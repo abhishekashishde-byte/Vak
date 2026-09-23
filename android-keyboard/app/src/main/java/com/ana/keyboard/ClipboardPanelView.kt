@@ -17,6 +17,7 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
         fun onPaste(text: String)
         fun onBackToLetters()
         fun onClearHistory()
+        fun onTogglePin(text: String)
     }
 
     var listener: Listener? = null
@@ -45,7 +46,7 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
         addView(header, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
 
         addView(TextView(context).apply {
-            text = "Ana reads the clipboard only when you open this panel. Saved clips stay on this device."
+            text = "Ana reads the clipboard only when you open this panel. Unpinned clips expire after 1 hour; pinned clips stay on this device."
             textSize = 11f
             setTextColor(Color.LTGRAY)
             setPadding(dp(8), dp(2), dp(8), dp(6))
@@ -58,7 +59,7 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
         addView(scroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
-    fun setItems(items: List<String>) {
+    fun setItems(items: List<KeyboardPrefs.ClipboardItem>) {
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(context).apply {
@@ -70,9 +71,13 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
             })
             return
         }
-        items.take(10).forEach { clip ->
+        items.take(20).forEach { clip ->
+            val row = LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
             val button = Button(context).apply {
-                text = clip.replace('\n', ' ').take(160)
+                text = clip.text.replace('\n', ' ').take(160)
                 isAllCaps = false
                 textSize = 14f
                 setTextColor(Color.WHITE)
@@ -80,10 +85,14 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
                 maxLines = 2
                 backgroundTintList = ColorStateList.valueOf(Color.rgb(52, 52, 52))
                 setPadding(dp(14), dp(7), dp(14), dp(7))
-                setOnClickListener { listener?.onPaste(clip) }
+                setOnClickListener { listener?.onPaste(clip.text) }
             }
-            list.addView(button, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)).apply {
-                bottomMargin = dp(6)
+            row.addView(button, LayoutParams(0, dp(58), 1f))
+            row.addView(action(if (clip.pinned) "Pinned" else "Pin") { listener?.onTogglePin(clip.text) }, LayoutParams(dp(74), dp(48)).apply {
+                marginStart = dp(6)
+            })
+            list.addView(row, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)).apply {
+                bottomMargin = dp(4)
             })
         }
     }
