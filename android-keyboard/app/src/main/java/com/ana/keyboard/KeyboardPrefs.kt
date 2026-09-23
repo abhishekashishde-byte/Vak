@@ -194,7 +194,7 @@ object KeyboardPrefs {
     fun numberRowEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_NUMBER_ROW, true)
     fun setNumberRowEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_NUMBER_ROW, enabled).apply()
 
-    fun commaKeyEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_COMMA, true)
+    fun commaKeyEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_COMMA, false)
     fun setCommaKeyEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_COMMA, enabled).apply()
 
     fun fullStopKeyEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_FULL_STOP, true)
@@ -427,7 +427,7 @@ object KeyboardPrefs {
     fun keyBordersEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_KEY_BORDERS, false)
     fun setKeyBordersEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_KEY_BORDERS, enabled).apply()
 
-    fun spacebarScalePercent(context: Context): Int = prefs(context).getInt(KEY_SPACEBAR_SCALE, 100).coerceIn(90, 135)
+    fun spacebarScalePercent(context: Context): Int = prefs(context).getInt(KEY_SPACEBAR_SCALE, 112).coerceIn(90, 135)
     fun setSpacebarScalePercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_SPACEBAR_SCALE, value.coerceIn(90, 135)).apply()
 
     fun adaptiveTouchEnabled(context: Context): Boolean = learningPrefs(context).getBoolean(KEY_ADAPTIVE_TOUCH, true)
