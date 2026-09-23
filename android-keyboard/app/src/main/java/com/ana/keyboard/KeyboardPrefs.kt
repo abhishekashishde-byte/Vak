@@ -44,6 +44,7 @@ object KeyboardPrefs {
     private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
     private const val KEY_NEXT_WORD_PREFIX = "next_word_model_"
     private const val KEY_APP_AI_BLOCKLIST = "app_ai_blocklist"
+    private const val KEY_APP_AI_ALLOWLIST = "app_ai_allowlist"
     private const val KEY_ONE_HANDED_MODE = "one_handed_mode"
     private const val KEY_ONE_HANDED_WIDTH = "one_handed_width_percent"
     private const val KEY_KEY_GAP = "key_gap_dp"
@@ -468,18 +469,41 @@ object KeyboardPrefs {
     fun aiBlockedApps(context: Context): Set<String> =
         prefs(context).getStringSet(KEY_APP_AI_BLOCKLIST, emptySet())?.toSet() ?: emptySet()
 
+    fun aiAllowedApps(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_APP_AI_ALLOWLIST, emptySet())?.toSet() ?: emptySet()
+
+    private fun looksSensitiveAppPackage(packageName: String): Boolean {
+        val value = packageName.lowercase()
+        return listOf(
+            "bank", "banking", "sparkasse", "dkb", "comdirect", "revolut", "n26",
+            "paypal", "wallet", "finanz", "authenticator", "secureid", "tan"
+        ).any { value.contains(it) }
+    }
+
     fun aiAllowedForPackage(context: Context, packageName: String?): Boolean {
         val safe = packageName?.trim().orEmpty()
         if (safe.isBlank()) return true
-        return safe !in aiBlockedApps(context)
+        if (safe in aiAllowedApps(context)) return true
+        if (safe in aiBlockedApps(context)) return false
+        return !looksSensitiveAppPackage(safe)
     }
 
     fun setAiAllowedForPackage(context: Context, packageName: String, allowed: Boolean) {
         val safe = packageName.trim()
         if (safe.isBlank()) return
         val blocked = aiBlockedApps(context).toMutableSet()
-        if (allowed) blocked.remove(safe) else blocked.add(safe)
-        prefs(context).edit().putStringSet(KEY_APP_AI_BLOCKLIST, blocked).apply()
+        val allowedApps = aiAllowedApps(context).toMutableSet()
+        if (allowed) {
+            blocked.remove(safe)
+            allowedApps.add(safe)
+        } else {
+            allowedApps.remove(safe)
+            blocked.add(safe)
+        }
+        prefs(context).edit()
+            .putStringSet(KEY_APP_AI_BLOCKLIST, blocked)
+            .putStringSet(KEY_APP_AI_ALLOWLIST, allowedApps)
+            .apply()
     }
 
     fun oneHandedMode(context: Context): String {
