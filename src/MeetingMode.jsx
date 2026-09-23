@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
+import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
 import './meeting-notes.css'
@@ -162,13 +162,17 @@ export default function MeetingMode() {
   const [importingAudio, setImportingAudio] = useState(false)
   const [calendarEvents, setCalendarEvents] = useState([])
   const [calendarState, setCalendarState] = useState({ loading: true, message: '', reconnect: false })
+  const [keepAudio, setKeepAudio] = useState(false)
+  const [bookmarks, setBookmarks] = useState(() => Array.isArray(saved.bookmarks) ? saved.bookmarks : [])
+  const [missedSummary, setMissedSummary] = useState('')
+  const [missedLoading, setMissedLoading] = useState(false)
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
   const targetRef = useRef(target), meetingModeRef = useRef(meetingMode), startedAtRef = useRef(Number(saved.startedAt) || 0)
   const originalTextRef = useRef(clean(saved.originalText)), translatedTextRef = useRef(clean(saved.translatedText))
   const originalBufferRef = useRef(''), translatedBufferRef = useRef(''), transcriptionItemsRef = useRef(new Map()), transcriptionOrderRef = useRef([])
-  const commitTimerRef = useRef(null), commitWaitsRef = useRef(0), translationPaneRef = useRef(null), hearingPaneRef = useRef(null)
+  const commitTimerRef = useRef(null), commitWaitsRef = useRef(0), translationPaneRef = useRef(null), hearingPaneRef = useRef(null), audioPlayerRef = useRef(null)
 
   const active = ['connecting', 'listening', 'recovering', 'paused'].includes(sessionState)
   const processing = ['transcribing', 'preparing'].includes(notesStatus)
@@ -263,12 +267,12 @@ export default function MeetingMode() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         target, meetingMode, startedAt, originalText, translatedText, metadata: meetingMeta,
-        transcriptSegments, speakerNames,
+        transcriptSegments, speakerNames, bookmarks,
         momTemplateId: selectedMomTemplate, customMomName, customMomInstruction, updatedAt: Date.now(),
       }))
       localStorage.setItem(MOM_PREFS_KEY, JSON.stringify({ selectedTemplateId: selectedMomTemplate, customName: customMomName, customInstruction: customMomInstruction }))
     } catch {}
-  }, [target, meetingMode, startedAt, originalText, translatedText, meetingMeta, transcriptSegments, speakerNames, selectedMomTemplate, customMomName, customMomInstruction])
+  }, [target, meetingMode, startedAt, originalText, translatedText, meetingMeta, transcriptSegments, speakerNames, bookmarks, selectedMomTemplate, customMomName, customMomInstruction])
   useEffect(() => { const node = translationPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [translatedText, liveTranslation])
   useEffect(() => { const node = hearingPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [originalText, liveOriginal])
   useEffect(() => () => discardActiveMeeting(), [])
@@ -393,6 +397,7 @@ export default function MeetingMode() {
     if (!consentVerified) { setError('Confirm that participants have been informed and you have permission to record/process this meeting.'); return }
     if (!navigator.mediaDevices?.getUserMedia) { setError('Meeting capture is not supported in this browser.'); return }
     setError(''); setNotesError(''); setMeetingNotes(null); setNotesStatus('idle'); setSessionState('connecting'); setPaused(false); pausedRef.current = false; activeRef.current = true
+    setBookmarks([]); setMissedSummary('')
     originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setLiveOriginal(''); setLiveTranslation('')
     originalTextRef.current = ''; translatedTextRef.current = ''; setOriginalText(''); setTranslatedText(''); try { localStorage.removeItem(STORAGE_KEY) } catch {}
     try {
@@ -411,20 +416,24 @@ export default function MeetingMode() {
     const hints = glossaryHints()
     return ['Business/technical meeting. The speakers may naturally mix English, German, Hindi and Hinglish.', 'SAP terms, transaction codes, material master, inspection plans and project names may occur.', hints.context ? `User glossary: ${hints.context}` : ''].filter(Boolean).join(' ').slice(0, 1800)
   }
-  const transcribeRecording = async blob => {
+  const transcribeRecording = async (blob, retainAudio = false) => {
     if (!blob?.size) throw new Error('No meeting audio was captured.')
     if (blob.size > MAX_FINAL_AUDIO_BYTES) throw new Error('This recording is too large for the final high-quality transcription pass. The live transcript will be kept where available.')
     if (!supabase) throw new Error('Account storage is not available.')
     const { data: userData, error: userError } = await supabase.auth.getUser(); if (userError || !userData?.user) throw new Error('Please sign in again before saving this meeting.')
     const mimeType = String(blob.type || recordingMimeRef.current || 'audio/webm').split(';')[0], ext = extensionForMime(mimeType), id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`, path = `${userData.user.id}/${Date.now()}-${id}.${ext}`, uploadBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType })
     const { error: uploadError } = await supabase.storage.from(AUDIO_BUCKET).upload(path, uploadBlob, { contentType: mimeType, upsert: false }); if (uploadError) throw new Error(uploadError.message || 'Could not upload the temporary meeting recording.')
+    let keepStoredAudio = false
     try {
       const { data: signed, error: signedError } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600); if (signedError || !signed?.signedUrl) throw new Error(signedError?.message || 'Could not prepare the temporary recording for transcription.')
       const response = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioUrl: signed.signedUrl, mimeType, meeting: true, speakerLabels: true, contextHints: buildFinalContext() }) }), data = await response.json()
       if (!response.ok) throw new Error(data?.error || 'Could not create the final transcript.')
       const text = clean(data?.text); if (!text) throw new Error('No speech was found in the meeting recording.')
-      return { text, segments: normalizeSegments(data?.segments), diarized: Boolean(data?.diarized) }
-    } finally { try { await supabase.storage.from(AUDIO_BUCKET).remove([path]) } catch {} }
+      keepStoredAudio = Boolean(retainAudio)
+      return { text, segments: normalizeSegments(data?.segments), diarized: Boolean(data?.diarized), audioPath: keepStoredAudio ? path : '' }
+    } finally {
+      if (!keepStoredAudio) { try { await supabase.storage.from(AUDIO_BUCKET).remove([path]) } catch {} }
+    }
   }
 
   const persistMeetingRecord = async record => {
