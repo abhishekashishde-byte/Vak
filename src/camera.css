@@ -11,7 +11,7 @@
 .camera-image-scaled{min-width:100%}
 .camera-result-image{position:relative}
 .camera-translation-layer{position:absolute;inset:0;pointer-events:none}
-.camera-visual-block{pointer-events:auto;background:rgba(20,20,20,.83)!important;color:#fff!important;border:1px solid rgba(255,255,255,.16)!important;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);box-shadow:0 1px 8px rgba(0,0,0,.16);line-height:1.12!important;padding:3px 5px!important;overflow:hidden;text-wrap:balance}
+.camera-visual-block{pointer-events:auto;background:rgba(20,20,20,.83);color:#fff;border:1px solid rgba(255,255,255,.16)!important;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);box-shadow:0 1px 8px rgba(0,0,0,.16);line-height:1.12!important;padding:3px 5px!important;overflow:hidden;text-wrap:balance}
 .camera-compare-divider{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 14px rgba(0,0,0,.35);pointer-events:none}
 .camera-compare-slider{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin:10px 0 14px;font-size:10px;color:#756e65}
 .camera-compare-slider input{width:100%}
