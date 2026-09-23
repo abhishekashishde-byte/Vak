@@ -21,5 +21,7 @@ jobs:
         run: npm install
       - name: Talk for Me adversarial trust tests
         run: npm run test:trust
+      - name: Browser extension bridge tests
+        run: node --test tests/browserExtensionBridge.test.js
       - name: Production build
         run: npm run build
