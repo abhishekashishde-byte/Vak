@@ -35,6 +35,7 @@ object KeyboardPrefs {
     private const val KEY_WORD_SUGGESTIONS = "word_suggestions"
     private const val KEY_AUTO_CORRECTION = "auto_correction"
     private const val KEY_SMART_SENTENCE_CORRECTION = "smart_sentence_correction"
+    private const val KEY_SMART_CORRECTION_MODE = "smart_correction_mode"
     private const val KEY_CLIPBOARD_HISTORY = "clipboard_history"
     private const val KEY_INCOGNITO = "incognito_mode"
     private const val CLIPBOARD_TTL_MS = 60L * 60L * 1000L
@@ -288,6 +289,16 @@ object KeyboardPrefs {
 
     fun smartSentenceCorrectionEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_SMART_SENTENCE_CORRECTION, false)
     fun setSmartSentenceCorrectionEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_SMART_SENTENCE_CORRECTION, enabled).apply()
+
+    fun smartCorrectionMode(context: Context): String {
+        val value = prefs(context).getString(KEY_SMART_CORRECTION_MODE, "review") ?: "review"
+        return value.takeIf { it in setOf("review", "auto") } ?: "review"
+    }
+
+    fun setSmartCorrectionMode(context: Context, value: String) =
+        prefs(context).edit()
+            .putString(KEY_SMART_CORRECTION_MODE, value.takeIf { it in setOf("review", "auto") } ?: "review")
+            .apply()
 
     fun incognitoEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_INCOGNITO, false)
     fun setIncognitoEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_INCOGNITO, enabled).apply()
