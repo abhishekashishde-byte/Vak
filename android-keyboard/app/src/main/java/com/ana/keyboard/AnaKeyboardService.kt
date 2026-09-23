@@ -219,6 +219,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         aiButtons.clear()
         suggestionButtons.clear()
         voiceButton = null
+        appAiButton = null
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -836,12 +837,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             clearSuggestions()
             return
         }
-        suggestionButtons[0].text = word
-        suggestionButtons[0].alpha = 1f
-        for (index in 1 until suggestionButtons.size) {
-            suggestionButtons[index].text = ""
-            suggestionButtons[index].alpha = 0f
-        }
+        showEntries(listOf(SuggestionEntry(word, word, SuggestionKind.WORD)))
     }
 
     private fun lastCompletedWord(): String? {
@@ -941,7 +937,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         if (currentInputConnection === connection) showStatus(defaultStatus())
                         return@post
                     }
-                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this@AnaKeyboardService)) {
+                    if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this@AnaKeyboardService) || !isAppAiAllowed()) {
                         showStatus(defaultStatus())
                         return@post
                     }
