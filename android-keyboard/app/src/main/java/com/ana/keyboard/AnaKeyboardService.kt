@@ -123,6 +123,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var lastVoicePartial = ""
     private var voiceRecognizerOnDevice = false
     private var onDeviceVoiceFailedThisSession = false
+    private var voiceSessionId = 0L
     private enum class VoiceMode { DICTATE, EDIT_COMMAND }
     private var voiceMode = VoiceMode.DICTATE
     private var voiceEditSource: ActionText? = null
@@ -1634,6 +1635,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceButton?.contentDescription = if (listening) "Stop voice typing" else "Voice typing"
     }
 
+    private fun recycleSpeechRecognizer() {
+        val old = speechRecognizer
+        speechRecognizer = null
+        try { old?.cancel() } catch (_: Exception) {}
+        try { old?.destroy() } catch (_: Exception) {}
+    }
+
     private fun startVoiceTyping() {
         if (!KeyboardPrefs.voiceTypingEnabled(this)) {
             showStatus("Voice typing is turned off in settings")
@@ -1652,25 +1660,33 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Allow microphone access, then tap the microphone again")
             return
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            showStatus("No Android speech recognizer is available on this device")
+        val standardAvailable = SpeechRecognizer.isRecognitionAvailable(this)
+        val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        if (!standardAvailable && !canUseOnDevice) {
+            showStatus("Android speech service is unavailable — microphone permission is already separate")
             return
         }
 
-        if (speechRecognizer == null) {
-            val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
-            val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-            voiceRecognizerOnDevice = preferOnDevice && canUseOnDevice && !onDeviceVoiceFailedThisSession
-            speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-            } else {
-                SpeechRecognizer.createSpeechRecognizer(this)
-            }
-            speechRecognizer = speechRecognizer?.apply {
-                setRecognitionListener(object : RecognitionListener {
+        // Build a fresh recognizer for every dictation session. Some Android
+        // speech services remain BUSY/CLIENT-broken after a completed/cancelled
+        // session even though microphone permission is still granted.
+        voiceSessionId += 1
+        val sessionId = voiceSessionId
+        recycleSpeechRecognizer()
+
+        val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
+        voiceRecognizerOnDevice = (preferOnDevice && canUseOnDevice && !onDeviceVoiceFailedThisSession) ||
+            (!standardAvailable && canUseOnDevice)
+        speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        }
+        speechRecognizer = speechRecognizer?.apply {
+            setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         if (voiceStopRequested) {
                             voiceListening = false
                             voiceFinalizing = true
@@ -1686,6 +1702,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     override fun onRmsChanged(rmsdB: Float) = Unit
                     override fun onBufferReceived(buffer: ByteArray?) = Unit
                     override fun onEndOfSpeech() {
+                        if (sessionId != voiceSessionId) return
                         if (!voiceResultHandled) {
                             voiceFinalizing = true
                             voiceListening = false
@@ -1695,9 +1712,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         }
                     }
                     override fun onError(error: Int) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         if (voiceRecognizerOnDevice && VoiceDictationPolicy.shouldFallbackFromOnDevice(error)) {
                             onDeviceVoiceFailedThisSession = true
+                        }
+                        if (VoiceDictationPolicy.shouldRecycleRecognizer(error)) {
                             val failedRecognizer = speechRecognizer
                             speechRecognizer = null
                             mainHandler.post { try { failedRecognizer?.destroy() } catch (_: Exception) {} }
@@ -1719,12 +1738,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         }
                     }
                     override fun onResults(results: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         val finalText = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                         completeVoiceRecognition(VoiceDictationPolicy.bestText(finalText, lastVoicePartial))
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
-                        if (voiceResultHandled) return
+                        if (sessionId != voiceSessionId || voiceResultHandled) return
                         val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                         if (partial.isBlank()) return
                         lastVoicePartial = partial
@@ -1737,7 +1756,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
                 })
             }
-        }
 
         val localeTag = when (KeyboardPrefs.inputBadge(this)) {
             "DE" -> "de-DE"
@@ -1764,8 +1782,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus(if (voiceRecognizerOnDevice) "Listening on device…" else "Listening…")
         } catch (_: Exception) {
             voiceListening = false
+            voiceFinalizing = false
+            voiceSessionId += 1
+            recycleSpeechRecognizer()
             setVoiceListeningUi(false)
-            showStatus("Could not start voice typing — tap the mic and try again")
+            showStatus("Speech service did not start — Ana reset it; tap the mic again")
         }
     }
 
@@ -1945,7 +1966,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceFinalizing = false
         voiceStopRequested = false
         lastVoicePartial = ""
-        try { speechRecognizer?.cancel() } catch (_: Exception) { }
+        voiceSessionId += 1
+        recycleSpeechRecognizer()
         try {
             currentInputConnection?.setComposingText("", 1)
             currentInputConnection?.finishComposingText()
@@ -2122,8 +2144,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     override fun onDestroy() {
         cancelPendingGlide()
         stopVoiceTyping(false)
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        voiceSessionId += 1
+        recycleSpeechRecognizer()
         try { clipboardManager.removePrimaryClipChangedListener(clipboardListener) } catch (_: Exception) {}
         suggestionEngine.close()
         executor.shutdownNow()
