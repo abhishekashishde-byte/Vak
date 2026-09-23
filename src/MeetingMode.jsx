@@ -185,6 +185,7 @@ export default function MeetingMode() {
       const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}
       return [
         record?.title, record?.target, meta.customer, meta.topic, meta.project, meta.meetingType,
+        ...(Array.isArray(meta.attendees) ? meta.attendees : []),
         ...(Array.isArray(meta.tags) ? meta.tags : []), template.title, record?.notes?.summary,
       ].filter(Boolean).join(' ').toLocaleLowerCase().includes(query)
     })
