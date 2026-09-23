@@ -17,7 +17,6 @@ class VoiceDictationPolicyTest {
     @Test fun onDeviceClientFailureFallsBackNextTime() {
         assertTrue(VoiceDictationPolicy.shouldFallbackFromOnDevice(SpeechRecognizer.ERROR_CLIENT))
     }
-}
 
     @Test fun busyRecognizerMustBeRecreated() {
         assertTrue(VoiceDictationPolicy.shouldRecycleRecognizer(SpeechRecognizer.ERROR_RECOGNIZER_BUSY))
@@ -26,4 +25,4 @@ class VoiceDictationPolicyTest {
     @Test fun clientRecognizerFailureMustBeRecreated() {
         assertTrue(VoiceDictationPolicy.shouldRecycleRecognizer(SpeechRecognizer.ERROR_CLIENT))
     }
-
+}
