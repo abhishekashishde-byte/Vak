@@ -26,7 +26,8 @@ test('rewrite becomes a Write for me draft without changing saved target', () =>
   assert.equal(draft.target, 'German')
   assert.equal(draft.outputMode, 'online')
   assert.equal(draft.writingMode, 'write')
-  assert.match(draft.input, /pls send file/)
+  assert.equal(draft.input, 'pls send file')
+  assert.equal(draft.extensionAction, 'rewrite')
   assert.equal(draft.output, '')
 })
 
@@ -40,7 +41,8 @@ test('new browser actions become Ana write drafts', () => {
   for (const action of ['correct', 'shorter', 'friendly', 'formal', 'du', 'sie', 'explain', 'reply']) {
     const draft = extensionRequestToDraft({ action, text: 'Bitte prüfen', glossaryContext: 'Project Alpha' }, { target: 'German' })
     assert.equal(draft.writingMode, 'write')
-    assert.match(draft.input, /Bitte prüfen/)
+    assert.equal(draft.input, 'Bitte prüfen')
+    assert.equal(draft.extensionAction, action)
     assert.equal(draft.glossaryContext, 'Project Alpha')
   }
 })
