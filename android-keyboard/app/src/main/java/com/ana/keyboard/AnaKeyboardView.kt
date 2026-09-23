@@ -209,7 +209,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                     KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
                     KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
                     KeySpec(".", ".", 0.72f),
-                    KeySpec("↵", "ENTER", 1.34f)
+                    KeySpec("Enter", "ENTER", 1.56f)
                 )
             )
         }
@@ -233,7 +233,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f))
             add(KeySpec("", "SPACE", 5.05f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.70f))
-            add(KeySpec("↵", "ENTER", 1.34f))
+            add(KeySpec("Enter", "ENTER", 1.56f))
         })
         return result
     }
