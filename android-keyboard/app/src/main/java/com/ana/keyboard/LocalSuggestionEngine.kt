@@ -62,7 +62,7 @@ class LocalSuggestionEngine(
         worker.execute {
             val result = offline.suggestions(clean, requestBadge)
                 ?: CoreLexicon.suggestions(clean, requestBadge)
-            onResult(clean, result.suggestions, result.highConfidenceTypo)
+            if (requestBadge == badge) onResult(clean, result.suggestions, result.highConfidenceTypo)
         }
     }
 
@@ -79,7 +79,7 @@ class LocalSuggestionEngine(
             val combined = (learned + builtIn)
                 .distinctBy { it.lowercase() }
                 .take(3)
-            onNextResult(clean, combined)
+            if (requestBadge == badge) onNextResult(clean, combined)
         }
     }
 
@@ -101,7 +101,7 @@ class LocalSuggestionEngine(
         worker.execute {
             val decoded = offline.decodeGlide(trace, requestBadge)
                 ?: CoreLexicon.decodeGlide(raw, requestBadge)
-            onDecoded(decoded)
+            if (requestBadge == badge) onDecoded(decoded)
         }
     }
 
