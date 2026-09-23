@@ -9,7 +9,8 @@ import java.util.concurrent.Executors
  */
 class LocalSuggestionEngine(
     private val context: Context,
-    private val onResult: (word: String, suggestions: List<String>, looksLikeTypo: Boolean) -> Unit
+    private val onResult: (word: String, suggestions: List<String>, looksLikeTypo: Boolean) -> Unit,
+    private val onNextResult: (previous: String, suggestions: List<String>) -> Unit = { _, _ -> }
 ) {
     private val offline = OfflineFrequencyLexicon(context.applicationContext)
     private val worker = Executors.newSingleThreadExecutor()
@@ -63,6 +64,31 @@ class LocalSuggestionEngine(
                 ?: CoreLexicon.suggestions(clean, requestBadge)
             onResult(clean, result.suggestions, result.highConfidenceTypo)
         }
+    }
+
+    fun requestNext(previous: String) {
+        val clean = previous.trim().lowercase()
+        if (clean.length < 2) {
+            onNextResult(clean, emptyList())
+            return
+        }
+        val requestBadge = badge.ifBlank { "EN" }
+        worker.execute {
+            val learned = KeyboardPrefs.nextWordSuggestions(context, clean, requestBadge, 3)
+            val builtIn = CoreLexicon.nextWords(clean, requestBadge, 3)
+            val combined = (learned + builtIn)
+                .distinctBy { it.lowercase() }
+                .take(3)
+            onNextResult(clean, combined)
+        }
+    }
+
+    fun learnTransition(previous: String, next: String) {
+        val from = previous.trim().lowercase()
+        val to = next.trim().lowercase()
+        val requestBadge = badge.ifBlank { "EN" }
+        if (from.length < 2 || to.length < 2 || from == to) return
+        worker.execute { KeyboardPrefs.learnNextWord(context, from, to, requestBadge) }
     }
 
     fun decodeGlideAsync(trace: AnaKeyboardView.GlideTrace, onDecoded: (String?) -> Unit) {
