@@ -116,10 +116,20 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
+    private var voiceFinalizing = false
+    private var voiceStopRequested = false
+    private var voiceResultHandled = false
+    private var lastVoicePartial = ""
     private var voiceRecognizerOnDevice = false
+    private var onDeviceVoiceFailedThisSession = false
     private enum class VoiceMode { DICTATE, EDIT_COMMAND }
     private var voiceMode = VoiceMode.DICTATE
     private var voiceEditSource: ActionText? = null
+    private val voiceFinalizeTimeout = Runnable {
+        if (!voiceFinalizing || voiceResultHandled) return@Runnable
+        try { speechRecognizer?.cancel() } catch (_: Exception) {}
+        completeVoiceRecognition("", fromTimeout = true)
+    }
 
     private enum class SuggestionKind { WORD, NEXT_WORD, EMOJI, CLIPBOARD }
     private data class SuggestionEntry(val label: String, val value: String, val kind: SuggestionKind)
@@ -1583,16 +1593,24 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun toggleVoiceTyping() {
-        if (voiceListening) stopVoiceTyping(true) else {
-            voiceMode = VoiceMode.DICTATE
-            voiceEditSource = null
-            startVoiceTyping()
+        when {
+            voiceFinalizing -> showStatus("Finishing dictation…")
+            voiceListening -> finishVoiceTyping()
+            else -> {
+                voiceMode = VoiceMode.DICTATE
+                voiceEditSource = null
+                startVoiceTyping()
+            }
         }
     }
 
     private fun startVoiceEditCommand() {
+        if (voiceFinalizing) {
+            showStatus("Finishing dictation…")
+            return
+        }
         if (voiceListening) {
-            stopVoiceTyping(true)
+            finishVoiceTyping()
             return
         }
         if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) {
@@ -1642,7 +1660,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             val preferOnDevice = KeyboardPrefs.preferOnDeviceDictation(this)
             val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-            voiceRecognizerOnDevice = preferOnDevice && canUseOnDevice
+            voiceRecognizerOnDevice = preferOnDevice && canUseOnDevice && !onDeviceVoiceFailedThisSession
             speechRecognizer = if (voiceRecognizerOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
             } else {
@@ -1651,30 +1669,64 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             speechRecognizer = speechRecognizer?.apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
+                        if (voiceResultHandled) return
+                        if (voiceStopRequested) {
+                            voiceListening = false
+                            voiceFinalizing = true
+                            showStatus("Finishing dictation…")
+                            return
+                        }
                         voiceListening = true
+                        voiceFinalizing = false
                         setVoiceListeningUi(true)
                         showStatus(if (voiceMode == VoiceMode.EDIT_COMMAND) "Listening for edit instruction…" else if (voiceRecognizerOnDevice) "Listening on device…" else "Listening…")
                     }
                     override fun onBeginningOfSpeech() = Unit
                     override fun onRmsChanged(rmsdB: Float) = Unit
                     override fun onBufferReceived(buffer: ByteArray?) = Unit
-                    override fun onEndOfSpeech() { showStatus("Finishing dictation…") }
+                    override fun onEndOfSpeech() {
+                        if (!voiceResultHandled) {
+                            voiceFinalizing = true
+                            voiceListening = false
+                            showStatus("Finishing dictation…")
+                            mainHandler.removeCallbacks(voiceFinalizeTimeout)
+                            mainHandler.postDelayed(voiceFinalizeTimeout, 2800)
+                        }
+                    }
                     override fun onError(error: Int) {
-                        currentInputConnection?.finishComposingText()
-                        voiceListening = false
-                        setVoiceListeningUi(false)
-                        showStatus("Voice typing stopped")
+                        if (voiceResultHandled) return
+                        if (voiceRecognizerOnDevice && VoiceDictationPolicy.shouldFallbackFromOnDevice(error)) {
+                            onDeviceVoiceFailedThisSession = true
+                            val failedRecognizer = speechRecognizer
+                            speechRecognizer = null
+                            mainHandler.post { try { failedRecognizer?.destroy() } catch (_: Exception) {} }
+                        }
+                        val fallback = VoiceDictationPolicy.bestText("", lastVoicePartial)
+                        if (fallback.isNotBlank()) {
+                            completeVoiceRecognition(fallback)
+                        } else {
+                            voiceResultHandled = true
+                            voiceListening = false
+                            voiceFinalizing = false
+                            mainHandler.removeCallbacks(voiceFinalizeTimeout)
+                            try {
+                                currentInputConnection?.setComposingText("", 1)
+                                currentInputConnection?.finishComposingText()
+                            } catch (_: Exception) {}
+                            setVoiceListeningUi(false)
+                            showStatus(voiceErrorMessage(error))
+                        }
                     }
                     override fun onResults(results: Bundle?) {
-                        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-                        voiceListening = false
-                        setVoiceListeningUi(false)
-                        if (voiceMode == VoiceMode.EDIT_COMMAND) finishVoiceEditCommand(text)
-                        else finishDictation(text)
+                        if (voiceResultHandled) return
+                        val finalText = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                        completeVoiceRecognition(VoiceDictationPolicy.bestText(finalText, lastVoicePartial))
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
+                        if (voiceResultHandled) return
                         val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                         if (partial.isBlank()) return
+                        lastVoicePartial = partial
                         if (voiceMode == VoiceMode.EDIT_COMMAND) {
                             showStatus("Voice edit: " + partial.take(80))
                         } else {
@@ -1700,10 +1752,20 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             }
         }
+        voiceResultHandled = false
+        voiceFinalizing = false
+        voiceStopRequested = false
+        lastVoicePartial = ""
         voiceListening = true
         setVoiceListeningUi(true)
-        speechRecognizer?.startListening(intent)
-        showStatus("Listening…")
+        try {
+            speechRecognizer?.startListening(intent)
+            showStatus(if (voiceRecognizerOnDevice) "Listening on device…" else "Listening…")
+        } catch (_: Exception) {
+            voiceListening = false
+            setVoiceListeningUi(false)
+            showStatus("Could not start voice typing — tap the mic and try again")
+        }
     }
 
     private fun cloudGlossary(): List<String> =
@@ -1818,16 +1880,81 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
-    private fun stopVoiceTyping(showMessage: Boolean) {
-        if (!voiceListening) return
-        try { speechRecognizer?.stopListening() } catch (_: Exception) { }
+    private fun finishVoiceTyping() {
+        if (!voiceListening || voiceResultHandled) return
         voiceListening = false
+        voiceFinalizing = true
+        voiceStopRequested = true
+        showStatus("Finishing dictation…")
+        mainHandler.removeCallbacks(voiceFinalizeTimeout)
+        mainHandler.postDelayed(voiceFinalizeTimeout, 2800)
+        try {
+            speechRecognizer?.stopListening()
+        } catch (_: Exception) {
+            completeVoiceRecognition("", fromTimeout = true)
+        }
+    }
+
+    private fun completeVoiceRecognition(text: String, fromTimeout: Boolean = false) {
+        if (voiceResultHandled) return
+        voiceResultHandled = true
+        voiceListening = false
+        voiceFinalizing = false
+        voiceStopRequested = false
+        mainHandler.removeCallbacks(voiceFinalizeTimeout)
+        setVoiceListeningUi(false)
+
+        val resolved = VoiceDictationPolicy.bestText(text, lastVoicePartial)
+        lastVoicePartial = ""
+        if (resolved.isBlank()) {
+            try {
+                currentInputConnection?.setComposingText("", 1)
+                currentInputConnection?.finishComposingText()
+            } catch (_: Exception) {}
+            showStatus(if (fromTimeout) "Nothing heard — tap the mic and try again" else "Nothing heard")
+            if (voiceMode == VoiceMode.EDIT_COMMAND) {
+                voiceEditSource = null
+                voiceMode = VoiceMode.DICTATE
+            }
+            return
+        }
+
+        if (voiceMode == VoiceMode.EDIT_COMMAND) finishVoiceEditCommand(resolved)
+        else finishDictation(resolved)
+    }
+
+    private fun voiceErrorMessage(error: Int): String = when (error) {
+        SpeechRecognizer.ERROR_NO_MATCH -> "Nothing understood — tap the mic and try again"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy — try again"
+        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network error"
+        else -> if (voiceRecognizerOnDevice && onDeviceVoiceFailedThisSession) {
+            "On-device speech failed — Ana will use Android speech recognition next time"
+        } else {
+            "Voice recognition failed — tap the mic and try again"
+        }
+    }
+
+    private fun stopVoiceTyping(showMessage: Boolean) {
+        if (!voiceListening && !voiceFinalizing) return
+        mainHandler.removeCallbacks(voiceFinalizeTimeout)
+        voiceResultHandled = true
+        voiceListening = false
+        voiceFinalizing = false
+        voiceStopRequested = false
+        lastVoicePartial = ""
+        try { speechRecognizer?.cancel() } catch (_: Exception) { }
+        try {
+            currentInputConnection?.setComposingText("", 1)
+            currentInputConnection?.finishComposingText()
+        } catch (_: Exception) {}
         if (voiceMode == VoiceMode.EDIT_COMMAND) {
             voiceEditSource = null
             voiceMode = VoiceMode.DICTATE
         }
         setVoiceListeningUi(false)
-        if (showMessage) showStatus("Voice typing stopped")
+        if (showMessage) showStatus("Voice typing cancelled")
     }
 
     private data class ActionText(val text: String, val selected: Boolean)
@@ -1950,7 +2077,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         status.text = message
         mainHandler.removeCallbacksAndMessages(STATUS_TOKEN)
         mainHandler.postAtTime({
-            if (!isSensitiveField() && !voiceListening) status.text = defaultStatus()
+            if (!isSensitiveField() && !voiceListening && !voiceFinalizing) status.text = defaultStatus()
         }, STATUS_TOKEN, SystemClock.uptimeMillis() + 2600)
     }
 

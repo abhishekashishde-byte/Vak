@@ -313,7 +313,7 @@ object KeyboardPrefs {
     fun setDictationMode(context: Context, value: String) =
         prefs(context).edit().putString(KEY_DICTATION_MODE, value.takeIf { it in setOf("exact", "clean") } ?: "clean").apply()
 
-    fun preferOnDeviceDictation(context: Context): Boolean = prefs(context).getBoolean(KEY_PREFER_ON_DEVICE_DICTATION, true)
+    fun preferOnDeviceDictation(context: Context): Boolean = prefs(context).getBoolean(KEY_PREFER_ON_DEVICE_DICTATION, false)
     fun setPreferOnDeviceDictation(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_PREFER_ON_DEVICE_DICTATION, enabled).apply()
 
     fun privacyShieldEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_PRIVACY_SHIELD, true)
