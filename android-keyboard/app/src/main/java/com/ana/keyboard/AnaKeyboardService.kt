@@ -47,6 +47,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private lateinit var status: TextView
     private lateinit var targetButton: Button
     private lateinit var suggestionEngine: LocalSuggestionEngine
+    private lateinit var correctionPreview: LinearLayout
+    private lateinit var correctionPreviewText: TextView
 
     private var voiceButton: ImageButton? = null
     private val aiButtons = mutableListOf<Button>()
@@ -72,6 +74,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var pendingDelimitedWord: String? = null
     private var lastAutoCorrection: AutoCorrectionRecord? = null
     private var lastSentenceCorrection: SentenceCorrectionRecord? = null
+    private var pendingSentenceProposal: SentenceProposal? = null
     private var smartSentenceToken = 0
     private var lastSmartSentenceChecked = ""
     @Volatile private var smartSentenceInFlight = false
@@ -102,6 +105,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private data class AutoCorrectionRecord(val original: String, val corrected: String)
     private data class SentenceCorrectionRecord(val original: String, val corrected: String, val trailing: String)
     private data class SentenceCandidate(val text: String, val suffix: String, val trailing: String)
+    private data class SentenceProposal(
+        val original: String,
+        val corrected: String,
+        val suffix: String,
+        val trailing: String,
+        val connection: InputConnection
+    )
 
     private val smartSentenceRunnable = Runnable { runSmartSentenceCorrection() }
 
@@ -257,6 +267,43 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             root.addView(suggestionStrip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
         }
 
+        correctionPreviewText = TextView(this).apply {
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            maxLines = 2
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(5), dp(8), dp(5))
+        }
+        correctionPreview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+            setBackgroundColor(Color.argb(245, 43, 43, 43))
+            visibility = View.GONE
+            addView(correctionPreviewText, LinearLayout.LayoutParams(0, dp(50), 1f))
+            addView(Button(this@AnaKeyboardService).apply {
+                text = "Reject"
+                isAllCaps = false
+                textSize = 11f
+                minWidth = 0
+                minimumWidth = 0
+                setTextColor(Color.WHITE)
+                backgroundTintList = ColorStateList.valueOf(Color.rgb(72, 72, 72))
+                setOnClickListener { rejectSentenceProposal() }
+            }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { marginEnd = dp(5) })
+            addView(Button(this@AnaKeyboardService).apply {
+                text = "Accept"
+                isAllCaps = false
+                textSize = 11f
+                minWidth = 0
+                minimumWidth = 0
+                setTextColor(Color.BLACK)
+                backgroundTintList = ColorStateList.valueOf(Color.rgb(230, 181, 65))
+                setOnClickListener { applySentenceProposal() }
+            }, LinearLayout.LayoutParams(dp(72), dp(44)))
+        }
+        root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+
         status = TextView(this).apply {
             text = defaultStatus()
             textSize = 11f
@@ -376,6 +423,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         pendingDelimitedWord = null
         lastAutoCorrection = null
         lastSentenceCorrection = null
+        pendingSentenceProposal = null
+        if (::correctionPreview.isInitialized) correctionPreview.visibility = View.GONE
         lastSmartSentenceChecked = ""
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
@@ -642,6 +691,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onKey(code: String) {
+        if (pendingSentenceProposal != null) dismissSentenceProposal(markChecked = false)
         if (code == "CURSOR_LEFT" || code == "CURSOR_RIGHT") {
             smartSentenceToken++
             mainHandler.removeCallbacks(smartSentenceRunnable)
@@ -772,7 +822,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun runSmartSentenceCorrection() {
         if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
-        if (smartSentenceInFlight) return
+        if (smartSentenceInFlight || pendingSentenceProposal != null) return
         val baseUrl = KeyboardPrefs.baseUrl(this)
         if (baseUrl.isBlank()) return
         val candidate = currentParagraphCandidate() ?: return
@@ -808,11 +858,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         return@post
                     }
 
-                    // Paragraph correction can finish while the final word is
-                    // still owned by Ana's composing region. Finish composing
-                    // before deleting/replacing text or some editors simply
-                    // ignore the replacement request.
-                    finishLocalComposition(connection)
+                    // Do not silently rewrite a paragraph. Keep obvious local
+                    // typo correction automatic, but present AI paragraph rewrites
+                    // as a reviewable proposal with explicit Accept / Reject.
                     val tail = connection.getTextBeforeCursor(candidate.suffix.length, 0)?.toString().orEmpty()
                     if (tail != candidate.suffix) {
                         showStatus(defaultStatus())
@@ -820,26 +868,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         return@post
                     }
 
-                    val replacement = corrected + candidate.trailing
-                    connection.beginBatchEdit()
-                    val deleted = try {
-                        connection.deleteSurroundingText(candidate.suffix.length, 0)
-                    } finally {
-                        // endBatchEdit is called after commit below when deletion succeeds.
-                    }
-                    if (!deleted) {
-                        connection.endBatchEdit()
-                        showStatus("ANA AI • could not apply correction")
-                        return@post
-                    }
-                    connection.commitText(replacement, 1)
-                    connection.endBatchEdit()
-
-                    lastSentenceCorrection = SentenceCorrectionRecord(candidate.text, corrected, candidate.trailing)
-                    lastSmartSentenceChecked = corrected
-                    clearSuggestions()
-                    refreshShiftFromEditor()
-                    showStatus("Paragraph corrected")
+                    showSentenceProposal(candidate, corrected, connection)
                 }
             } catch (_: Exception) {
                 // Network/API failure must never interrupt typing, but it should
@@ -860,6 +889,67 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 }
             }
         }
+    }
+
+    private fun showSentenceProposal(candidate: SentenceCandidate, corrected: String, connection: InputConnection) {
+        pendingSentenceProposal = SentenceProposal(candidate.text, corrected, candidate.suffix, candidate.trailing, connection)
+        if (::correctionPreviewText.isInitialized) {
+            correctionPreviewText.text = "Ana suggests: " + corrected.replace("\n", " ").take(220)
+            correctionPreview.visibility = View.VISIBLE
+        }
+        showStatus("ANA AI • correction ready for review")
+    }
+
+    private fun dismissSentenceProposal(markChecked: Boolean) {
+        val proposal = pendingSentenceProposal
+        if (markChecked && proposal != null) lastSmartSentenceChecked = proposal.original
+        pendingSentenceProposal = null
+        if (::correctionPreview.isInitialized) correctionPreview.visibility = View.GONE
+    }
+
+    private fun rejectSentenceProposal() {
+        val proposal = pendingSentenceProposal ?: return
+        lastSmartSentenceChecked = proposal.original
+        dismissSentenceProposal(markChecked = false)
+        showStatus("Correction rejected")
+    }
+
+    private fun applySentenceProposal() {
+        val proposal = pendingSentenceProposal ?: return
+        val connection = currentInputConnection
+        if (connection == null || connection !== proposal.connection || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) {
+            dismissSentenceProposal(markChecked = false)
+            showStatus("Text field changed — correction not applied")
+            return
+        }
+
+        finishLocalComposition(connection)
+        val tail = connection.getTextBeforeCursor(proposal.suffix.length, 0)?.toString().orEmpty()
+        if (tail != proposal.suffix) {
+            dismissSentenceProposal(markChecked = false)
+            showStatus("Draft changed — correction not applied")
+            scheduleSmartSentenceCorrection()
+            return
+        }
+
+        val replacement = proposal.corrected + proposal.trailing
+        connection.beginBatchEdit()
+        val deleted = connection.deleteSurroundingText(proposal.suffix.length, 0)
+        if (!deleted) {
+            connection.endBatchEdit()
+            dismissSentenceProposal(markChecked = false)
+            showStatus("ANA AI • could not apply correction")
+            return
+        }
+        connection.commitText(replacement, 1)
+        connection.endBatchEdit()
+
+        lastSentenceCorrection = SentenceCorrectionRecord(proposal.original, proposal.corrected, proposal.trailing)
+        lastSmartSentenceChecked = proposal.corrected
+        dismissSentenceProposal(markChecked = false)
+        clearSuggestions()
+        refreshShiftFromEditor()
+        showStatus("Paragraph corrected")
     }
 
     private fun isSafeSentenceCorrection(original: String, corrected: String): Boolean {
@@ -1227,9 +1317,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (::targetButton.isInitialized) targetButton.isEnabled = !privateField
         voiceButton?.isEnabled = !privateField && !incognito
         if (privateField) {
+            dismissSentenceProposal(markChecked = false)
             status.text = "PRIVATE FIELD • Ana AI, voice, learning and clipboard are off"
             clearSuggestions()
         } else if (incognito) {
+            dismissSentenceProposal(markChecked = false)
             status.text = "INCOGNITO • learning, clipboard history and Ana AI are off"
         } else {
             status.text = defaultStatus()

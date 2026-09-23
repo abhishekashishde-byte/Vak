@@ -57,8 +57,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
-  const { audio, audioUrl, mimeType = 'audio/webm', meeting = false, contextHints = '' } = req.body || {}
+  const { audio, audioUrl, mimeType = 'audio/webm', meeting = false, speakerLabels = false, contextHints = '' } = req.body || {}
   const isMeeting = Boolean(meeting || audioUrl)
+  const wantsSpeakers = Boolean(isMeeting && speakerLabels)
 
   try {
     let bytes
@@ -98,27 +99,60 @@ export default async function handler(req, res) {
           keywordHint,
         ].filter(Boolean).join(' ')
 
-    const form = new FormData()
     const ext = extensionFor(resolvedMime)
-    form.append('file', new Blob([bytes], { type: resolvedMime }), isMeeting ? `ana-meeting.${ext}` : `ana-briefing.${ext}`)
-    form.append('model', 'gpt-transcribe')
-    form.append('response_format', 'json')
-    form.append('prompt', prompt)
+    const transcribe = async ({ model, responseFormat, diarize = false }) => {
+      const form = new FormData()
+      form.append('file', new Blob([bytes], { type: resolvedMime }), isMeeting ? `ana-meeting.${ext}` : `ana-briefing.${ext}`)
+      form.append('model', model)
+      form.append('response_format', responseFormat)
+      if (prompt) form.append('prompt', prompt)
+      if (diarize) form.append('chunking_strategy', 'auto')
 
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: form,
-      signal: AbortSignal.timeout(isMeeting ? 240000 : 60000),
-    })
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: form,
+        signal: AbortSignal.timeout(isMeeting ? 240000 : 60000),
+      })
+      const data = await response.json()
+      return { response, data }
+    }
 
-    const data = await response.json()
+    let model = 'gpt-transcribe'
+    let responseFormat = 'json'
+    let result
+    if (wantsSpeakers) {
+      model = process.env.OPENAI_DIARIZE_MODEL || 'gpt-4o-transcribe-diarize'
+      responseFormat = 'diarized_json'
+      result = await transcribe({ model, responseFormat, diarize: true })
+      // Speaker diarization is isolated behind this request flag. If the
+      // provider/model is unavailable, keep the meeting usable with a normal
+      // high-quality transcript instead of failing the whole meeting.
+      if (!result.response.ok) {
+        model = 'gpt-transcribe'
+        responseFormat = 'json'
+        result = await transcribe({ model, responseFormat })
+      }
+    } else {
+      result = await transcribe({ model, responseFormat })
+    }
+
+    const { response, data } = result
     if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || 'Transcription failed' })
 
     const text = String(data?.text || '').trim()
     if (!text) return res.status(502).json({ error: 'No speech was detected' })
+    const segments = Array.isArray(data?.segments)
+      ? data.segments.map((segment, index) => ({
+          id: String(segment?.id || `seg-${index + 1}`),
+          speaker: String(segment?.speaker || '').trim() || 'Speaker',
+          start: Number(segment?.start) || 0,
+          end: Number(segment?.end) || 0,
+          text: String(segment?.text || '').trim(),
+        })).filter(segment => segment.text)
+      : []
     const finalDomain = resolveDomain(text, req.body?.domain)
-    return res.status(200).json({ text, model: 'gpt-transcribe', domain: publicDomain(finalDomain) })
+    return res.status(200).json({ text, segments, model, diarized: segments.length > 0, domain: publicDomain(finalDomain) })
   } catch (error) {
     const status = Number(error?.status || 0)
     if (status) return res.status(status).json({ error: error?.message || 'Transcription failed' })
