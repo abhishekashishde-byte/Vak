@@ -62,25 +62,31 @@ const setGlossaryUpdatedAt = value => {
 
 const sanitiseGlossary = glossary => {
   if (!Array.isArray(glossary)) return []
-  return glossary.slice(-40).map(item => ({
-    id: String(item?.id || ''),
-    target: String(item?.target || '').slice(0, 32),
-    source: String(item?.source || '').slice(0, 160),
-    preferred: String(item?.preferred || '').slice(0, 160),
-  })).filter(item => item.target && item.source && item.preferred)
+  return glossary.slice(-120).map(item => {
+    const scope = ['personal', 'project', 'company'].includes(item?.scope) ? item.scope : 'personal'
+    const rule = ['preferred', 'locked'].includes(item?.rule) ? item.rule : 'preferred'
+    const source = String(item?.source || '').slice(0, 160)
+    const preferred = String(item?.preferred || (rule === 'locked' ? source : '')).slice(0, 160)
+    return {
+      id: String(item?.id || ''),
+      target: String(item?.target || '').slice(0, 40),
+      source,
+      preferred,
+      scope,
+      context: scope === 'personal' ? '' : String(item?.context || '').slice(0, 120),
+      rule,
+    }
+  }).filter(item => item.target && item.source && item.preferred)
 }
 
 const glossarySignature = glossary => JSON.stringify(sanitiseGlossary(glossary))
 
 const mergeGlossaries = (older = [], newer = []) => {
   const map = new Map()
-  for (const item of sanitiseGlossary(older)) {
-    map.set(`${item.target}\u0000${item.source.toLocaleLowerCase()}`, item)
-  }
-  for (const item of sanitiseGlossary(newer)) {
-    map.set(`${item.target}\u0000${item.source.toLocaleLowerCase()}`, item)
-  }
-  return [...map.values()].slice(-40)
+  const keyFor = item => [item.scope, item.context.toLocaleLowerCase(), item.target, item.source.toLocaleLowerCase()].join('\u0000')
+  for (const item of sanitiseGlossary(older)) map.set(keyFor(item), item)
+  for (const item of sanitiseGlossary(newer)) map.set(keyFor(item), item)
+  return [...map.values()].slice(-120)
 }
 
 export const getPrivacySettings = () => ({
