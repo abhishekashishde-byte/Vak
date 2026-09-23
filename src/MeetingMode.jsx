@@ -527,6 +527,7 @@ export default function MeetingMode() {
     if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode, segments: finalSegments, names: {}, audioPath: retainedAudioPath, meetingBookmarks: bookmarks }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
     else { setNotesStatus('error'); setNotesError(finalTranscriptError || 'Not enough speech was captured to create meeting notes.') }
     setConsentVerified(false)
+    setKeepAudio(false)
   }
 
   const togglePause = () => {
@@ -542,9 +543,10 @@ export default function MeetingMode() {
     if (active || processing) return
     meetingModeRef.current = value; setMeetingMode(value); setError(''); setNotesError(''); setMeetingNotes(null); setNotesStatus('idle'); originalTextRef.current = ''; translatedTextRef.current = ''; setOriginalText(''); setTranslatedText(''); setLiveOriginal(''); setLiveTranslation(''); setStartedAt(null); startedAtRef.current = 0; setElapsed(0); setSessionState('idle'); try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
-  const clearTranscript = () => {
+  const clearTranscript = async () => {
     if (active || processing) return
-    originalTextRef.current = ''; translatedTextRef.current = ''; startedAtRef.current = 0; setOriginalText(''); setTranslatedText(''); setTranscriptSegments([]); setSpeakerNames({}); setTranscriptDirty(false); setMeetingNotes(null); setNotesStatus('idle'); setNotesError(''); setStartedAt(null); setElapsed(0); setSessionState('idle'); try { localStorage.removeItem(STORAGE_KEY) } catch {}
+    if (clean(meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath)) await deleteRetainedAudio()
+    originalTextRef.current = ''; translatedTextRef.current = ''; startedAtRef.current = 0; setOriginalText(''); setTranslatedText(''); setTranscriptSegments([]); setSpeakerNames({}); setTranscriptDirty(false); setMeetingNotes(null); setNotesStatus('idle'); setNotesError(''); setStartedAt(null); setElapsed(0); setSessionState('idle'); setBookmarks([]); setMissedSummary(''); try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
   const updateTranscriptSegment = (index, text) => {
@@ -590,9 +592,71 @@ export default function MeetingMode() {
       setSessionState('ended')
       await generateMeetingNotes({ transcript: result.text, translation: '', start, end, mode: 'import', segments, names: {}, audioPath: result.audioPath || '', meetingBookmarks: bookmarks })
       setConsentVerified(false)
+      setKeepAudio(false)
     } catch (err) {
       setSessionState('idle'); setNotesStatus('error'); setNotesError(err?.message || 'Could not import this meeting audio.')
     } finally { setImportingAudio(false) }
+  }
+
+  const addBookmark = () => {
+    if (!activeRef.current || !startedAtRef.current) return
+    const at = Math.max(0, (Date.now() - startedAtRef.current) / 1000)
+    setBookmarks(previous => [...previous, { id: `bookmark-${Date.now()}`, at }].slice(-30))
+  }
+
+  const whatDidIMiss = async () => {
+    if (!activeRef.current || meetingModeRef.current === 'mom' || missedLoading) return
+    const recent = appendText(
+      originalTextRef.current,
+      meetingModeRef.current === 'translate' ? originalBufferRef.current : liveOriginal
+    ).slice(-2600)
+    if (recent.length < 40) { setMissedSummary('Not enough speech has been captured yet.'); return }
+    setMissedLoading(true)
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: recent,
+          instructions: `Summarize only the most recent discussion for someone who briefly stepped away. Write in ${targetRef.current}. Maximum 3 short bullets. Focus on decisions, changes, questions and actions; omit greetings and filler. Do not invent anything.`,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error || 'Could not prepare a catch-up.')
+      setMissedSummary(clean(data?.content) || 'No meaningful update was detected.')
+    } catch (error) {
+      setMissedSummary(error?.message || 'Catch-up is temporarily unavailable.')
+    } finally { setMissedLoading(false) }
+  }
+
+  const playRetainedAudio = async startSeconds => {
+    const path = clean(meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath)
+    if (!path || !supabase) return
+    try {
+      const { data, error: signedError } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600)
+      if (signedError || !data?.signedUrl) throw new Error(signedError?.message || 'Could not open retained audio.')
+      try { audioPlayerRef.current?.pause?.() } catch {}
+      const audio = new Audio(data.signedUrl)
+      audioPlayerRef.current = audio
+      audio.addEventListener('loadedmetadata', () => { audio.currentTime = Math.max(0, Number(startSeconds) || 0); void audio.play() }, { once: true })
+      audio.addEventListener('error', () => setNotesError('Retained audio could not be played.'), { once: true })
+    } catch (error) { setNotesError(error?.message || 'Retained audio could not be played.') }
+  }
+
+  const deleteRetainedAudio = async () => {
+    const record = meetingNotes
+    const path = clean(record?.notes?._ana?.audioPath || record?.audioPath)
+    if (!path || !supabase) return
+    try {
+      const { error: removeError } = await supabase.storage.from(AUDIO_BUCKET).remove([path])
+      if (removeError) throw removeError
+      const notes = record?.notes ? { ...record.notes, _ana: { ...(record.notes._ana || {}), audioPath: '' } } : record?.notes
+      const updated = { ...record, audioPath: '', notes }
+      setMeetingNotes(updated)
+      saveMeetingRecord(updated)
+      try { audioPlayerRef.current?.pause?.() } catch {}
+      setNotesError('')
+    } catch (error) { setNotesError(error?.message || 'Could not delete retained audio.') }
   }
 
   const fullOriginal = appendText(originalText, liveOriginal), fullTranslation = appendText(translatedText, liveTranslation), copyValue = meetingMode === 'translate' ? clean(fullTranslation || fullOriginal) : clean(fullOriginal)
@@ -626,6 +690,7 @@ export default function MeetingMode() {
     const blob = new Blob([lines], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), anchor = document.createElement('a')
     anchor.href = url; anchor.download = `ana-mom-${new Date(record.startedAt || Date.now()).toISOString().slice(0, 10)}.md`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
+  const retainedAudioPath = clean(meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath)
   const statusText = sessionState === 'connecting' ? 'Connecting…' : sessionState === 'recovering' ? 'Reconnecting…' : sessionState === 'processing' ? 'Preparing final transcript…' : paused ? 'Paused' : active ? (meetingMode === 'mom' ? 'Ana is recording' : 'Ana is listening now') : sessionState === 'ended' ? 'Meeting ended' : 'Ready'
 
   return <section className="meeting-wrap meeting-realtime">
@@ -661,6 +726,7 @@ export default function MeetingMode() {
       </section>
 
       <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Consent verified</strong> I confirm participants have been informed and I have the necessary permission to record/process this meeting.</span></label>
+      <label className="meeting-consent meeting-keep-audio"><input type="checkbox" checked={keepAudio} onChange={event => setKeepAudio(event.target.checked)} disabled={active || processing}/><span><strong>Keep audio after transcription</strong> Off by default. If enabled, Ana retains this meeting audio privately so transcript timestamps can replay the original moment.</span></label>
       <div className={`meeting-single-card ${active ? 'active' : ''}`}>
         <div className="meeting-status-row meeting-live-status"><div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div><span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span></div>
 
@@ -670,9 +736,11 @@ export default function MeetingMode() {
         </div>}
         {meetingMode === 'transcript' && <div className="meeting-transcript-only-screen"><div className="meeting-screen-label"><span>Live transcript</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div><div ref={hearingPaneRef} className="meeting-screen-scroll meeting-transcript-only-scroll"><p>{fullOriginal || (active ? 'Listening for speech…' : 'Start listening and the transcript will appear here.')}</p></div></div>}
         {meetingMode === 'mom' && <div className="meeting-mom-only-screen"><FileAudio size={28}/><strong>{active ? 'Recording the meeting' : sessionState === 'ended' ? 'Meeting processed' : 'No live transcript on screen'}</strong><p>{active ? 'Ana is recording the audio. When you end the meeting, Ana will create a high-quality transcript and prepare the MOM.' : 'Start the meeting and keep this screen quiet. The transcript is prepared only after you press End meeting.'}</p></div>}
+        {bookmarks.length > 0 && <div className="meeting-bookmarks">{bookmarks.map((item,index)=><span key={item.id || index}><Bookmark size={11}/>{formatSegmentTime(item.at)}</span>)}</div>}
+        {(missedLoading || missedSummary) && <div className="meeting-catchup-card"><strong>Catch-up</strong><p>{missedLoading ? 'Ana is summarizing the most recent discussion…' : missedSummary}</p></div>}
         {error && <div className="error meeting-error">{error}</div>}
         <div className="meeting-single-footer">
-          <div className="meeting-controls">{!active ? <><button className="meeting-start" onClick={startMeeting} disabled={processing || !consentVerified}><Headphones size={18}/> Start meeting</button><label className="meeting-import-button"><Upload size={16}/>{importingAudio ? 'Importing…' : 'Import audio'}<input type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.mp4" onChange={importAudioFile} disabled={processing || importingAudio || !consentVerified}/></label></> : <><button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button><button className="meeting-stop" onClick={endMeeting} disabled={processing}><Square size={16}/> End meeting</button></>}</div>
+          <div className="meeting-controls">{!active ? <><button className="meeting-start" onClick={startMeeting} disabled={processing || !consentVerified}><Headphones size={18}/> Start meeting</button><label className="meeting-import-button"><Upload size={16}/>{importingAudio ? 'Importing…' : 'Import audio'}<input type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.mp4" onChange={importAudioFile} disabled={processing || importingAudio || !consentVerified}/></label></> : <><button className="meeting-pause" onClick={togglePause}>{paused ? <Play size={17}/> : <Pause size={17}/>} {paused ? 'Resume' : 'Pause'}</button><button className="meeting-bookmark" onClick={addBookmark}><Bookmark size={15}/> Bookmark{bookmarks.length ? ` ${bookmarks.length}` : ''}</button>{meetingMode !== 'mom' && <button className="meeting-catchup" onClick={whatDidIMiss} disabled={missedLoading}>{missedLoading ? 'Catching up…' : 'What did I miss?'}</button>}<button className="meeting-stop" onClick={endMeeting} disabled={processing}><Square size={16}/> End meeting</button></>}</div>
           <div className="meeting-transcript-actions meeting-single-actions"><button onClick={copyTranscript} disabled={!copyValue}>{copied ? <Check size={15}/> : <Clipboard size={15}/>} {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadTranscript} disabled={!fullOriginal && !fullTranslation}><Download size={15}/> Download</button><button onClick={clearTranscript} disabled={active || processing || (!fullOriginal && !fullTranslation)}><Trash2 size={15}/> Clear</button></div>
         </div>
       </div>
@@ -690,8 +758,8 @@ export default function MeetingMode() {
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.decisions?.length && <section className="meeting-notes-section"><h3>Decisions</h3><ul>{meetingNotes.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
         {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item === 'string' ? item : item?.task}</strong>{typeof item !== 'string' && (item?.owner || item?.deadline) && <small>{item?.owner ? `Owner: ${item.owner}` : 'Owner: not specified'}{item?.deadline ? ` · Deadline: ${item.deadline}` : ''}</small>}</div>)}</div></section>}
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
-        {(transcriptSegments.length > 0 || originalText) && <section className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button><button className={transcriptDirty ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={!transcriptDirty || processing}><RefreshCw size={14}/> Regenerate MOM</button></div></div>
-          {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article className="meeting-segment-row" key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><strong>{speakerNames[segment.speaker] || segment.speaker}</strong></div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
+        {(transcriptSegments.length > 0 || originalText) && <section className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button>{retainedAudioPath && <button onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button>}<button className={transcriptDirty ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={!transcriptDirty || processing}><RefreshCw size={14}/> Regenerate MOM</button></div></div>
+          {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article className="meeting-segment-row" key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><strong>{speakerNames[segment.speaker] || segment.speaker}</strong>{retainedAudioPath && <button type="button" className="meeting-play-segment" onClick={() => playRetainedAudio(segment.start)}><Play size={11}/> Replay</button>}</div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
         </section>}
       </div>}
       {notesError && <div className="meeting-notes-error">{notesError}</div>}
@@ -701,6 +769,6 @@ export default function MeetingMode() {
       {record.notes?.summary && <div><h4>Summary</h4><p>{record.notes.summary}</p></div>}{!!record.notes?.keyPoints?.length && <div><h4>Key points</h4><ul>{record.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.decisions?.length && <div><h4>Decisions</h4><ul>{record.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.actions?.length && <div><h4>To-do / actions</h4><ul>{record.notes.actions.map((item,index)=><li key={index}>{typeof item === 'string' ? item : [item?.task, item?.owner ? `Owner: ${item.owner}` : '', item?.deadline ? `Deadline: ${item.deadline}` : ''].filter(Boolean).join(' · ')}</li>)}</ul></div>}{!!record.notes?.openQuestions?.length && <div><h4>Open questions</h4><ul>{record.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}
       <div className="meeting-history-transcripts">{!!record.translatedText && <details><summary>Translated transcript</summary><p>{record.translatedText}</p></details>}<details><summary>Original transcript</summary><p>{record.originalText || '—'}</p></details></div></div></details> })}</div></section>}
 
-    <p className="meeting-footnote">All three modes keep the complete final transcript as evidence. Ana filters greetings, filler and off-topic chatter only when preparing the MOM. The temporary meeting-audio upload is removed after the final transcription pass.</p>
+    <p className="meeting-footnote">All three modes keep the complete final transcript as evidence. Ana filters greetings, filler and off-topic chatter only when preparing the MOM. Meeting audio is deleted after transcription by default; it is retained only when you explicitly enable Keep audio.</p>
   </section>
 }
