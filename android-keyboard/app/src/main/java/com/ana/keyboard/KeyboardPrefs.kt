@@ -26,6 +26,9 @@ object KeyboardPrefs {
     private const val KEY_AUTO_SPACE_PUNCT = "auto_space_punctuation"
     private const val KEY_AUTO_SPACE_SUGGESTION = "auto_space_suggestion"
     private const val KEY_TOOLBAR = "ana_toolbar_compact_v2"
+    private const val KEY_TOOLBAR_ACTIONS = "toolbar_actions_v1"
+    private const val KEY_LONG_PRESS_MS = "long_press_ms"
+    private const val KEY_SHARED_GLOSSARY = "shared_glossary_v1"
     private const val KEY_THEME = "keyboard_theme"
     private const val KEY_BACKGROUND_URI = "background_uri"
     private const val KEY_BACKGROUND_TINT = "background_tint_percent"
@@ -60,6 +63,14 @@ object KeyboardPrefs {
 
     data class TranslationTarget(val name: String, val badge: String)
     data class ClipboardItem(val text: String, val pinned: Boolean = false, val createdAt: Long = System.currentTimeMillis())
+    data class SharedGlossaryEntry(
+        val target: String,
+        val source: String,
+        val preferred: String,
+        val scope: String = "personal",
+        val context: String = "",
+        val rule: String = "preferred"
+    )
 
     val translationTargets = listOf(
         TranslationTarget("German", "DE"),
@@ -219,9 +230,45 @@ object KeyboardPrefs {
     fun autoSpaceAfterSuggestion(context: Context): Boolean = prefs(context).getBoolean(KEY_AUTO_SPACE_SUGGESTION, true)
     fun setAutoSpaceAfterSuggestion(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_AUTO_SPACE_SUGGESTION, enabled).apply()
 
-    // Compact toolbar now contains only the useful Ana actions (Translate, Write, clipboard, mic, target language).
+    // Compact toolbar. Advanced actions remain available but are opt-in so
+    // the keyboard does not grow every time Ana gains a capability.
     fun toolbarEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_TOOLBAR, true)
     fun setToolbarEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_TOOLBAR, enabled).apply()
+
+    val toolbarActionOptions = listOf(
+        "translate" to "Translate",
+        "write" to "Write",
+        "correct" to "Correct",
+        "shorter" to "Shorter",
+        "friendly" to "Friendly",
+        "formal" to "Formal",
+        "du" to "Du",
+        "sie" to "Sie",
+        "clipboard" to "Clipboard",
+        "undo" to "Undo",
+        "redo" to "Redo",
+        "select_all" to "Select all",
+        "app_ai" to "Per-app AI",
+        "private" to "Incognito",
+        "voice_edit" to "Voice edit",
+        "voice" to "Voice"
+    )
+    private val defaultToolbarActions = setOf("translate", "write", "correct", "clipboard", "undo", "private", "voice")
+
+    fun toolbarActions(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_TOOLBAR_ACTIONS, defaultToolbarActions)?.toSet() ?: defaultToolbarActions
+
+    fun toolbarActionEnabled(context: Context, id: String): Boolean = id in toolbarActions(context)
+
+    fun setToolbarActionEnabled(context: Context, id: String, enabled: Boolean) {
+        if (toolbarActionOptions.none { it.first == id }) return
+        val next = toolbarActions(context).toMutableSet()
+        if (enabled) next.add(id) else next.remove(id)
+        prefs(context).edit().putStringSet(KEY_TOOLBAR_ACTIONS, next).apply()
+    }
+
+    fun longPressDelayMs(context: Context): Int = prefs(context).getInt(KEY_LONG_PRESS_MS, 360).coerceIn(260, 520)
+    fun setLongPressDelayMs(context: Context, value: Int) = prefs(context).edit().putInt(KEY_LONG_PRESS_MS, value.coerceIn(260, 520)).apply()
 
     fun theme(context: Context): String = prefs(context).getString(KEY_THEME, "dark") ?: "dark"
     fun setTheme(context: Context, value: String) = prefs(context).edit().putString(KEY_THEME, value).apply()
@@ -270,6 +317,61 @@ object KeyboardPrefs {
 
     fun privacyShieldEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_PRIVACY_SHIELD, true)
     fun setPrivacyShieldEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_PRIVACY_SHIELD, enabled).apply()
+
+    fun setSharedGlossary(context: Context, entries: List<SharedGlossaryEntry>) {
+        val array = JSONArray()
+        entries.take(160).forEach { entry ->
+            val source = entry.source.trim().take(160)
+            val preferred = entry.preferred.trim().take(160)
+            if (source.isBlank()) return@forEach
+            array.put(JSONObject().apply {
+                put("target", entry.target.trim().take(40))
+                put("source", source)
+                put("preferred", preferred)
+                put("scope", entry.scope.trim().ifBlank { "personal" }.take(24))
+                put("context", entry.context.trim().take(120))
+                put("rule", entry.rule.trim().ifBlank { "preferred" }.take(32))
+            })
+        }
+        prefs(context).edit().putString(KEY_SHARED_GLOSSARY, array.toString()).apply()
+    }
+
+    fun sharedGlossary(context: Context): List<SharedGlossaryEntry> {
+        val raw = prefs(context).getString(KEY_SHARED_GLOSSARY, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val source = item.optString("source").trim()
+                    if (source.isBlank()) continue
+                    add(SharedGlossaryEntry(
+                        target = item.optString("target").trim(),
+                        source = source,
+                        preferred = item.optString("preferred").trim(),
+                        scope = item.optString("scope", "personal").trim().ifBlank { "personal" },
+                        context = item.optString("context").trim(),
+                        rule = item.optString("rule", "preferred").trim().ifBlank { "preferred" }
+                    ))
+                }
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun sharedGlossaryTerms(context: Context, badge: String = inputBadge(context)): List<String> {
+        val acceptedTargets = when (badge) {
+            "DE" -> setOf("German", "Swabian German (Schwäbisch)", "Bavarian German (Bairisch)", "Low German (Plattdeutsch)")
+            "HIN" -> setOf("Hindi", "Hinglish")
+            else -> setOf("English")
+        }
+        return sharedGlossary(context)
+            .filter { it.target.isBlank() || it.target in acceptedTargets }
+            .flatMap { listOf(it.source, it.preferred) }
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.contains(' ') && it.length <= 60 }
+            .distinctBy { it.lowercase() }
+            .take(120)
+    }
 
     fun personalDictionary(context: Context, badge: String = inputBadge(context)): List<String> {
         val raw = learningPrefs(context).getString(KEY_PERSONAL_DICTIONARY_PREFIX + badge, "[]") ?: "[]"
