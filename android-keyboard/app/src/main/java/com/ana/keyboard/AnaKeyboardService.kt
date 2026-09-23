@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.hardware.SensorPrivacyManager
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -1661,17 +1660,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("Allow microphone permission, then tap the microphone again")
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val privacy = getSystemService(SensorPrivacyManager::class.java)
-            val micBlocked = try {
-                privacy?.supportsSensorToggle(SensorPrivacyManager.Sensors.MICROPHONE) == true &&
-                    privacy.isSensorPrivacyEnabled(SensorPrivacyManager.Sensors.MICROPHONE)
-            } catch (_: Exception) { false }
-            if (micBlocked) {
-                showStatus("Android Mic access is OFF — turn it on in Quick Settings")
-                return
-            }
-        }
         val standardAvailable = SpeechRecognizer.isRecognitionAvailable(this)
         val canUseOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
@@ -1958,10 +1946,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun voiceErrorMessage(error: Int): String = when (error) {
-        SpeechRecognizer.ERROR_NO_MATCH -> "Nothing understood — tap the mic and try again"
+        SpeechRecognizer.ERROR_NO_MATCH -> "Nothing understood — if this repeats, check Android Mic access"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is required"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy — try again"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                "Ana permission is allowed — check Android Mic access in Quick Settings"
+            else "Microphone permission is required"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech service was busy — Ana reset it; tap the mic again"
+        SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_SERVER -> "Speech service reset — tap the mic again"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network error"
         else -> if (voiceRecognizerOnDevice && onDeviceVoiceFailedThisSession) {
             "On-device speech failed — Ana will use Android speech recognition next time"
