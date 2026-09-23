@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Camera, CameraOff, Check, ImagePlus, Languages, LoaderCircle, RefreshCcw, ScanLine, X } from 'lucide-react'
+import { AlertTriangle, Camera, CameraOff, Check, Download, ImagePlus, Languages, LoaderCircle, Minus, Plus, RefreshCcw, ScanLine, X } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { getNetworkState } from './networkResilience.js'
 
@@ -94,27 +94,59 @@ function blockStyle(block) {
   const y = Math.max(0, Math.min(1000, Number(block.y) || 0))
   const width = Math.max(12, Math.min(1000 - x, Number(block.width) || 120))
   const height = Math.max(18, Math.min(1000 - y, Number(block.height) || 50))
+  const sourceLength = Math.max(1, String(block.text || '').length)
+  const translatedLength = Math.max(1, String(block.translation || '').length)
+  const expansion = Math.max(1, translatedLength / sourceLength)
+  const fontSize = Math.max(9, Math.min(24, (height / 3.4) / Math.sqrt(expansion)))
   return {
-    left: `${x / 10}%`,
-    top: `${y / 10}%`,
-    width: `${width / 10}%`,
-    minHeight: `${height / 10}%`,
+    left: (x / 10) + '%',
+    top: (y / 10) + '%',
+    width: (width / 10) + '%',
+    minHeight: (height / 10) + '%',
+    fontSize: fontSize + 'px',
   }
 }
 
-export default function CameraMode() {
+function touchDistance(touches) {
+  if (!touches || touches.length < 2) return 0
+  const dx = touches[0].clientX - touches[1].clientX
+  const dy = touches[0].clientY - touches[1].clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function canvasWrapText(ctx, text, maxWidth) {
+  const words = String(text || '').split(/\s+/).filter(Boolean)
+  const lines = []
+  let line = ''
+  for (const word of words) {
+    const candidate = line ? line + ' ' + word : word
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+export default function CameraMode() {export default function CameraMode() {
   const [target, setTarget] = useState(initialTarget)
   const [stage, setStage] = useState('ready')
   const [imageData, setImageData] = useState('')
   const [blocks, setBlocks] = useState([])
   const [error, setError] = useState('')
-  const [overlay, setOverlay] = useState(true)
+  const [viewMode, setViewMode] = useState('translated')
+  const [comparePosition, setComparePosition] = useState(50)
+  const [zoom, setZoom] = useState(1)
   const [copiedId, setCopiedId] = useState('')
   const [quality, setQuality] = useState({ low: 0, handwritten: 0 })
 
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const inputRef = useRef(null)
+  const pinchRef = useRef({ distance: 0, zoom: 1 })
 
   const cameraSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
   const busy = stage === 'reading' || stage === 'translating'
@@ -228,7 +260,81 @@ export default function CameraMode() {
     setQuality({ low: 0, handwritten: 0 })
     setError('')
     setCopiedId('')
+    setViewMode('translated')
+    setComparePosition(50)
+    setZoom(1)
     setStage('ready')
+  }
+
+  const handlePinchStart = event => {
+    if (event.touches?.length !== 2) return
+    pinchRef.current = { distance: touchDistance(event.touches), zoom }
+  }
+
+  const handlePinchMove = event => {
+    if (event.touches?.length !== 2 || !pinchRef.current.distance) return
+    event.preventDefault()
+    const ratio = touchDistance(event.touches) / pinchRef.current.distance
+    setZoom(Math.max(1, Math.min(3.5, pinchRef.current.zoom * ratio)))
+  }
+
+  const downloadTranslatedImage = async () => {
+    if (!imageData || !blocks.length) return
+
+    const image = new Image()
+    image.src = imageData
+    await new Promise((resolve, reject) => {
+      image.onload = resolve
+      image.onerror = reject
+    })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth || image.width
+    canvas.height = image.naturalHeight || image.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+    for (const block of blocks) {
+      if (!block.translation) continue
+      const x = (Math.max(0, Number(block.x) || 0) / 1000) * canvas.width
+      const y = (Math.max(0, Number(block.y) || 0) / 1000) * canvas.height
+      const w = (Math.max(12, Number(block.width) || 120) / 1000) * canvas.width
+      const h = (Math.max(18, Number(block.height) || 50) / 1000) * canvas.height
+
+      ctx.fillStyle = 'rgba(20,20,20,.84)'
+      ctx.fillRect(x, y, w, Math.max(h, 22))
+
+      let fontSize = Math.max(11, Math.min(30, h * 0.42))
+      ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif'
+      ctx.fillStyle = '#fff'
+      ctx.textBaseline = 'top'
+      let lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
+
+      while (lines.length * fontSize * 1.2 > Math.max(h, 30) && fontSize > 9) {
+        fontSize -= 1
+        ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif'
+        lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
+      }
+
+      const maxLines = Math.max(1, Math.floor(Math.max(h, 30) / (fontSize * 1.2)))
+      lines.slice(0, maxLines).forEach((line, index) => {
+        ctx.fillText(line, x + 5, y + 4 + index * fontSize * 1.2)
+      })
+    }
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'ana-translated-image.png'
+    anchor.rel = 'noopener'
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
   }
 
   const copyTranslation = async block => {
@@ -248,8 +354,9 @@ export default function CameraMode() {
     <div className="camera-toolbar">
       <label><Languages size={15}/><span>Translate to</span><select value={target} disabled={busy} onChange={e => changeTarget(e.target.value)}>{TARGETS.map(value => <option key={value}>{value}</option>)}</select></label>
       {stage === 'result' && imageData && <div className="camera-overlay-toggle" aria-label="Image display">
-        <button className={overlay ? 'active' : ''} onClick={() => setOverlay(true)}>Translated overlay</button>
-        <button className={!overlay ? 'active' : ''} onClick={() => setOverlay(false)}>Original photo</button>
+        <button className={viewMode === 'translated' ? 'active' : ''} onClick={() => setViewMode('translated')}>Translated</button>
+        <button className={viewMode === 'original' ? 'active' : ''} onClick={() => setViewMode('original')}>Original</button>
+        <button className={viewMode === 'compare' ? 'active' : ''} onClick={() => setViewMode('compare')}>Compare</button>
       </div>}
     </div>
 
@@ -284,19 +391,42 @@ export default function CameraMode() {
     </div>}
 
     {stage === 'result' && imageData && <>
-      <div className={`camera-result-image ${overlay ? 'with-overlay' : ''}`}>
-        <img src={imageData} alt="Captured scene"/>
-        {overlay && blocks.map(block => <button
-          key={block.id}
-          className={`camera-visual-block ${block.confidence === 'low' || block.handwritten ? 'review' : ''}`}
-          style={blockStyle(block)}
-          onClick={() => document.getElementById(`camera-detail-${block.id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })}
-          title={block.confidence === 'low' ? 'This text was hard to read — check the original.' : block.translation}
-        >
-          <span>{block.translation || block.text}</span>
-          {(block.confidence === 'low' || block.handwritten) && <AlertTriangle size={11}/>} 
-        </button>)}
+      <div className="camera-zoom-tools" aria-label="Image zoom">
+        <button onClick={() => setZoom(value => Math.max(1, value - .25))} disabled={zoom <= 1}><Minus size={15}/></button>
+        <button onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+        <button onClick={() => setZoom(value => Math.min(3.5, value + .25))} disabled={zoom >= 3.5}><Plus size={15}/></button>
+        <span>Pinch or use the controls to inspect small text.</span>
       </div>
+
+      <div className="camera-image-viewport" onTouchStart={handlePinchStart} onTouchMove={handlePinchMove}>
+        <div className="camera-image-scaled" style={{ width: (zoom * 100) + '%' }}>
+          <div className={'camera-result-image ' + (viewMode !== 'original' ? 'with-overlay' : '')}>
+            <img src={imageData} alt="Captured scene"/>
+            {viewMode !== 'original' && <div
+              className="camera-translation-layer"
+              style={viewMode === 'compare' ? { clipPath: 'inset(0 ' + (100 - comparePosition) + '% 0 0)' } : undefined}
+            >
+              {blocks.map(block => <button
+                key={block.id}
+                className={'camera-visual-block ' + (block.confidence === 'low' || block.handwritten ? 'review' : '')}
+                style={blockStyle(block)}
+                onClick={() => document.getElementById('camera-detail-' + block.id)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })}
+                title={block.confidence === 'low' ? 'This text was hard to read — check the original.' : block.translation}
+              >
+                <span>{block.translation || block.text}</span>
+                {(block.confidence === 'low' || block.handwritten) && <AlertTriangle size={11}/>}
+              </button>)}
+            </div>}
+            {viewMode === 'compare' && <div className="camera-compare-divider" style={{ left: comparePosition + '%' }}/>}
+          </div>
+        </div>
+      </div>
+
+      {viewMode === 'compare' && <label className="camera-compare-slider">
+        <span>Translated</span>
+        <input type="range" min="10" max="90" value={comparePosition} onChange={event => setComparePosition(Number(event.target.value))}/>
+        <span>Original</span>
+      </label>}
 
       {reviewCount > 0 && <div className="camera-review-note"><AlertTriangle size={17}/><div><strong>Check {reviewCount} area{reviewCount === 1 ? '' : 's'} against the photo.</strong><span>{quality.low ? `${quality.low} area${quality.low === 1 ? ' was' : 's were'} hard to read. ` : ''}{quality.handwritten ? `${quality.handwritten} handwritten area${quality.handwritten === 1 ? ' needs' : 's need'} extra care.` : ''}</span></div></div>}
 
@@ -315,7 +445,8 @@ export default function CameraMode() {
       </div>}
 
       <div className="camera-result-actions">
-        <button className="camera-primary" onClick={startCamera}><RefreshCcw size={17}/> Capture another</button>
+        <button className="camera-primary" onClick={downloadTranslatedImage}><Download size={17}/> Save translated image</button>
+        <button className="camera-secondary" onClick={startCamera}><RefreshCcw size={17}/> Capture another</button>
         <button className="camera-secondary" onClick={() => inputRef.current?.click()}><ImagePlus size={17}/> Choose another photo</button>
         <button className="camera-secondary" onClick={reset}><CameraOff size={17}/> Finish</button>
       </div>
