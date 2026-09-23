@@ -329,6 +329,18 @@ export default function MeetingIntelligence() {
 
   useEffect(() => { if (selected) ensureEnriched(selected) }, [selected?.id])
 
+  useEffect(() => {
+    const openMeeting = event => {
+      const id = clean(event?.detail?.id)
+      if (!id || !history.some(record => String(record.id) === id)) return
+      setSelectedId(id)
+      setAnswer('')
+      setOutput(null)
+    }
+    window.addEventListener('ana-open-meeting', openMeeting)
+    return () => window.removeEventListener('ana-open-meeting', openMeeting)
+  }, [history])
+
   const loadGmailStatus = async () => {
     const token = await sessionToken()
     if (!token) { setGmail({ loading: false, connected: false, email: '', configured: true, error: 'Please sign in again.' }); return }
@@ -372,8 +384,9 @@ export default function MeetingIntelligence() {
     if (!supabase || !action?.id) return
     const nextStatus = action.status === 'done' ? 'open' : 'done'
     setActions(previous => previous.map(item => item.id === action.id ? { ...item, status: nextStatus } : item))
-    const { error } = await supabase.from('meeting_actions').update({ status: nextStatus }).eq('id', action.id)
+    const { error } = await supabase.from('meeting_actions').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', action.id)
     if (error) { console.warn('[Ana meeting actions]', error.message); await refreshCloud() }
+    else window.dispatchEvent(new CustomEvent('ana-actions-changed'))
   }
 
   const askAna = async () => {
