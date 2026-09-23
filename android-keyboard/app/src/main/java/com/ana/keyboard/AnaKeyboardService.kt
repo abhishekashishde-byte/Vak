@@ -1256,12 +1256,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun handleEnter() {
         val connection = currentInputConnection ?: return
         finishLocalComposition(connection)
-        val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: EditorInfo.IME_ACTION_NONE
-        if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
-            connection.performEditorAction(action)
-        } else {
-            connection.commitText("\n", 1)
-        }
+        // Ana deliberately treats the bottom-right key as a real Enter key.
+        // Never call performEditorAction() here: many apps map that to Send,
+        // Go, Search or Post. If the target field refuses new lines, Ana leaves
+        // the text untouched rather than submitting it on the user's behalf.
+        connection.commitText("\n", 1)
         refreshShiftFromEditor()
     }
 
