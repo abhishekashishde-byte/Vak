@@ -1,6 +1,7 @@
 package com.ana.keyboard
 
 import android.content.Context
+import android.content.res.Configuration
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -41,6 +42,12 @@ object KeyboardPrefs {
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
     private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
     private const val KEY_ONE_HANDED_MODE = "one_handed_mode"
+    private const val KEY_ONE_HANDED_WIDTH = "one_handed_width_percent"
+    private const val KEY_KEY_GAP = "key_gap_dp"
+    private const val KEY_KEY_RADIUS = "key_radius_dp"
+    private const val KEY_KEY_LABEL_SCALE = "key_label_scale_percent"
+    private const val KEY_KEY_BORDERS = "key_borders"
+    private const val KEY_SPACEBAR_SCALE = "spacebar_scale_percent"
     private const val KEY_ADAPTIVE_TOUCH = "adaptive_touch"
     private const val KEY_TOUCH_CALIBRATION_PREFIX = "touch_calibration_"
 
@@ -394,22 +401,51 @@ object KeyboardPrefs {
     }
 
     fun oneHandedMode(context: Context): String {
-        val value = learningPrefs(context).getString(KEY_ONE_HANDED_MODE, "off") ?: "off"
+        val modern = prefs(context).getString(KEY_ONE_HANDED_MODE, null)
+        val legacy = learningPrefs(context).getString(KEY_ONE_HANDED_MODE, "off")
+        val value = modern ?: legacy ?: "off"
         return value.takeIf { it in setOf("off", "left", "right") } ?: "off"
     }
 
     fun setOneHandedMode(context: Context, value: String) {
         val safe = value.takeIf { it in setOf("off", "left", "right") } ?: "off"
-        learningPrefs(context).edit().putString(KEY_ONE_HANDED_MODE, safe).apply()
+        prefs(context).edit().putString(KEY_ONE_HANDED_MODE, safe).apply()
     }
+
+    fun oneHandedWidthPercent(context: Context): Int = prefs(context).getInt(KEY_ONE_HANDED_WIDTH, 78).coerceIn(68, 92)
+    fun setOneHandedWidthPercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_ONE_HANDED_WIDTH, value.coerceIn(68, 92)).apply()
+
+    fun keyGapDp(context: Context): Int = prefs(context).getInt(KEY_KEY_GAP, 5).coerceIn(2, 9)
+    fun setKeyGapDp(context: Context, value: Int) = prefs(context).edit().putInt(KEY_KEY_GAP, value.coerceIn(2, 9)).apply()
+
+    fun keyRadiusDp(context: Context): Int = prefs(context).getInt(KEY_KEY_RADIUS, 7).coerceIn(3, 18)
+    fun setKeyRadiusDp(context: Context, value: Int) = prefs(context).edit().putInt(KEY_KEY_RADIUS, value.coerceIn(3, 18)).apply()
+
+    fun keyLabelScalePercent(context: Context): Int = prefs(context).getInt(KEY_KEY_LABEL_SCALE, 100).coerceIn(85, 125)
+    fun setKeyLabelScalePercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_KEY_LABEL_SCALE, value.coerceIn(85, 125)).apply()
+
+    fun keyBordersEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_KEY_BORDERS, false)
+    fun setKeyBordersEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_KEY_BORDERS, enabled).apply()
+
+    fun spacebarScalePercent(context: Context): Int = prefs(context).getInt(KEY_SPACEBAR_SCALE, 100).coerceIn(90, 135)
+    fun setSpacebarScalePercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_SPACEBAR_SCALE, value.coerceIn(90, 135)).apply()
 
     fun adaptiveTouchEnabled(context: Context): Boolean = learningPrefs(context).getBoolean(KEY_ADAPTIVE_TOUCH, true)
     fun setAdaptiveTouchEnabled(context: Context, enabled: Boolean) = learningPrefs(context).edit().putBoolean(KEY_ADAPTIVE_TOUCH, enabled).apply()
 
     data class TouchCalibration(val dx: Float, val dy: Float, val count: Int)
 
+    private fun calibrationKey(context: Context, badge: String): String {
+        val orientation = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) "land" else "port"
+        return KEY_TOUCH_CALIBRATION_PREFIX + badge + "_" + orientation
+    }
+
     fun touchCalibration(context: Context, badge: String = inputBadge(context)): Map<String, TouchCalibration> {
-        val raw = learningPrefs(context).getString(KEY_TOUCH_CALIBRATION_PREFIX + badge, "{}") ?: "{}"
+        val modernKey = calibrationKey(context, badge)
+        val store = learningPrefs(context)
+        val raw = store.getString(modernKey, null)
+            ?: store.getString(KEY_TOUCH_CALIBRATION_PREFIX + badge, "{}")
+            ?: "{}"
         return try {
             val json = JSONObject(raw)
             buildMap {
@@ -438,11 +474,16 @@ object KeyboardPrefs {
                 put("count", value.count.coerceIn(1, 100000))
             })
         }
-        learningPrefs(context).edit().putString(KEY_TOUCH_CALIBRATION_PREFIX + badge, json.toString()).apply()
+        learningPrefs(context).edit().putString(calibrationKey(context, badge), json.toString()).apply()
     }
 
-    fun clearTouchCalibration(context: Context, badge: String = inputBadge(context)) =
-        learningPrefs(context).edit().remove(KEY_TOUCH_CALIBRATION_PREFIX + badge).apply()
+    fun clearTouchCalibration(context: Context, badge: String = inputBadge(context)) {
+        learningPrefs(context).edit()
+            .remove(KEY_TOUCH_CALIBRATION_PREFIX + badge)
+            .remove(KEY_TOUCH_CALIBRATION_PREFIX + badge + "_port")
+            .remove(KEY_TOUCH_CALIBRATION_PREFIX + badge + "_land")
+            .apply()
+    }
 
     /**
      * Clears only account-synced language data when switching Ana accounts.
