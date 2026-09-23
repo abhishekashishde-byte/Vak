@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -18,10 +19,13 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
         fun onBackToLetters()
         fun onClearHistory()
         fun onTogglePin(text: String)
+        fun onDelete(text: String)
     }
 
     var listener: Listener? = null
     private val list = LinearLayout(context).apply { orientation = VERTICAL }
+    private var allItems = emptyList<KeyboardPrefs.ClipboardItem>()
+    private var query = ""
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
@@ -52,6 +56,27 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
             setPadding(dp(8), dp(2), dp(8), dp(6))
         })
 
+        val search = EditText(context).apply {
+            hint = "Search clipboard"
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            isSingleLine = true
+            textSize = 13f
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(82, 82, 82))
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    query = s?.toString().orEmpty().trim()
+                    renderItems()
+                }
+                override fun afterTextChanged(s: android.text.Editable?) = Unit
+            })
+        }
+        addView(search, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            bottomMargin = dp(6)
+        })
+
         val scroll = ScrollView(context).apply {
             isFillViewport = true
             addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -60,10 +85,18 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
     }
 
     fun setItems(items: List<KeyboardPrefs.ClipboardItem>) {
+        allItems = items
+        renderItems()
+    }
+
+    private fun renderItems() {
         list.removeAllViews()
-        if (items.isEmpty()) {
+        val filtered = allItems.filter {
+            query.isBlank() || it.text.contains(query, ignoreCase = true)
+        }
+        if (filtered.isEmpty()) {
             list.addView(TextView(context).apply {
-                text = "Clipboard is empty"
+                text = if (query.isBlank()) "Clipboard is empty" else "No clipboard matches"
                 textSize = 15f
                 setTextColor(Color.LTGRAY)
                 gravity = Gravity.CENTER
@@ -71,6 +104,20 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
             })
             return
         }
+
+        val pinned = filtered.filter { it.pinned }
+        val recent = filtered.filterNot { it.pinned }
+        if (pinned.isNotEmpty()) addSection("Pinned", pinned)
+        if (recent.isNotEmpty()) addSection("Recent", recent)
+    }
+
+    private fun addSection(title: String, items: List<KeyboardPrefs.ClipboardItem>) {
+        list.addView(TextView(context).apply {
+            text = title
+            textSize = 11f
+            setTextColor(Color.LTGRAY)
+            setPadding(dp(5), dp(7), dp(5), dp(5))
+        })
         items.take(20).forEach { clip ->
             val row = LinearLayout(context).apply {
                 orientation = HORIZONTAL
@@ -88,8 +135,11 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
                 setOnClickListener { listener?.onPaste(clip.text) }
             }
             row.addView(button, LayoutParams(0, dp(58), 1f))
-            row.addView(action(if (clip.pinned) "Pinned" else "Pin") { listener?.onTogglePin(clip.text) }, LayoutParams(dp(74), dp(48)).apply {
-                marginStart = dp(6)
+            row.addView(action(if (clip.pinned) "Unpin" else "Pin") { listener?.onTogglePin(clip.text) }, LayoutParams(dp(70), dp(48)).apply {
+                marginStart = dp(5)
+            })
+            row.addView(action("×") { listener?.onDelete(clip.text) }, LayoutParams(dp(48), dp(48)).apply {
+                marginStart = dp(4)
             })
             list.addView(row, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)).apply {
                 bottomMargin = dp(4)
