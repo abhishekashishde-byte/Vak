@@ -409,18 +409,45 @@ class MainActivity : Activity() {
         currentScreen = "layout"
         val root = page("Layout & keys")
 
-        root.addView(section("Keyboard size"))
+        root.addView(section("Portrait height"))
         KeyboardSizing.options.forEach { size ->
             val detail = when (size) {
-                "Small" -> "More screen space"
-                "Large" -> "Larger keys and taller keyboard"
-                else -> "Balanced default size"
+                "Small" -> "More screen space in portrait"
+                "Large" -> "Taller portrait keys"
+                else -> "Balanced portrait height"
             }
-            root.addView(choiceRow(size, detail, KeyboardSizing.size(this) == size) {
-                KeyboardSizing.setSize(this, size)
+            root.addView(choiceRow(size, detail, KeyboardSizing.portraitSize(this) == size) {
+                KeyboardSizing.setPortraitSize(this, size)
                 renderLayoutKeys()
             })
         }
+
+        root.addView(section("Landscape height"))
+        KeyboardSizing.options.forEach { size ->
+            val detail = when (size) {
+                "Small" -> "Compact landscape layout"
+                "Large" -> "Tall landscape keys"
+                else -> "Balanced landscape height"
+            }
+            root.addView(choiceRow(size, detail, KeyboardSizing.landscapeSize(this) == size) {
+                KeyboardSizing.setLandscapeSize(this, size)
+                renderLayoutKeys()
+            })
+        }
+
+        root.addView(section("Key feel & appearance"))
+        root.addView(intSliderCard("Key spacing", "Distance between visible keys", KeyboardPrefs.keyGapDp(this), 2, 9, " dp") {
+            KeyboardPrefs.setKeyGapDp(this, it)
+        })
+        root.addView(intSliderCard("Key roundness", "Corner radius of each key", KeyboardPrefs.keyRadiusDp(this), 3, 18, " dp") {
+            KeyboardPrefs.setKeyRadiusDp(this, it)
+        })
+        root.addView(intSliderCard("Key label size", "Letter and symbol size", KeyboardPrefs.keyLabelScalePercent(this), 85, 125, "%") {
+            KeyboardPrefs.setKeyLabelScalePercent(this, it)
+        })
+        root.addView(switchRow("Key borders", "Add a subtle outline to separate keys more clearly", KeyboardPrefs.keyBordersEnabled(this)) {
+            KeyboardPrefs.setKeyBordersEnabled(this, it)
+        })
 
         root.addView(section("One-handed mode"))
         root.addView(choiceRow("Off", "Full-width keyboard", KeyboardPrefs.oneHandedMode(this) == "off") {
@@ -435,12 +462,15 @@ class MainActivity : Activity() {
             KeyboardPrefs.setOneHandedMode(this, "right")
             renderLayoutKeys()
         })
+        root.addView(intSliderCard("One-handed width", "How much of the screen the compact keyboard uses", KeyboardPrefs.oneHandedWidthPercent(this), 68, 92, "%") {
+            KeyboardPrefs.setOneHandedWidthPercent(this, it)
+        })
 
         root.addView(section("Adaptive touch"))
         root.addView(switchRow("Learn my touch pattern", "Ana quietly adjusts invisible letter hitboxes to your usual thumb drift. Raw touch coordinates are not stored.", KeyboardPrefs.adaptiveTouchEnabled(this)) {
             KeyboardPrefs.setAdaptiveTouchEnabled(this, it)
         })
-        root.addView(infoCard("Local calibration", "Only small per-key offset averages and counts are stored on this device. The visible key layout never moves."))
+        root.addView(infoCard("Portrait + landscape learning", "Ana learns separate per-key thumb drift for portrait and landscape. Only small offset averages and counts are stored locally; raw touch coordinates are not retained."))
         root.addView(actionCard("Reset touch calibration") {
             KeyboardPrefs.clearTouchCalibration(this)
             activePreview?.refreshFromSettings()
@@ -449,6 +479,9 @@ class MainActivity : Activity() {
 
         root.addView(section("Spacebar"))
         root.addView(infoCard("Forgiving Space", "The spacebar has a larger invisible hit area. Hold briefly and slide left or right only when you intentionally want cursor control."))
+        root.addView(intSliderCard("Spacebar width", "Make the central space target wider or more compact", KeyboardPrefs.spacebarScalePercent(this), 90, 135, "%") {
+            KeyboardPrefs.setSpacebarScalePercent(this, it)
+        })
 
         root.addView(section("Keys"))
         root.addView(switchRow("Number row", "Always show 1–0 above letters", KeyboardPrefs.numberRowEnabled(this)) {
@@ -632,6 +665,37 @@ class MainActivity : Activity() {
             KeyboardPrefs.setBackgroundUri(this, uri.toString())
             renderTheme()
         }
+    }
+
+    private fun intSliderCard(
+        title: String,
+        subtitle: String,
+        current: Int,
+        min: Int,
+        max: Int,
+        suffix: String,
+        onChanged: (Int) -> Unit
+    ): View {
+        val wrap = cardContainer()
+        val titleView = titleText("$title: $current$suffix")
+        wrap.addView(titleView)
+        wrap.addView(subText(subtitle))
+        wrap.addView(SeekBar(this).apply {
+            this.max = (max - min).coerceAtLeast(1)
+            progress = (current - min).coerceIn(0, this.max)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    val value = (min + progress).coerceIn(min, max)
+                    onChanged(value)
+                    titleView.text = "$title: $value$suffix"
+                    activePreview?.refreshFromSettings()
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        })
+        return wrap
     }
 
     private fun vibrationStrengthCard(): View {

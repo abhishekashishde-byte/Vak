@@ -180,7 +180,7 @@ async function handleGoogleStart(req, res) {
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: 'code',
-    scope: 'openid email https://www.googleapis.com/auth/gmail.send',
+    scope: 'openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.readonly',
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -212,7 +212,7 @@ async function handleGoogleCallback(req, res) {
         refresh_token: seal({ token: refreshToken }),
         email: String(profile?.email || existing?.email || '').trim(),
         connected_at: new Date().toISOString(),
-        scope: 'gmail.send',
+        scope: String(tokenData?.scope || existing?.scope || 'https://www.googleapis.com/auth/gmail.send').trim(),
       },
     })
     return res.redirect(302, redirectWith(returnTo, 'gmail', 'connected'))
@@ -230,7 +230,11 @@ async function handleGoogleStatus(req, res) {
   const user = await verifySupabaseUser(token)
   if (!user?.id) return res.status(401).json({ error: 'Invalid session' })
   const connection = user.user_metadata?.google_gmail
-  return res.status(200).json({ connected: Boolean(connection?.refresh_token), email: String(connection?.email || '') })
+  return res.status(200).json({
+    connected: Boolean(connection?.refresh_token),
+    email: String(connection?.email || ''),
+    calendar: String(connection?.scope || '').includes('calendar.readonly'),
+  })
 }
 
 async function handleGoogleDisconnect(req, res) {
@@ -298,6 +302,58 @@ async function handleGoogleSend(req, res) {
   } catch (error) {
     console.error('[google-gmail send]', error?.message || error)
     return res.status(502).json({ error: error?.message || 'Gmail could not send the message.' })
+  }
+}
+
+async function handleGoogleCalendar(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!googleReady()) return res.status(503).json({ error: 'Google integration is not configured yet.' })
+  const token = bearerToken(req)
+  if (!token) return res.status(401).json({ error: 'Missing session' })
+  const user = await verifySupabaseUser(token)
+  if (!user?.id) return res.status(401).json({ error: 'Invalid session' })
+  const connection = user.user_metadata?.google_gmail
+  if (!connection?.refresh_token) return res.status(409).json({ error: 'Connect Google before reading calendar events.', reconnect: true })
+
+  try {
+    const refreshToken = unseal(connection.refresh_token)?.token
+    if (!refreshToken) throw new Error('Google connection is invalid')
+    const accessToken = await refreshGoogleAccessToken(refreshToken)
+    const now = new Date()
+    const days = Math.min(30, Math.max(1, Number(req.body?.days || 14)))
+    const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+    const params = new URLSearchParams({
+      timeMin: now.toISOString(),
+      timeMax: until.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '12',
+    })
+    const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      if (response.status === 403) {
+        return res.status(403).json({ error: 'Reconnect Google once to grant Ana read-only Calendar access.', reconnect: true })
+      }
+      throw new Error(data?.error?.message || 'Google Calendar could not be read')
+    }
+    const events = (Array.isArray(data?.items) ? data.items : []).map(item => ({
+      id: String(item?.id || ''),
+      title: String(item?.summary || 'Meeting').trim(),
+      start: String(item?.start?.dateTime || item?.start?.date || ''),
+      end: String(item?.end?.dateTime || item?.end?.date || ''),
+      attendees: (Array.isArray(item?.attendees) ? item.attendees : []).map(person => ({
+        name: String(person?.displayName || '').trim(),
+        email: String(person?.email || '').trim(),
+      })).filter(person => person.name || person.email).slice(0, 25),
+      link: String(item?.hangoutLink || '').trim(),
+    })).filter(item => item.id && item.start)
+    return res.status(200).json({ events })
+  } catch (error) {
+    console.error('[google-calendar]', error?.message || error)
+    return res.status(502).json({ error: error?.message || 'Google Calendar could not be read.' })
   }
 }
 
@@ -388,6 +444,7 @@ export default async function handler(req, res) {
     if (action === 'google-status') return await handleGoogleStatus(req, res)
     if (action === 'google-disconnect') return await handleGoogleDisconnect(req, res)
     if (action === 'google-send') return await handleGoogleSend(req, res)
+    if (action === 'google-calendar') return await handleGoogleCalendar(req, res)
     return await handleAuthNotification(req, res)
   } catch (error) {
     console.error('[auth-account]', error?.message || error)

@@ -148,6 +148,7 @@ export default function MeetingMode() {
     topic: clean(saved?.metadata?.topic),
     project: clean(saved?.metadata?.project),
     meetingType: clean(saved?.metadata?.meetingType) || 'Customer meeting',
+    attendees: Array.isArray(saved?.metadata?.attendees) ? saved.metadata.attendees.map(clean).filter(Boolean).slice(0, 25) : [],
     tags: cleanTags(saved?.metadata?.tags),
   }))
   const [selectedMomTemplate, setSelectedMomTemplate] = useState(() => saved.momTemplateId || momPrefs.selectedTemplateId || 'standard')
@@ -159,6 +160,8 @@ export default function MeetingMode() {
   const [speakerNames, setSpeakerNames] = useState(() => saved.speakerNames || saved?.notes?._ana?.speakerNames || {})
   const [transcriptDirty, setTranscriptDirty] = useState(false)
   const [importingAudio, setImportingAudio] = useState(false)
+  const [calendarEvents, setCalendarEvents] = useState([])
+  const [calendarState, setCalendarState] = useState({ loading: true, message: '', reconnect: false })
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
@@ -182,6 +185,7 @@ export default function MeetingMode() {
       const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}
       return [
         record?.title, record?.target, meta.customer, meta.topic, meta.project, meta.meetingType,
+        ...(Array.isArray(meta.attendees) ? meta.attendees : []),
         ...(Array.isArray(meta.tags) ? meta.tags : []), template.title, record?.notes?.summary,
       ].filter(Boolean).join(' ').toLocaleLowerCase().includes(query)
     })
@@ -198,6 +202,63 @@ export default function MeetingMode() {
     setElapsed(Math.max(0, Date.now() - startedAt))
     return () => clearInterval(timer)
   }, [startedAt])
+  const calendarSessionToken = async () => {
+    if (!supabase) return ''
+    const { data } = await supabase.auth.getSession()
+    return data?.session?.access_token || ''
+  }
+
+  const loadCalendar = async () => {
+    const token = await calendarSessionToken()
+    if (!token) { setCalendarState({ loading: false, message: '', reconnect: false }); return }
+    setCalendarState(value => ({ ...value, loading: true }))
+    try {
+      const response = await fetch('/api/auth-notify?action=google-calendar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: 14 }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setCalendarEvents([])
+        setCalendarState({ loading: false, message: data?.error || 'Calendar unavailable.', reconnect: Boolean(data?.reconnect) })
+        return
+      }
+      setCalendarEvents(Array.isArray(data?.events) ? data.events : [])
+      setCalendarState({ loading: false, message: '', reconnect: false })
+    } catch (error) {
+      setCalendarState({ loading: false, message: error?.message || 'Calendar unavailable.', reconnect: false })
+    }
+  }
+
+  const connectGoogleCalendar = async () => {
+    const token = await calendarSessionToken()
+    if (!token) { setCalendarState({ loading: false, message: 'Sign in to Ana first.', reconnect: false }); return }
+    try {
+      const returnTo = `${window.location.origin}/?mode=meeting&calendar=connected`
+      const response = await fetch('/api/auth-notify?action=google-start', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnTo }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.url) throw new Error(data?.error || 'Could not connect Google.')
+      window.location.assign(data.url)
+    } catch (error) {
+      setCalendarState({ loading: false, message: error?.message || 'Could not connect Google.', reconnect: false })
+    }
+  }
+
+  const useCalendarEvent = event => {
+    const attendees = (Array.isArray(event?.attendees) ? event.attendees : [])
+      .map(person => clean(person?.name) || clean(person?.email))
+      .filter(Boolean)
+      .slice(0, 25)
+    setMeetingMeta(value => ({ ...value, topic: clean(event?.title) || value.topic, attendees }))
+  }
+
+  useEffect(() => { loadCalendar() }, [])
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -408,6 +469,7 @@ export default function MeetingMode() {
       manualMetadata.topic ? `Topic: ${manualMetadata.topic}` : '',
       manualMetadata.project ? `Project: ${manualMetadata.project}` : '',
       manualMetadata.meetingType ? `Meeting type: ${manualMetadata.meetingType}` : '',
+      manualMetadata.attendees?.length ? `Attendees: ${manualMetadata.attendees.join(', ')}` : '',
       manualMetadata.tags?.length ? `Tags: ${manualMetadata.tags.join(', ')}` : '',
     ].filter(Boolean).join('; ')
     const instructions = `ANA_MEETING_NOTES. Create post-meeting notes from this raw transcript. Write in ${outputLanguage}. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions, labels, sections. actions must be objects with task, owner and deadline. labels must be an object with customer, topic, project, meetingType and tags. Respect user-supplied labels and only infer missing labels when clearly supported; otherwise use empty values. sections must be an array of objects with title, content and items and MUST follow this MOM template: "${template.title}". Required/custom structure: ${template.instruction || 'Use the most useful concise meeting structure.'}. Keep the standard summary/keyPoints/decisions/actions/openQuestions fields populated too so Ana can search and route actions later. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the actual meeting topic. User-supplied meeting context: ${suppliedContext || 'none'}. IMPORTANT SIGNAL FILTER: greetings, jokes, filler, repetitions, private chatter, side conversations and off-topic discussion must stay out of MOM sections unless they materially affect a decision, commitment, risk, requirement or important context. Understand natural code-switching between English, German, Hindi and Hinglish.`
@@ -566,11 +628,18 @@ export default function MeetingMode() {
         <label><span>{meetingMode === 'translate' ? 'Translate to' : 'MOM language'}</span><select value={target} onChange={event => changeTarget(event.target.value)} disabled={processing}>{TARGETS.map(value => <option key={value}>{value}</option>)}</select></label>
       </div>
 
+      <section className="meeting-calendar">
+        <div className="meeting-calendar-head"><div><strong>Upcoming calendar</strong><span>Use an event to prefill the meeting topic and attendees.</span></div><button type="button" onClick={calendarState.reconnect || (!calendarEvents.length && !calendarState.loading) ? connectGoogleCalendar : loadCalendar}>{calendarState.loading ? 'Checking…' : calendarState.reconnect ? 'Reconnect Google' : calendarEvents.length ? 'Refresh' : 'Connect Google'}</button></div>
+        {calendarEvents.length > 0 && <div className="meeting-calendar-events">{calendarEvents.slice(0,5).map(event => <button type="button" key={event.id} onClick={() => useCalendarEvent(event)} disabled={active || processing}><strong>{event.title}</strong><span>{event.start ? new Date(event.start).toLocaleString() : ''}</span><small>{event.attendees?.length ? `${event.attendees.length} attendee${event.attendees.length === 1 ? '' : 's'}` : 'No attendee list'}</small></button>)}</div>}
+        {calendarState.message && <p>{calendarState.message}</p>}
+      </section>
+
       <div className="meeting-meta-grid">
         <label><span>Customer</span><input value={meetingMeta.customer} onChange={event => setMeetingMeta(value => ({ ...value, customer: event.target.value }))} placeholder="Customer / organisation" disabled={active || processing}/></label>
         <label><span>Topic</span><input value={meetingMeta.topic} onChange={event => setMeetingMeta(value => ({ ...value, topic: event.target.value }))} placeholder="Main meeting topic" disabled={active || processing}/></label>
         <label><span>Project</span><input value={meetingMeta.project} onChange={event => setMeetingMeta(value => ({ ...value, project: event.target.value }))} placeholder="Project (optional)" disabled={active || processing}/></label>
         <label><span>Meeting type</span><select value={meetingMeta.meetingType} onChange={event => setMeetingMeta(value => ({ ...value, meetingType: event.target.value }))} disabled={active || processing}>{MEETING_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="meeting-meta-wide"><span>Attendees</span><input value={meetingMeta.attendees.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, attendees: event.target.value.split(',').map(clean).filter(Boolean).slice(0,25) }))} placeholder="Names or email addresses"/></label>
         <label className="meeting-meta-wide"><span>Tags</span><input value={meetingMeta.tags.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, tags: event.target.value.split(',') }))} onBlur={() => setMeetingMeta(value => ({ ...value, tags: cleanTags(value.tags) }))} placeholder="e.g. SAP, MRP, capacity"/></label>
       </div>
 

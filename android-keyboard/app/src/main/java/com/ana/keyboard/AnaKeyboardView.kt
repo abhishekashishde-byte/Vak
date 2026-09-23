@@ -207,7 +207,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                 listOf(
                     KeySpec("", "EMOJI", 0.86f),
                     KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
-                    KeySpec("", "SPACE", 5.10f),
+                    KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
                     KeySpec(".", ".", 0.72f),
                     KeySpec("↵", "ENTER", 1.34f)
                 )
@@ -231,7 +231,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             if (KeyboardPrefs.commaKeyEnabled(context)) add(KeySpec(",", ",", 0.70f))
             add(KeySpec("", "EMOJI", 0.82f))
             add(KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f))
-            add(KeySpec("", "SPACE", 5.05f))
+            add(KeySpec("", "SPACE", 5.05f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)))
             if (KeyboardPrefs.fullStopKeyEnabled(context)) add(KeySpec(".", ".", 0.70f))
             add(KeySpec("↵", "ENTER", 1.34f))
         })
@@ -242,15 +242,16 @@ class AnaKeyboardView @JvmOverloads constructor(
         if (width <= 0 || height <= 0) return emptyList()
         val rows = rows()
         val outer = dp(6f)
-        val gap = dp(5f)
-        val rowGap = dp(5f)
+        val gapDp = KeyboardPrefs.keyGapDp(context).toFloat()
+        val gap = dp(gapDp)
+        val rowGap = dp((gapDp * 0.92f).coerceAtLeast(2f))
         val usableHeight = height - outer * 2 - rowGap * (rows.size - 1)
         val rowHeight = max(dp(36f), usableHeight / rows.size)
         val result = mutableListOf<PlacedKey>()
 
         val oneHanded = KeyboardPrefs.oneHandedMode(context)
         val fullWidth = width - outer * 2
-        val activeWidth = if (oneHanded == "off") fullWidth else fullWidth * 0.78f
+        val activeWidth = if (oneHanded == "off") fullWidth else fullWidth * (KeyboardPrefs.oneHandedWidthPercent(context) / 100f)
         val baseLeft = when (oneHanded) {
             "right" -> width - outer - activeWidth
             else -> outer
@@ -406,11 +407,20 @@ class AnaKeyboardView @JvmOverloads constructor(
             val rect = if (pressed) {
                 RectF(item.rect.left - dp(1f), item.rect.top - dp(1f), item.rect.right + dp(1f), item.rect.bottom + dp(1f))
             } else item.rect
-            canvas.drawRoundRect(rect, dp(7f), dp(7f), keyPaint)
+            val radius = dp(KeyboardPrefs.keyRadiusDp(context).toFloat())
+            canvas.drawRoundRect(rect, radius, radius, keyPaint)
+            if (KeyboardPrefs.keyBordersEnabled(context)) {
+                keyPaint.style = Paint.Style.STROKE
+                keyPaint.strokeWidth = dp(0.8f)
+                keyPaint.color = Color.argb(if (KeyboardPrefs.theme(context) == "light") 46 else 62, Color.red(colors.text), Color.green(colors.text), Color.blue(colors.text))
+                canvas.drawRoundRect(rect, radius, radius, keyPaint)
+                keyPaint.style = Paint.Style.FILL
+            }
 
             if (!drawSpecialIcon(canvas, item, rect, colors)) {
                 val label = displayLabel(item.key)
-                textPaint.textSize = if (label.length > 4) dp(13f) else dp(20f)
+                val labelScale = KeyboardPrefs.keyLabelScalePercent(context) / 100f
+                textPaint.textSize = (if (label.length > 4) dp(13f) else dp(20f)) * labelScale
                 textPaint.color = colors.text
                 val baseline = rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
                 canvas.drawText(label, rect.centerX(), baseline, textPaint)

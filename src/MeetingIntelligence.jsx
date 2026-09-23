@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, Check, Circle, Clipboard, FileText, ListTodo, Mail, MessageSquare, Search, Send, Sparkles } from 'lucide-react'
+import { Bot, Check, Circle, Clipboard, Download, FileText, ListTodo, Mail, MessageSquare, Printer, Search, Send, Sparkles } from 'lucide-react'
 import { supabase } from './lib/supabase.js'
 import './meeting-intelligence.css'
 
@@ -8,6 +8,7 @@ const LABELS = new Set(['Decision', 'Action', 'Important', 'Question', 'Chatter'
 
 const clean = value => String(value || '').trim()
 const safeArray = value => Array.isArray(value) ? value : []
+const escapeHtml = value => String(value || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
 function readHistory() {
   try {
@@ -117,7 +118,7 @@ function meetingText(record) {
   const notes = record?.notes || {}
   const meta = record?.metadata || notes?._ana?.metadata || {}
   const template = record?.momTemplate || notes?._ana?.momTemplate || {}
-  return [record?.title, meta.customer, meta.topic, meta.project, meta.meetingType, ...safeArray(meta.tags), template.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
+  return [record?.title, meta.customer, meta.topic, meta.project, meta.meetingType, ...safeArray(meta.attendees), ...safeArray(meta.tags), template.title, notes.summary, ...safeArray(notes.keyPoints), ...safeArray(notes.decisions), ...normalizeActions(notes.actions).map(item => `${item.task} ${item.owner} ${item.deadline}`), record?.originalText]
     .filter(Boolean).join(' ').toLocaleLowerCase()
 }
 
@@ -161,6 +162,36 @@ export default function MeetingIntelligence() {
   const selected = useMemo(() => history.find(item => String(item.id) === String(selectedId)) || history[0] || null, [history, selectedId])
   const sections = useMemo(() => transcriptSections(selected), [selected])
   const visibleSections = transcriptView === 'important' ? sections.filter(item => item.label !== 'Chatter') : sections
+  const dashboard = useMemo(() => {
+    const customers = new Set(), projects = new Set()
+    history.forEach(record => {
+      const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+      if (clean(meta.customer)) customers.add(clean(meta.customer))
+      if (clean(meta.project)) projects.add(clean(meta.project))
+    })
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    return {
+      meetings: history.length,
+      recent: history.filter(record => Number(record.startedAt || 0) >= cutoff).length,
+      customers: customers.size,
+      projects: projects.size,
+      openActions: actions.filter(item => item.status !== 'done').length,
+    }
+  }, [history, actions])
+  const relatedOpenActions = useMemo(() => {
+    if (!selected) return []
+    const selectedMeta = selected?.metadata || selected?.notes?._ana?.metadata || {}
+    const customer = clean(selectedMeta.customer).toLocaleLowerCase()
+    const project = clean(selectedMeta.project).toLocaleLowerCase()
+    if (!customer && !project) return []
+    const relatedIds = new Set(history.filter(record => {
+      const meta = record?.metadata || record?.notes?._ana?.metadata || {}
+      const sameProject = project && clean(meta.project).toLocaleLowerCase() === project
+      const sameCustomer = customer && clean(meta.customer).toLocaleLowerCase() === customer
+      return sameProject || sameCustomer
+    }).map(record => String(record.id)))
+    return actions.filter(item => item.status !== 'done' && relatedIds.has(String(item.meeting_client_id))).slice(0, 12)
+  }, [selected, history, actions])
 
   const refreshCloud = async () => {
     if (!supabase) return
@@ -378,6 +409,36 @@ export default function MeetingIntelligence() {
     setMailSubject(subject); setMailBody(body); setMailMessage(''); setMailOpen(true)
   }
 
+  const downloadMomWord = () => {
+    if (!selected) return
+    const content = formatMom(selected)
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(selected.title || 'Ana MOM')}</title></head><body style="font-family:Arial,sans-serif;line-height:1.5;white-space:pre-wrap">${escapeHtml(content).replaceAll('\n', '<br>')}</body></html>`
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `ana-mom-${new Date(selected.startedAt || Date.now()).toISOString().slice(0, 10)}.doc`
+    document.body.appendChild(anchor); anchor.click(); anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const printMomPdf = () => {
+    if (!selected) return
+    const content = formatMom(selected)
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) return
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(selected.title || 'Ana MOM')}</title><style>body{font-family:Arial,sans-serif;color:#171717;padding:32px;line-height:1.55}pre{font:inherit;white-space:pre-wrap} @media print{body{padding:0}}</style></head><body><pre>${escapeHtml(content)}</pre><script>window.onload=()=>window.print()<\/script></body></html>`)
+    printWindow.document.close()
+  }
+
+  const copyMom = async () => {
+    if (!selected) return
+    try {
+      await navigator.clipboard.writeText(formatMom(selected))
+      setCopied(true); setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
+
   const sendMail = async () => {
     const recipients = mailTo.split(/[;,]+/).map(value => value.trim()).filter(Boolean)
     if (!recipients.length || !clean(mailSubject) || !clean(mailBody)) { setMailMessage('Add at least one recipient, a subject and the email body.'); return }
@@ -407,6 +468,14 @@ export default function MeetingIntelligence() {
       <label className="mi-meeting-select"><span>Meeting</span><select value={selected?.id || ''} onChange={event => { setSelectedId(event.target.value); setAnswer(''); setOutput(null) }}>{history.map(record => { const meta = record?.metadata || record?.notes?._ana?.metadata || {}; return <option value={record.id} key={record.id}>{meta.customer ? `${meta.customer} · ` : ''}{meta.topic || record.title || 'Meeting'} · {formatShortDate(record.startedAt)}</option> })}</select></label>
     </div>
 
+    <div className="mi-dashboard">
+      <div><strong>{dashboard.meetings}</strong><span>Meetings</span></div>
+      <div><strong>{dashboard.recent}</strong><span>Last 30 days</span></div>
+      <div><strong>{dashboard.customers}</strong><span>Customers</span></div>
+      <div><strong>{dashboard.projects}</strong><span>Projects</span></div>
+      <div><strong>{dashboard.openActions}</strong><span>Open actions</span></div>
+    </div>
+
     <div className="mi-grid">
       <section className="mi-card mi-ask">
         <div className="mi-card-head"><Bot size={16}/><div><strong>Ask Ana</strong><small>Current meeting or all saved meetings</small></div></div>
@@ -417,6 +486,7 @@ export default function MeetingIntelligence() {
 
       <section className="mi-card mi-actions">
         <div className="mi-card-head"><ListTodo size={16}/><div><strong>Actions</strong><small>{actions.filter(item => item.status !== 'done').length} open across meetings</small></div></div>
+        {relatedOpenActions.length > 0 && <div className="mi-continuity"><strong>Carry forward</strong><span>{relatedOpenActions.length} open item{relatedOpenActions.length === 1 ? '' : 's'} from the same customer/project</span></div>}
         <div className="mi-action-list">{actions.length ? actions.slice(0, 40).map(action => {
           const meeting = history.find(item => String(item.id) === String(action.meeting_client_id))
           return <button className={`mi-action-row ${action.status === 'done' ? 'done' : ''}`} key={action.id} onClick={() => toggleAction(action)}><span className="mi-action-check">{action.status === 'done' ? <Check size={13}/> : <Circle size={13}/>}</span><span><strong>{action.task}</strong><small>{[action.owner ? `Owner: ${action.owner}` : '', action.deadline ? `Deadline: ${action.deadline}` : '', meeting?.title || ''].filter(Boolean).join(' · ')}</small></span></button>
@@ -432,6 +502,9 @@ export default function MeetingIntelligence() {
     <section className="mi-card mi-outputs">
       <div className="mi-card-head"><MessageSquare size={16}/><div><strong>One-click outputs</strong><small>Reuse the meeting without rewriting it yourself.</small></div></div>
       <div className="mi-output-buttons">
+        <button onClick={copyMom}><Clipboard size={14}/> {copied ? 'Copied MOM' : 'Copy MOM'}</button>
+        <button onClick={downloadMomWord}><Download size={14}/> Word</button>
+        <button onClick={printMomPdf}><Printer size={14}/> Print / PDF</button>
         <button onClick={() => generateOutput('email')} disabled={Boolean(outputLoading)}>{outputLoading === 'email' ? <span className="mi-spinner"/> : <Mail size={14}/>} Follow-up email</button>
         <button onClick={() => generateOutput('german')} disabled={Boolean(outputLoading)}>German MOM</button>
         <button onClick={() => generateOutput('customer')} disabled={Boolean(outputLoading)}>Customer-safe</button>
