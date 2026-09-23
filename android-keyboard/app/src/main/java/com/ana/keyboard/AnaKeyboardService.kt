@@ -242,38 +242,50 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setPadding(dp(5), dp(4), dp(5), dp(3))
             }
 
+            fun show(id: String) = KeyboardPrefs.toolbarActionEnabled(this@AnaKeyboardService, id)
+            fun addAi(id: String, label: String, action: AnaApi.Action) {
+                if (!show(id)) return
+                toolbar.addView(actionButton(label) { runAnaAction(action) }.also { aiButtons += it })
+            }
+
             targetButton = actionButton("→ ${KeyboardPrefs.targetBadge(this)}") { showTranslationPicker() }
                 .also { toolbar.addView(it) }
-            toolbar.addView(actionButton("Translate") { runAnaAction(AnaApi.Action.TRANSLATE) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Write") { runAnaAction(AnaApi.Action.WRITE) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Correct") { runAnaAction(AnaApi.Action.FIX) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Shorter") { runAnaAction(AnaApi.Action.SHORTER) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Friendly") { runAnaAction(AnaApi.Action.FRIENDLY) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Formal") { runAnaAction(AnaApi.Action.FORMAL) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Du") { runAnaAction(AnaApi.Action.DU) }.also { aiButtons += it })
-            toolbar.addView(actionButton("Sie") { runAnaAction(AnaApi.Action.SIE) }.also { aiButtons += it })
-            toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
-            toolbar.addView(actionButton("Undo") { performUndo() })
-            toolbar.addView(actionButton("Redo") { sendEditorShortcut(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON) })
-            toolbar.addView(actionButton("Select all") { performSelectAll() })
-            appAiButton = actionButton(if (isAppAiAllowed()) "AI app ✓" else "AI app off") { toggleCurrentAppAi() }
-                .also { toolbar.addView(it) }
-            toolbar.addView(actionButton(if (KeyboardPrefs.incognitoEnabled(this)) "Private ✓" else "Private") {
-                val enabled = KeyboardPrefs.toggleIncognito(this)
-                if (enabled) {
-                    stopVoiceTyping(false)
-                    clearSuggestions()
-                    hidePanels()
-                    keyboard.visibility = View.VISIBLE
-                }
-                updateAiAvailability()
-                showStatus(if (enabled) "INCOGNITO • learning, clipboard history and Ana AI are off" else defaultStatus())
-                requestSuggestionsSoon()
-            })
-            if (KeyboardPrefs.voiceTypingEnabled(this)) {
-                toolbar.addView(actionButton("Voice edit") { startVoiceEditCommand() }.also { aiButtons += it })
-                voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
+            addAi("translate", "Translate", AnaApi.Action.TRANSLATE)
+            addAi("write", "Write", AnaApi.Action.WRITE)
+            addAi("correct", "Correct", AnaApi.Action.FIX)
+            addAi("shorter", "Shorter", AnaApi.Action.SHORTER)
+            addAi("friendly", "Friendly", AnaApi.Action.FRIENDLY)
+            addAi("formal", "Formal", AnaApi.Action.FORMAL)
+            addAi("du", "Du", AnaApi.Action.DU)
+            addAi("sie", "Sie", AnaApi.Action.SIE)
+            if (show("clipboard")) toolbar.addView(iconButton(R.drawable.ic_clipboard, "Clipboard") { showClipboardPanel() })
+            if (show("undo")) toolbar.addView(actionButton("Undo") { performUndo() })
+            if (show("redo")) toolbar.addView(actionButton("Redo") { sendEditorShortcut(KeyEvent.KEYCODE_Z, KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON) })
+            if (show("select_all")) toolbar.addView(actionButton("Select all") { performSelectAll() })
+            if (show("app_ai")) {
+                appAiButton = actionButton(if (isAppAiAllowed()) "AI app ✓" else "AI app off") { toggleCurrentAppAi() }
                     .also { toolbar.addView(it) }
+            }
+            if (show("private")) {
+                toolbar.addView(actionButton(if (KeyboardPrefs.incognitoEnabled(this)) "Private ✓" else "Private") {
+                    val enabled = KeyboardPrefs.toggleIncognito(this)
+                    if (enabled) {
+                        stopVoiceTyping(false)
+                        clearSuggestions()
+                        hidePanels()
+                        keyboard.visibility = View.VISIBLE
+                    }
+                    updateAiAvailability()
+                    showStatus(if (enabled) "INCOGNITO • learning, clipboard history and Ana AI are off" else defaultStatus())
+                    requestSuggestionsSoon()
+                })
+            }
+            if (KeyboardPrefs.voiceTypingEnabled(this)) {
+                if (show("voice_edit")) toolbar.addView(actionButton("Voice edit") { startVoiceEditCommand() }.also { aiButtons += it })
+                if (show("voice")) {
+                    voiceButton = iconButton(R.drawable.ic_mic, "Voice typing") { toggleVoiceTyping() }
+                        .also { toolbar.addView(it) }
+                }
             }
 
             toolbarScroll.addView(toolbar)
@@ -1683,7 +1695,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun cloudGlossary(): List<String> =
-        KeyboardPrefs.personalDictionary(this, cachedInputBadge).map { it.trim() }.filter { it.isNotBlank() }.take(40)
+        (
+            KeyboardPrefs.personalDictionary(this, cachedInputBadge) +
+            KeyboardPrefs.sharedGlossaryTerms(this, cachedInputBadge)
+        ).map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.take(80)
 
     private fun commitDictationText(text: String, message: String) {
         val connection = currentInputConnection ?: return
