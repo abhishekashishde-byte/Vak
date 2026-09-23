@@ -75,6 +75,7 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var calibrationDirty = 0
     private var keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
     private var backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
+    private var keyOpacityPercent = KeyboardPrefs.keyOpacityPercent(context)
     private var spaceCursorMoved = false
     private var spaceCursorAnchorX = 0f
 
@@ -186,6 +187,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
         keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
         backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
+        keyOpacityPercent = KeyboardPrefs.keyOpacityPercent(context)
         clearPressState()
         invalidate()
     }
@@ -383,12 +385,8 @@ class AnaKeyboardView @JvmOverloads constructor(
             special -> colors.specialKey
             else -> colors.normalKey
         }
-        if (backgroundBitmap == null) return color
-        val alpha = when {
-            pressed -> 190
-            special -> 128
-            else -> 105
-        }
+        val baseAlpha = (255 * keyOpacityPercent / 100).coerceIn(51, 255)
+        val alpha = if (pressed) (baseAlpha + 26).coerceAtMost(255) else baseAlpha
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
