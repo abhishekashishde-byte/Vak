@@ -341,7 +341,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             isFillViewport = true
             isVerticalScrollBarEnabled = true
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            addView(correctionPreviewText, ScrollView.LayoutParams(
+            addView(correctionPreviewText, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ))
