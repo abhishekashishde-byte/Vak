@@ -55,6 +55,8 @@ export default function ActionCenter() {
   const [project, setProject] = useState('')
   const [routing, setRouting] = useState('')
   const [approval, setApproval] = useState(null)
+  const [editingId, setEditingId] = useState('')
+  const [editDraft, setEditDraft] = useState({ task: '', owner: '', deadline: '' })
   const [message, setMessage] = useState('')
 
   const refresh = async () => {
@@ -145,6 +147,30 @@ export default function ActionCenter() {
     }
   }
 
+  const startEdit = action => {
+    setEditingId(action.id)
+    setEditDraft({ task: clean(action.task), owner: clean(action.owner), deadline: clean(action.deadline) })
+    setMessage('')
+  }
+
+  const saveEdit = async action => {
+    if (!supabase || !action?.id) return
+    const task = clean(editDraft.task)
+    if (!task) { setMessage('Action task cannot be empty.'); return }
+    const patch = {
+      task: task.slice(0, 1000),
+      owner: clean(editDraft.owner).slice(0, 240),
+      deadline: clean(editDraft.deadline).slice(0, 120),
+      updated_at: new Date().toISOString(),
+    }
+    const { error } = await supabase.from('meeting_actions').update(patch).eq('id', action.id)
+    if (error) { setMessage(error.message); return }
+    setActions(previous => previous.map(item => item.id === action.id ? { ...item, ...patch } : item))
+    setEditingId('')
+    window.dispatchEvent(new CustomEvent('ana-actions-changed'))
+    setMessage('Action updated.')
+  }
+
   const routeAction = async (action, provider) => {
     const token = await sessionToken()
     if (!token) return
@@ -208,22 +234,30 @@ export default function ActionCenter() {
             {action.status==='done'?<Check size={15}/>:<Circle size={15}/>}
           </button>
           <div className="action-center-main">
-            <strong>{action.task}</strong>
-            <div className="action-meta">
-              {action.owner && <span>Owner: {action.owner}</span>}
-              {action.deadline && <span className={bucket==='overdue'?'danger':''}>{bucket==='overdue'?<TriangleAlert size={11}/>:null} {action.deadline}</span>}
-              {meta.customer && <span>{meta.customer}</span>}
-              {meta.project && <span>{meta.project}</span>}
-            </div>
+            {editingId === action.id ? <div className="action-edit">
+              <input value={editDraft.task} onChange={event=>setEditDraft(value=>({...value,task:event.target.value}))} placeholder="Action"/>
+              <div><input value={editDraft.owner} onChange={event=>setEditDraft(value=>({...value,owner:event.target.value}))} placeholder="Owner"/><input value={editDraft.deadline} onChange={event=>setEditDraft(value=>({...value,deadline:event.target.value}))} placeholder="Deadline"/></div>
+              <div className="action-edit-buttons"><button onClick={()=>setEditingId('')}>Cancel</button><button className="save" onClick={()=>saveEdit(action)}>Save</button></div>
+            </div> : <>
+              <div className="action-title-row"><strong>{action.task}</strong><button onClick={()=>startEdit(action)}>Edit</button></div>
+              <div className="action-meta">
+                {action.owner && <span>Owner: {action.owner}</span>}
+                {action.deadline && <span className={bucket==='overdue'?'danger':''}>{bucket==='overdue'?<TriangleAlert size={11}/>:null} {action.deadline}</span>}
+                {meta.customer && <span>{meta.customer}</span>}
+                {meta.project && <span>{meta.project}</span>}
+              </div>
+            </>}
             <button className="action-source" onClick={()=>openEvidence(action.meeting_client_id)}>Source: {meeting?.title || 'Meeting'} · view evidence</button>
-            {receipts.length > 0 && <div className="action-route-receipts">{receipts.map(receipt=><span key={receipt.id}>{receipt.provider === 'jira' ? 'Jira' : 'Planner'} ✓ {receipt.external_url ? <a href={receipt.external_url} target="_blank" rel="noreferrer"><ExternalLink size={10}/></a> : null}</span>)}</div>}
+            {receipts.length > 0 && <div className="action-route-receipts">{receipts.map(receipt=><span className={receipt.status==='failed'?'failed':''} key={receipt.id}>{receipt.provider === 'jira' ? 'Jira' : 'Planner'} {receipt.status === 'failed' ? 'failed' : '✓'} {receipt.external_url ? <a href={receipt.external_url} target="_blank" rel="noreferrer"><ExternalLink size={10}/></a> : null}</span>)}</div>}
           </div>
           <div className="action-route-buttons">
             {['jira','planner'].map(provider => {
               const configured = Boolean(integrations[provider]?.configured)
               const busy = routing === `${action.id}:${provider}`
               if (pendingProvider === provider) return <div className="action-approval" key={provider}><small>Send this action to {provider === 'jira' ? 'Jira' : 'Planner'}?</small><div><button onClick={()=>setApproval(null)}>Cancel</button><button className="approve" onClick={()=>routeAction(action,provider)} disabled={busy}>{busy?'Sending…':'Approve & send'}</button></div></div>
-              return <button key={provider} disabled={!configured || Boolean(routing)} title={configured?'Requires your approval before sending':'Configure this integration on the Ana server first'} onClick={()=>setApproval({actionId:action.id,provider})}><Send size={12}/> {provider === 'jira' ? 'Jira' : 'Planner'}</button>
+              const previousRoute = receipts.find(receipt => receipt.provider === provider)
+              const label = previousRoute?.status === 'failed' ? `Retry ${provider === 'jira' ? 'Jira' : 'Planner'}` : (provider === 'jira' ? 'Jira' : 'Planner')
+              return <button key={provider} disabled={!configured || Boolean(routing)} title={configured?'Requires your approval before sending':'Configure this integration on the Ana server first'} onClick={()=>setApproval({actionId:action.id,provider})}><Send size={12}/> {label}</button>
             })}
           </div>
         </article>
