@@ -117,6 +117,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var speechRecognizer: SpeechRecognizer? = null
     private var voiceListening = false
     private var voiceFinalizing = false
+    private var voiceStopRequested = false
     private var voiceResultHandled = false
     private var lastVoicePartial = ""
     private var voiceRecognizerOnDevice = false
@@ -1669,6 +1670,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         if (voiceResultHandled) return
+                        if (voiceStopRequested) {
+                            voiceListening = false
+                            voiceFinalizing = true
+                            showStatus("Finishing dictation…")
+                            return
+                        }
                         voiceListening = true
                         voiceFinalizing = false
                         setVoiceListeningUi(true)
@@ -1747,6 +1754,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
         voiceResultHandled = false
         voiceFinalizing = false
+        voiceStopRequested = false
         lastVoicePartial = ""
         voiceListening = true
         setVoiceListeningUi(true)
@@ -1876,6 +1884,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (!voiceListening || voiceResultHandled) return
         voiceListening = false
         voiceFinalizing = true
+        voiceStopRequested = true
         showStatus("Finishing dictation…")
         mainHandler.removeCallbacks(voiceFinalizeTimeout)
         mainHandler.postDelayed(voiceFinalizeTimeout, 2800)
@@ -1891,6 +1900,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceResultHandled = true
         voiceListening = false
         voiceFinalizing = false
+        voiceStopRequested = false
         mainHandler.removeCallbacks(voiceFinalizeTimeout)
         setVoiceListeningUi(false)
 
@@ -1932,6 +1942,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         voiceResultHandled = true
         voiceListening = false
         voiceFinalizing = false
+        voiceStopRequested = false
         lastVoicePartial = ""
         try { speechRecognizer?.cancel() } catch (_: Exception) { }
         try {
