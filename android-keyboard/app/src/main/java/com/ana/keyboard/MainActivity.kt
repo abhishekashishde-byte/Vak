@@ -363,7 +363,7 @@ class MainActivity : Activity() {
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
         })
-        root.addView(switchRow("Smart paragraph correction", "Off by default for privacy. If enabled, Ana re-checks the active paragraph after a pause so earlier missed errors can also be repaired; normal word correction stays local.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
+        root.addView(switchRow("Smart paragraph correction", "Off by default for privacy. If enabled, Ana checks the active paragraph after a pause and shows the proposed rewrite with Accept / Reject. Normal confident word correction stays local and automatic.", KeyboardPrefs.smartSentenceCorrectionEnabled(this)) {
             KeyboardPrefs.setSmartSentenceCorrectionEnabled(this, it)
         })
         root.addView(switchRow("Word suggestions", "First choice is exactly what you typed; tap it to teach Ana that word", KeyboardPrefs.wordSuggestionsEnabled(this)) {
@@ -616,7 +616,7 @@ class MainActivity : Activity() {
         })
         root.addView(infoCard("LOCAL means local", "Ordinary keystrokes, local word correction and adaptive touch calibration stay on this device. If you sign in, only your saved words, learned corrections and shortcuts are synced to your Ana account."))
         root.addView(infoCard("ANA AI is visible", "The keyboard status changes from LOCAL to ANA AI whenever text is being sent to your Ana server for Translate, Write, Correct or an enabled smart paragraph check."))
-        root.addView(infoCard("Smart paragraph AI is opt-in", "Automatic cloud paragraph correction is off by default. Turn it on under Typing only if you want it."))
+        root.addView(infoCard("Smart paragraph AI is opt-in", "Cloud paragraph checking is off by default. When enabled, Ana shows a proposed correction first; it never silently replaces the paragraph."))
         root.addView(infoCard("Private fields", "Passwords, OTP / verification-code fields and apps that request no personalised learning automatically disable Ana AI, voice, suggestions and clipboard history."))
         root.addView(infoCard("Clipboard stays local", "Clipboard history is stored only on this device. Unpinned clips expire after 1 hour; pinned clips remain until you clear or unpin them. Incognito mode does not add clipboard history."))
     }
