@@ -1287,7 +1287,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }
         }
 
-        learnTransitionFromContext()
+        if (!wordBeforeSpace.isNullOrBlank()) learnTransitionFromContext()
 
         val now = SystemClock.elapsedRealtime()
         val before = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
