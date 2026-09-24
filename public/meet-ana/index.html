@@ -90,6 +90,7 @@
     .quick-card[data-depth="1"]{z-index:3;transform:translate3d(0,18px,-40px) scale(.965);opacity:.92;filter:saturate(.92)}
     .quick-card[data-depth="2"]{z-index:2;transform:translate3d(0,36px,-80px) scale(.93);opacity:.72;filter:saturate(.82)}
     .quick-card[data-depth="3"]{z-index:1;transform:translate3d(0,50px,-110px) scale(.90);opacity:.46;filter:saturate(.72)}
+    .quick-card[data-depth="hidden"]{z-index:0;transform:translate3d(0,60px,-130px) scale(.88);opacity:0;pointer-events:none}
     .quick-card.is-dragging{transition:none}
     .quick-copy{position:absolute;z-index:2;left:28px;right:28px;bottom:28px;color:#fff;pointer-events:none}
     .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#c4d3d5}
@@ -102,7 +103,7 @@
       transition:transform .2s ease,background .2s ease
     }
     .stack-arrow:hover{background:#e9efee;transform:translateY(-1px)}
-    .stack-dots{display:flex;align-items:center;gap:7px}
+    .stack-dots{display:flex;align-items:center;justify-content:center;gap:6px;max-width:210px;flex-wrap:wrap}
     .stack-dot{
       width:7px;height:7px;border:0;border-radius:999px;background:#b6c2c0;padding:0;cursor:pointer;
       transition:width .25s ease,background .25s ease
@@ -284,57 +285,107 @@
     <section class="quick" id="products">
       <div class="wrap">
         <div class="section-head">
-          <div class="kicker">ANA AT A GLANCE</div>
-          <h2>Four ways Ana helps you communicate.</h2>
-          <p>Ana brings four core experiences together — each built for a different way you communicate.</p>
+          <div class="kicker">WHAT ANA CAN DO</div>
+          <h2>Nine ways Ana helps you communicate.</h2>
+          <p>From writing a message to understanding a meeting, these are the core things you can ask Ana to do.</p>
         </div>
 
         <div class="product-stack" data-product-stack>
-          <div class="stack-stage" aria-label="Ana product areas. Swipe or use the controls to browse.">
+          <div class="stack-stage" aria-label="Ana features. Swipe or use the controls to browse.">
             <article class="quick-card" data-stack-card data-depth="0">
-              <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person messaging on a smartphone">
+              <img src="https://images.pexels.com/photos/261949/pexels-photo-261949.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person writing a message on a laptop">
               <div class="quick-copy">
-                <small>ANA KEYBOARD</small>
-                <h3>Write, reply and translate — right from your keyboard.</h3>
-                <p>Write · Correct · Reply · Translate · Voice</p>
+                <small>WRITE FOR ME</small>
+                <h3>Turn a rough thought into a finished message.</h3>
+                <p>From a few words to something ready to send.</p>
               </div>
             </article>
 
             <article class="quick-card" data-stack-card data-depth="1">
-              <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a clean desk">
+              <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person replying to a message on a smartphone">
               <div class="quick-copy">
-                <small>ANA DOCUMENTS</small>
-                <h3>Translate without losing the document.</h3>
-                <p>PDF · Scanned PDF · Word · Compare</p>
+                <small>REPLY FOR ME</small>
+                <h3>Understand the message and answer it.</h3>
+                <p>Use selected or copied context, review, then paste.</p>
               </div>
             </article>
 
             <article class="quick-card" data-stack-card data-depth="2">
-              <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler photographing street signs with a smartphone">
+              <img src="https://images.pexels.com/photos/4050291/pexels-photo-4050291.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person editing text on a laptop">
               <div class="quick-copy">
-                <small>ANA VISION</small>
-                <h3>Understand text in the world around you.</h3>
-                <p>Camera · Pictures · Signs · Menus · Labels</p>
+                <small>CORRECT</small>
+                <h3>Fix the writing without changing what you mean.</h3>
+                <p>Grammar · spelling · clarity · full paragraphs</p>
               </div>
             </article>
 
             <article class="quick-card" data-stack-card data-depth="3">
-              <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People discussing work around a laptop">
+              <img src="https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a phone while traveling">
               <div class="quick-copy">
-                <small>ANA LIVE</small>
-                <h3>Follow conversations as they happen.</h3>
-                <p>Live translation · Meetings · Talk for Me</p>
+                <small>TRANSLATE</small>
+                <h3>Say the same thing naturally in another language.</h3>
+                <p>Typed · pasted · dictated · mixed-language text</p>
+              </div>
+            </article>
+
+            <article class="quick-card" data-stack-card data-depth="hidden">
+              <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a desk">
+              <div class="quick-copy">
+                <small>DOCUMENT TRANSLATION</small>
+                <h3>Translate PDF and Word without losing the structure.</h3>
+                <p>PDF · scanned PDF · Word · Compare</p>
+              </div>
+            </article>
+
+            <article class="quick-card" data-stack-card data-depth="hidden">
+              <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person photographing signs with a smartphone">
+              <div class="quick-copy">
+                <small>PICTURE TRANSLATION</small>
+                <h3>Understand the text in front of you.</h3>
+                <p>Camera · pictures · signs · menus · labels</p>
+              </div>
+            </article>
+
+            <article class="quick-card" data-stack-card data-depth="hidden">
+              <img src="https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Two people speaking during an appointment">
+              <div class="quick-copy">
+                <small>LIVE INTERPRETER</small>
+                <h3>Follow a conversation across languages.</h3>
+                <p>Back-and-forth spoken translation</p>
+              </div>
+            </article>
+
+            <article class="quick-card" data-stack-card data-depth="hidden">
+              <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People in a meeting around a laptop">
+              <div class="quick-copy">
+                <small>MEETING LISTEN</small>
+                <h3>Keep up with the meeting as it happens.</h3>
+                <p>Transcript · translated text · longer conversations</p>
+              </div>
+            </article>
+
+            <article class="quick-card" data-stack-card data-depth="hidden">
+              <img src="https://images.pexels.com/photos/7433900/pexels-photo-7433900.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People having a focused conversation at work">
+              <div class="quick-copy">
+                <small>TALK FOR ME</small>
+                <h3>Let Ana help with routine back-and-forth.</h3>
+                <p>Important decisions still stay with you · Early access</p>
               </div>
             </article>
           </div>
 
           <div class="stack-controls" aria-label="Product carousel controls">
             <button class="stack-arrow" type="button" data-stack-prev aria-label="Previous Ana product">←</button>
-            <div class="stack-dots" role="tablist" aria-label="Ana products">
-              <button class="stack-dot active" type="button" data-stack-dot="0" aria-label="Ana Keyboard" aria-selected="true"></button>
-              <button class="stack-dot" type="button" data-stack-dot="1" aria-label="Ana Documents" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="2" aria-label="Ana Vision" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="3" aria-label="Ana Live" aria-selected="false"></button>
+            <div class="stack-dots" role="tablist" aria-label="Ana features">
+              <button class="stack-dot active" type="button" data-stack-dot="0" aria-label="Write for Me" aria-selected="true"></button>
+              <button class="stack-dot" type="button" data-stack-dot="1" aria-label="Reply for Me" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="2" aria-label="Correct" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="3" aria-label="Translate" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="4" aria-label="Document Translation" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="5" aria-label="Picture Translation" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="6" aria-label="Live Interpreter" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="7" aria-label="Meeting Listen" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="8" aria-label="Talk for Me" aria-selected="false"></button>
             </div>
             <button class="stack-arrow" type="button" data-stack-next aria-label="Next Ana product">→</button>
           </div>
@@ -530,11 +581,12 @@
 
       const render = () => {
         cards.forEach((card, index) => {
-          const depth = (index - active + cards.length) % cards.length;
-          card.dataset.depth = String(depth);
-          card.setAttribute('aria-hidden', depth === 0 ? 'false' : 'true');
-          card.style.pointerEvents = depth === 0 ? 'auto' : 'none';
-          if (depth !== 0) {
+          const rawDepth = (index - active + cards.length) % cards.length;
+          const depth = rawDepth > 3 ? 'hidden' : String(rawDepth);
+          card.dataset.depth = depth;
+          card.setAttribute('aria-hidden', rawDepth === 0 ? 'false' : 'true');
+          card.style.pointerEvents = rawDepth === 0 ? 'auto' : 'none';
+          if (rawDepth !== 0) {
             card.classList.remove('is-dragging');
             card.style.removeProperty('transform');
           }
