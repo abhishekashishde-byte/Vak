@@ -71,12 +71,13 @@
     .quick{padding:96px 0;background:var(--paper);color:var(--darkText)}
     .quick .section-head p{color:var(--mutedDark)}
     .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-    .quick-card{position:relative;min-height:400px;border-radius:24px;overflow:hidden;background:#cfd9d7}
-    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.78) brightness(.78)}
-    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(5,15,20,.84))}
+    .quick-card{position:relative;min-height:430px;border-radius:24px;overflow:hidden;background:#cfd9d7}
+    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.78) brightness(.72)}
+    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 28%,rgba(5,15,20,.9))}
     .quick-copy{position:absolute;z-index:2;left:22px;right:22px;bottom:22px;color:#fff}
     .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#b8c9cc}
-    .quick-copy h3{font-size:26px;line-height:1.05;letter-spacing:-.035em;margin:7px 0 0}
+    .quick-copy h3{font-size:28px;line-height:1.02;letter-spacing:-.04em;margin:7px 0 9px}
+    .quick-copy p{font-size:11px;line-height:1.5;color:#c4d0d2;margin:0}
 
     /* SPLIT SECTIONS */
     .splits{background:var(--paper);color:var(--darkText)}
@@ -213,7 +214,7 @@
     <div class="wrap nav">
       <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
       <nav class="navlinks" aria-label="Ana navigation">
-        <a href="#capabilities">Capabilities</a>
+        <a href="#products">Products</a>
         <a href="#keyboard">Keyboard</a>
         <a href="#privacy">Privacy</a>
         <a href="#compatibility">Compatibility</a>
@@ -233,7 +234,7 @@
             <p>Ana helps you write, translate, reply and understand the world around you — without changing how you already communicate.</p>
             <div class="hero-actions">
               <a class="cta" href="/">Try Ana →</a>
-              <a class="ghost" href="#capabilities">See how Ana works</a>
+              <a class="ghost" href="#products">See Ana at a glance</a>
             </div>
             <div class="hero-points">
               <span>Privacy-first</span>
@@ -245,29 +246,49 @@
       </div>
     </section>
 
-    <section class="quick" id="capabilities">
+    <section class="quick" id="products">
       <div class="wrap">
         <div class="section-head">
-          <div class="kicker">WHAT ANA HELPS WITH</div>
-          <h2>Everything you need to communicate across languages.</h2>
+          <div class="kicker">ANA AT A GLANCE</div>
+          <h2>Four ways Ana helps you communicate.</h2>
+          <p>Start here. Everything else on this page belongs to one of these four product areas.</p>
         </div>
 
         <div class="quick-grid">
           <article class="quick-card">
             <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person messaging on a smartphone">
-            <div class="quick-copy"><small>MESSAGES</small><h3>Reply in your own voice.</h3></div>
+            <div class="quick-copy">
+              <small>ANA KEYBOARD</small>
+              <h3>Communicate where you already type.</h3>
+              <p>Write · Correct · Reply · Translate · Voice</p>
+            </div>
           </article>
+
           <article class="quick-card">
             <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a clean desk">
-            <div class="quick-copy"><small>DOCUMENTS</small><h3>Translate PDF & Word.</h3></div>
+            <div class="quick-copy">
+              <small>ANA DOCUMENTS</small>
+              <h3>Translate without losing the document.</h3>
+              <p>PDF · Scanned PDF · Word · Compare</p>
+            </div>
           </article>
+
           <article class="quick-card">
             <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler photographing street signs with a smartphone">
-            <div class="quick-copy"><small>PICTURES</small><h3>Understand what you see.</h3></div>
+            <div class="quick-copy">
+              <small>ANA VISION</small>
+              <h3>Understand text in the world around you.</h3>
+              <p>Camera · Pictures · Signs · Menus · Labels</p>
+            </div>
           </article>
+
           <article class="quick-card">
             <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People discussing work around a laptop">
-            <div class="quick-copy"><small>CONVERSATIONS</small><h3>Follow what is being said.</h3></div>
+            <div class="quick-copy">
+              <small>ANA LIVE</small>
+              <h3>Follow conversations as they happen.</h3>
+              <p>Live translation · Meetings · Talk for Me</p>
+            </div>
           </article>
         </div>
       </div>
@@ -434,7 +455,7 @@
     <div class="wrap footer">
       <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
       <div class="footer-links">
-        <a href="#capabilities">Capabilities</a>
+        <a href="#products">Products</a>
         <a href="#keyboard">Keyboard</a>
         <a href="#privacy">Privacy</a>
         <a href="#compatibility">Compatibility</a>
