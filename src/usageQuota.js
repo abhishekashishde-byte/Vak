@@ -5,6 +5,7 @@ export const ANA_ADMIN_EMAIL = 'abhishekashish15@gmail.com'
 const rpcError = (error, fallback) => {
   const message = String(error?.message || '')
   if (message.includes('ANA_QUOTA_EXCEEDED')) return new Error('You have reached this week’s tester limit.')
+  if (message.includes('ANA_USAGE_ALREADY_ACTIVE')) return new Error('Another limited Ana session is already active. End it first, or wait briefly for a stale session to close.')
   if (message.includes('ANA_DOCUMENT_TOO_LONG')) return new Error('Tester documents are limited to 10 pages each.')
   if (message.includes('ANA_AUTH_REQUIRED')) return new Error('Please sign in again.')
   return new Error(message || fallback)
