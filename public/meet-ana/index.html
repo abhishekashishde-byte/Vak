@@ -3,319 +3,209 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ana — Your meaning. Any language.</title>
-  <meta name="description" content="Ana is a privacy-first multilingual communication assistant for typing, replies, translation, documents, photos, live conversations and meetings." />
+  <title>Ana — Say what you mean. In any language.</title>
+  <meta name="description" content="Ana is a privacy-first multilingual communication assistant for writing, replies, translation, documents, pictures, meetings and live conversations." />
   <meta name="theme-color" content="#07131a" />
   <link rel="icon" type="image/png" href="/ana-app-icon.png" />
   <style>
     :root{
-      --bg:#07131a;
-      --bg2:#0b1c25;
-      --panel:#10242d;
-      --panel2:#142b35;
-      --text:#f4f8f8;
-      --muted:#9fb5bb;
-      --muted2:#6f8b92;
-      --accent:#6fe1d2;
-      --accent2:#9b8cff;
-      --line:rgba(255,255,255,.095);
-      --lineAccent:rgba(111,225,210,.28);
-      --max:1160px;
-      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      --ink:#07131a;
+      --ink2:#0d2028;
+      --ink3:#132b35;
+      --paper:#f5f7f6;
+      --paper2:#eaf0ef;
+      --text:#f5f8f8;
+      --darkText:#102129;
+      --muted:#9db1b6;
+      --mutedDark:#5f7176;
+      --aqua:#69ded0;
+      --violet:#9588f6;
+      --line:rgba(255,255,255,.10);
+      --darkLine:rgba(10,30,38,.12);
+      --max:1180px;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
     }
     *{box-sizing:border-box}
-    html{scroll-behavior:smooth;background:var(--bg);width:100%;max-width:100%;overflow-x:clip}
-    body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;width:100%;max-width:100%;overflow-x:clip}
-    main,section{width:100%;max-width:100%;min-width:0}
-    h1,h2,h3,p{overflow-wrap:break-word}
-    img,video{max-width:100%}
+    html{scroll-behavior:smooth;background:var(--ink);overflow-x:clip}
+    body{margin:0;background:var(--ink);color:var(--text);-webkit-font-smoothing:antialiased;overflow-x:clip}
+    img,video{display:block;width:100%;max-width:100%}
     a{color:inherit;text-decoration:none}
-    img,video{display:block;max-width:100%}
-    .wrap{width:100%;max-width:var(--max);margin:0 auto;padding-left:20px;padding-right:20px;min-width:0}
-    .accent{color:var(--accent)}
-    .kicker{color:#9da6b8;font-size:11px;font-weight:850;letter-spacing:.16em;text-transform:uppercase}
-    .rule{width:112px;height:4px;background:var(--accent2);border-radius:999px;margin:28px auto 0}
-    .section-title{font-size:clamp(44px,5.5vw,74px);line-height:1;letter-spacing:-.055em;margin:14px 0 0;font-weight:820}
-    .section-lead{max-width:760px;margin:24px auto 0;color:var(--muted);font-size:16px;line-height:1.75;text-align:center}
+    h1,h2,h3,p{overflow-wrap:break-word}
+    .wrap{width:100%;max-width:var(--max);margin:0 auto;padding:0 22px}
+    .kicker{font-size:10px;line-height:1.2;letter-spacing:.16em;text-transform:uppercase;font-weight:850;color:var(--violet)}
+    .accent{color:var(--aqua)}
+    .section-head{max-width:780px;margin:0 auto 52px;text-align:center}
+    .section-head h2{font-size:clamp(40px,5vw,68px);line-height:1;letter-spacing:-.055em;margin:12px 0 14px}
+    .section-head p{font-size:15px;line-height:1.7;color:var(--muted);margin:0 auto;max-width:680px}
 
-    .topbar{position:sticky;top:0;z-index:60;background:rgba(7,19,26,.93);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
-    .nav{height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:850;font-size:20px;letter-spacing:-.025em}
+    .topbar{position:sticky;top:0;z-index:50;background:rgba(7,19,26,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+    .nav{height:72px;display:flex;align-items:center;justify-content:space-between;gap:22px}
+    .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:850}
     .brand img{width:34px;height:34px;filter:invert(1)}
-    .navlinks{display:flex;gap:25px;align-items:center;color:#a7afbf;font-size:12px;font-weight:720}
+    .navlinks{display:flex;align-items:center;gap:24px;color:#a9b7bc;font-size:12px;font-weight:700}
     .navlinks a:hover{color:#fff}
-    .cta{
+    .cta,.ghost{
       display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
-      background:linear-gradient(135deg,var(--accent2),var(--accent));color:#061419;
-      font-weight:900;font-size:12px;padding:11px 17px;border:1px solid rgba(255,255,255,.08);
-      box-shadow:0 12px 30px rgba(111,225,210,.16)
+      font-size:12px;font-weight:850;padding:11px 17px
     }
-    .ghost{
-      display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
-      border:1px solid var(--line);color:#c1c7d3;background:rgba(255,255,255,.025);
-      font-size:12px;font-weight:800;padding:11px 17px
-    }
+    .cta{background:linear-gradient(135deg,var(--violet),var(--aqua));color:#07131a}
+    .ghost{border:1px solid var(--line);color:#d8e2e4;background:rgba(255,255,255,.03)}
 
-    /* HERO — visual first */
-    .hero{
-      padding:70px 0 90px;min-height:820px;display:grid;grid-template-columns:.9fr 1.1fr;
-      gap:54px;align-items:center;position:relative
+    /* HERO */
+    .hero{padding:48px 0 84px}
+    .hero-card{
+      position:relative;min-height:690px;border-radius:34px;overflow:hidden;border:1px solid var(--line);
+      box-shadow:0 34px 90px rgba(0,0,0,.38)
     }
-    .hero:before{
-      content:"";position:absolute;inset:-15% -20% auto;height:620px;pointer-events:none;
-      background:
-        radial-gradient(circle at 26% 30%,rgba(62,129,168,.18),transparent 30%),
-        radial-gradient(circle at 78% 42%,rgba(155,140,255,.14),transparent 31%)
-    }
-    .hero-copy{position:relative;z-index:3}
-    .hero-badge{
-      display:inline-flex;align-items:center;gap:9px;border:1px solid var(--lineAccent);
-      background:rgba(12,31,40,.78);border-radius:999px;padding:10px 15px;
-      color:#b6bfd0;font-size:12px
-    }
-    .hero-badge i{font-style:normal;color:var(--accent2);font-size:17px}
-    .hero h1{
-      margin:26px 0 0;font-size:clamp(62px,8vw,108px);line-height:.88;letter-spacing:-.075em;
-      background:linear-gradient(180deg,#a995ff 0%,#63dfd0 92%);
-      color:transparent;background-clip:text;-webkit-background-clip:text
-    }
-    .hero h2{font-size:clamp(34px,4.6vw,58px);line-height:1.04;letter-spacing:-.045em;margin:22px 0 0;font-weight:450}
-    .hero p{max-width:610px;color:#a7afbf;font-size:16px;line-height:1.75;margin:25px 0 0}
-    .hero-actions{display:flex;gap:11px;flex-wrap:wrap;margin-top:29px}
-    .hero-trust{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px}
-    .hero-trust span{border:1px solid var(--line);border-radius:999px;padding:7px 10px;color:#8f98aa;font-size:9px;background:rgba(255,255,255,.02)}
+    .hero-card>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.82) brightness(.64)}
+    .hero-card:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(4,15,21,.88) 0%,rgba(4,15,21,.58) 43%,rgba(4,15,21,.10) 75%),linear-gradient(0deg,rgba(4,15,21,.40),transparent 38%)}
+    .hero-copy{position:relative;z-index:2;max-width:650px;padding:96px 70px}
+    .hero-badge{display:inline-flex;border:1px solid rgba(105,222,208,.28);background:rgba(7,19,26,.52);backdrop-filter:blur(8px);border-radius:999px;padding:9px 12px;color:#c4d4d6;font-size:10px;font-weight:750}
+    .hero h1{font-size:clamp(54px,7vw,92px);line-height:.92;letter-spacing:-.067em;margin:24px 0 18px}
+    .hero p{font-size:17px;line-height:1.7;color:#c3d0d2;max-width:590px;margin:0}
+    .hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+    .hero-points{display:flex;gap:8px;flex-wrap:wrap;margin-top:25px}
+    .hero-points span{border:1px solid rgba(255,255,255,.12);background:rgba(5,16,22,.38);backdrop-filter:blur(8px);border-radius:999px;padding:7px 10px;font-size:9px;color:#c4d0d2}
 
-    .hero-visual{position:relative;min-height:650px;min-width:0}
-    .hero-photo{
-      position:absolute;inset:0;border-radius:34px;overflow:hidden;
-      border:1px solid rgba(255,255,255,.10);box-shadow:0 30px 80px rgba(0,0,0,.38)
-    }
-    .hero-photo img{width:100%;height:100%;object-fit:cover;filter:saturate(.78) brightness(.66) contrast(1.04)}
-    .hero-photo:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,20,27,.06),rgba(5,20,27,.20) 58%,rgba(5,20,27,.70))}
-    .float-bubble{
-      position:absolute;z-index:6;max-width:46%;padding:14px 16px;border-radius:18px;
-      background:rgba(247,245,238,.97);color:#25231f;font-size:12px;line-height:1.5;
-      box-shadow:0 18px 38px rgba(0,0,0,.22)
-    }
-    .float-bubble.one{top:17%;right:4%}.float-bubble.two{top:43%;right:7%}
-    .hero-script{
-      position:absolute;z-index:7;right:5%;bottom:8%;font-family:Georgia,serif;font-style:italic;
-      font-size:clamp(22px,2.5vw,36px);line-height:1.02;text-align:right;color:#f3efe7;
-      text-shadow:0 4px 20px rgba(0,0,0,.45);max-width:72%
-    }
-    .hero-image-label{
-      position:absolute;z-index:7;left:5%;bottom:7%;padding:8px 11px;border-radius:999px;
-      background:rgba(8,9,12,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);
-      color:#f4f1e9;font-size:9px;font-weight:850;letter-spacing:.08em
-    }
+    /* QUICK CARDS */
+    .quick{padding:96px 0;background:var(--paper);color:var(--darkText)}
+    .quick .section-head p{color:var(--mutedDark)}
+    .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+    .quick-card{position:relative;min-height:400px;border-radius:24px;overflow:hidden;background:#cfd9d7}
+    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.78) brightness(.78)}
+    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(5,15,20,.84))}
+    .quick-copy{position:absolute;z-index:2;left:22px;right:22px;bottom:22px;color:#fff}
+    .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#b8c9cc}
+    .quick-copy h3{font-size:26px;line-height:1.05;letter-spacing:-.035em;margin:7px 0 0}
 
-    /* VISUAL PRODUCT MOMENTS */
-    .visual-moments{padding:0 0 104px;border-top:1px solid var(--line)}
-    .visual-moments-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;padding-top:34px}
-    .moment-large,.moment-small{position:relative;overflow:hidden;border-radius:28px;border:1px solid var(--line);background:#0d2028}
-    .moment-large{min-height:520px}
-    .moment-stack{display:grid;grid-template-rows:1fr 1fr;gap:18px}
-    .moment-small{min-height:250px}
-    .moment-large img,.moment-small img{width:100%;height:100%;object-fit:cover;filter:saturate(.78) brightness(.72)}
-    .moment-large:after,.moment-small:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 42%,rgba(5,20,27,.74))}
-    .moment-copy{position:absolute;z-index:2;left:26px;right:26px;bottom:24px}
-    .moment-copy small{display:block;color:var(--accent2);font-size:9px;letter-spacing:.13em;font-weight:900;text-transform:uppercase;margin-bottom:7px}
-    .moment-copy strong{display:block;font-size:clamp(22px,2.6vw,36px);line-height:1.05;letter-spacing:-.035em}
-    .moment-copy span{display:block;color:#c0c6d0;font-size:11px;line-height:1.5;margin-top:7px;max-width:520px}
+    /* SPLIT SECTIONS */
+    .splits{background:var(--paper);color:var(--darkText)}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:590px;border-top:1px solid var(--darkLine)}
+    .split.reverse .split-media{order:2}
+    .split-media{min-height:590px;overflow:hidden;background:#dfe7e5}
+    .split-media img{height:100%;object-fit:cover}
+    .split-media.video{background:#08161d;padding:28px;display:flex;align-items:center;justify-content:center}
+    .phone-frame{width:min(390px,100%);border-radius:30px;background:#020608;padding:9px;box-shadow:0 28px 65px rgba(0,0,0,.36)}
+    .phone-frame video{border-radius:23px;max-height:650px;object-fit:cover}
+    .split-copy{padding:76px max(6vw,44px);display:flex;flex-direction:column;justify-content:center}
+    .split-copy h2{font-size:clamp(40px,5vw,66px);line-height:.98;letter-spacing:-.055em;margin:12px 0 18px}
+    .split-copy>p{font-size:15px;line-height:1.75;color:var(--mutedDark);margin:0;max-width:560px}
+    .features{margin-top:28px;border-top:1px solid var(--darkLine)}
+    .feature{display:grid;grid-template-columns:145px 1fr;gap:18px;padding:13px 0;border-bottom:1px solid var(--darkLine)}
+    .feature strong{font-size:12px}.feature span{font-size:12px;line-height:1.5;color:#687a7f}
+    .reply-mini{margin-top:30px;display:grid;gap:10px;max-width:460px}
+    .msg{border-radius:16px;padding:13px 15px;font-size:12px;line-height:1.5}
+    .msg.in{background:#dfe8e6;color:#27383c;max-width:82%}
+    .msg.out{background:linear-gradient(135deg,var(--violet),var(--aqua));color:#061419;max-width:82%;margin-left:auto;font-weight:700}
+    .review{display:flex;justify-content:flex-end;gap:7px}
+    .review span{font-size:9px;border:1px solid var(--darkLine);border-radius:999px;padding:7px 9px;color:#66777b}
+    .review span:last-child{background:#10242d;color:#fff;border-color:#10242d}
+
+    /* LIVE */
+    .live{padding:100px 0;background:var(--ink2)}
+    .live-panel{display:grid;grid-template-columns:1.12fr .88fr;min-height:560px;border:1px solid var(--line);border-radius:28px;overflow:hidden;background:var(--ink3)}
+    .live-photo{position:relative}
+    .live-photo img{height:100%;object-fit:cover;filter:saturate(.78) brightness(.72)}
+    .live-photo:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 55%,rgba(13,32,40,.78))}
+    .live-copy{padding:58px 50px;display:flex;flex-direction:column;justify-content:center}
+    .live-copy h2{font-size:clamp(38px,4.4vw,58px);line-height:1;letter-spacing:-.05em;margin:12px 0 18px}
+    .live-copy>p{font-size:14px;line-height:1.72;color:var(--muted);margin:0}
+    .live-list{margin-top:24px}
+    .live-item{padding:14px 0;border-top:1px solid var(--line)}
+    .live-item strong{display:block;font-size:12px;margin-bottom:4px}.live-item span{font-size:11px;line-height:1.5;color:#91a6ab}
+    .testing-chip{display:inline-flex;width:max-content;margin-top:7px;border:1px solid rgba(149,136,246,.30);border-radius:999px;padding:5px 7px;color:#b9afff;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
 
     /* PRIVACY */
-    .privacy{padding:115px 0;border-top:1px solid var(--line);background:#091820}
-    .privacy-head{text-align:center;max-width:900px;margin:auto}
-    .privacy-grid{max-width:980px;margin:68px auto 0;display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
-    .privacy-item{min-height:245px;padding:32px;border-radius:25px;background:#10242d;border:1px solid var(--line)}
-    .privacy-item .num{font-size:10px;color:var(--accent2);font-weight:900;letter-spacing:.14em}
-    .privacy-item h3{font-size:26px;letter-spacing:-.035em;margin:34px 0 10px}
-    .privacy-item p{font-size:13px;color:var(--muted);line-height:1.72;margin:0}
-    .privacy-note{
-      max-width:980px;margin:18px auto 0;padding:20px 22px;border-radius:18px;
-      border:1px solid var(--lineAccent);background:rgba(111,225,210,.055);
-      color:#aab2c0;font-size:12px;line-height:1.65
-    }
-    .privacy-note strong{color:#f2f0eb}
+    .privacy{padding:104px 0;background:var(--paper2);color:var(--darkText)}
+    .privacy .section-head p{color:var(--mutedDark)}
+    .privacy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:980px;margin:0 auto}
+    .privacy-card{background:#fff;border:1px solid var(--darkLine);border-radius:22px;padding:28px;min-height:235px}
+    .privacy-card small{font-size:9px;font-weight:850;letter-spacing:.13em;color:#756be0}
+    .privacy-card h3{font-size:24px;line-height:1.05;letter-spacing:-.035em;margin:28px 0 10px}
+    .privacy-card p{font-size:12px;line-height:1.65;color:#65777b;margin:0}
+    .privacy-note{max-width:980px;margin:14px auto 0;padding:15px 18px;border:1px solid rgba(105,222,208,.34);border-radius:16px;background:#e2f2ef;color:#536a6f;font-size:11px;line-height:1.55}
+    .privacy-note strong{color:#102129}
 
-    /* REAL-LIFE IMAGE STORIES */
-    .situations{padding:118px 0;border-top:1px solid var(--line)}
-    .editorial-head{text-align:center;max-width:900px;margin:0 auto 64px}
-    .story-row{
-      min-height:500px;display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);
-      padding:56px 0;gap:62px;align-items:center
-    }
-    .story-row:nth-child(even) .story-image{order:2}
-    .story-image{height:430px;border-radius:28px;overflow:hidden;border:1px solid var(--line);position:relative}
-    .story-image img{width:100%;height:100%;object-fit:cover;filter:saturate(.72) brightness(.72)}
-    .story-image:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(5,20,27,.48))}
-    .story-copy .kicker{color:#8f98aa}
-    .story-copy h3{font-size:clamp(36px,4.2vw,56px);line-height:1;letter-spacing:-.05em;margin:12px 0 18px}
-    .story-copy p{font-size:15px;line-height:1.78;color:var(--muted);max-width:560px;margin:0}
-    .micro{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
-    .micro span{border:1px solid var(--line);border-radius:999px;padding:7px 9px;color:#9ca5b5;font-size:9px}
-
-    /* PRODUCT HIGHLIGHTS */
-    .highlights{padding:118px 0;border-top:1px solid var(--line);background:#091820}
-    .highlight{
-      min-height:520px;display:grid;grid-template-columns:.9fr 1.1fr;gap:66px;align-items:center;
-      padding:64px 0;border-top:1px solid var(--line)
-    }
-    .highlight:first-of-type{margin-top:60px}
-    .highlight h3{font-size:clamp(38px,4.5vw,62px);line-height:.98;letter-spacing:-.055em;margin:12px 0 18px}
-    .highlight p{font-size:15px;line-height:1.75;color:var(--muted);margin:0}
-    .specs{margin-top:28px}
-    .spec{display:grid;grid-template-columns:155px 1fr;gap:20px;padding:14px 0;border-top:1px solid var(--line)}
-    .spec strong{font-size:12px}.spec span{font-size:12px;color:#929bad;line-height:1.5}
-    .showcase{
-      min-height:410px;border-radius:30px;border:1px solid var(--lineAccent);padding:32px;
-      background:
-        radial-gradient(circle at 50% 10%,rgba(155,140,255,.13),transparent 30%),
-        linear-gradient(145deg,#142b35,#0b1c25);
-      display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden
-    }
-    .doc-stack{width:min(430px,94%);display:grid;gap:12px;position:relative;z-index:2}
-    .doc{border:1px solid rgba(255,255,255,.1);border-radius:17px;background:#142a34;padding:19px 20px}
-    .doc.goldline{border-color:rgba(111,225,210,.38)}
-    .doc small{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#777f91}
-    .doc b{display:block;margin-top:6px;font-size:16px}.doc span{display:block;color:#969faf;font-size:11px;margin-top:5px}
-    .reply-demo{width:min(460px,94%);display:grid;gap:12px;position:relative;z-index:2}
-    .bubble{max-width:82%;padding:15px 17px;border-radius:18px;font-size:12px;line-height:1.55}
-    .bubble.in{background:#132630;color:#c2c9d5;border:1px solid var(--line)}
-    .bubble.out{margin-left:auto;background:linear-gradient(135deg,#9b8cff,#6fe1d2);color:#061419;font-weight:720}
-    .approval{display:flex;justify-content:flex-end;gap:8px}.approval span{border:1px solid var(--line);border-radius:999px;padding:8px 10px;color:#9ea6b6;font-size:10px}.approval span:last-child{background:var(--accent);color:#061419;border-color:var(--accent);font-weight:900}
-    .meeting-demo{width:min(470px,95%);position:relative;z-index:2}
-    .meeting-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-    .meeting-head strong{font-size:13px}.live{font-size:10px;color:#9ca5b4;display:flex;align-items:center;gap:6px}.live i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px rgba(111,225,210,.72)}
-    .transcript{display:grid;gap:10px}.tline{border-left:2px solid rgba(155,140,255,.48);padding:8px 0 8px 14px;color:#a7afbe;font-size:11px;line-height:1.55}.tline b{display:block;color:#f0eee8;font-size:10px;margin-bottom:3px}
-
-    /* KEYBOARD VIDEO — hero treatment */
-    .keyboard{padding:118px 0;border-top:1px solid var(--line)}
-    .keyboard-layout{display:grid;grid-template-columns:.92fr 1.08fr;gap:58px;align-items:center;margin-top:62px}
-    .keyboard-video{
-      position:relative;border-radius:32px;background:#061016;border:1px solid rgba(255,255,255,.11);
-      padding:10px;box-shadow:0 36px 95px rgba(0,0,0,.45);max-width:440px;margin:auto
-    }
-    .keyboard-video video{width:100%;border-radius:24px;max-height:670px;object-fit:cover}
-    .keyboard-tag{position:absolute;left:22px;top:22px;padding:8px 10px;border-radius:999px;background:rgba(6,16,22,.78);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.13);font-size:9px;font-weight:850;letter-spacing:.08em}
-    .keyboard-copy h3{font-size:clamp(38px,4.5vw,62px);line-height:.98;letter-spacing:-.055em;margin:12px 0 18px}
-    .keyboard-copy>p{font-size:15px;color:var(--muted);line-height:1.75;margin:0}
-    .kbd-list{margin-top:28px}
-    .kbd-row{display:grid;grid-template-columns:180px 1fr;gap:18px;border-top:1px solid var(--line);padding:14px 0}
-    .kbd-row strong{font-size:12px}.kbd-row span{font-size:12px;color:#929bad;line-height:1.5}
-
-    /* COMPATIBILITY */
-    .compat{padding:118px 0;border-top:1px solid var(--line);background:#08161d}
-    .compat-shell{
-      max-width:1040px;margin:58px auto 0;border:1px solid var(--lineAccent);border-radius:30px;
-      padding:42px;background:
-        radial-gradient(circle at 20% 10%,rgba(155,140,255,.10),transparent 26%),
-        radial-gradient(circle at 84% 86%,rgba(111,225,210,.09),transparent 28%),
-        #10242d
-    }
-    .compat-grid{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
-    .compat-copy h3{font-size:clamp(34px,4vw,54px);line-height:1;letter-spacing:-.05em;margin:12px 0 16px}
-    .compat-copy p{font-size:14px;line-height:1.75;color:var(--muted);margin:0}
-    .compat-flow{display:grid;gap:10px}
-    .compat-node{
-      border:1px solid var(--line);border-radius:18px;padding:17px 18px;background:#0d2028
-    }
-    .compat-node strong{display:block;font-size:13px;margin-bottom:5px}
-    .compat-node span{display:block;font-size:11px;line-height:1.5;color:#95aab0}
-    .compat-arrow{text-align:center;color:var(--accent);font-size:18px;line-height:1}
-    .compat-note{margin-top:18px;color:#738d94;font-size:10px;line-height:1.55}
+    /* COMPAT */
+    .compat{padding:100px 0;background:var(--ink)}
+    .compat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:1000px;margin:0 auto}
+    .compat-card{border:1px solid var(--line);background:var(--ink2);border-radius:22px;padding:28px;min-height:220px}
+    .compat-card small{font-size:9px;color:var(--aqua);letter-spacing:.13em;font-weight:850}
+    .compat-card h3{font-size:25px;letter-spacing:-.035em;margin:28px 0 10px}
+    .compat-card p{font-size:12px;line-height:1.65;color:var(--muted);margin:0}
 
     /* EASY */
-    .easy{padding:116px 0;border-top:1px solid var(--line);background:#091820;text-align:center}
-    .steps{max-width:900px;margin:64px auto 0;display:grid;grid-template-columns:repeat(3,1fr)}
-    .step{padding:0 34px;border-right:1px solid var(--line)}
+    .easy{padding:94px 0;background:var(--paper);color:var(--darkText)}
+    .easy .section-head p{color:var(--mutedDark)}
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);max-width:930px;margin:0 auto}
+    .step{padding:0 34px;border-right:1px solid var(--darkLine);text-align:center}
     .step:last-child{border-right:0}
-    .step .n{font-size:10px;color:var(--accent);font-weight:900;letter-spacing:.12em}
-    .step h3{font-size:26px;letter-spacing:-.04em;margin:20px 0 8px}
-    .step p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}
+    .step small{font-size:9px;letter-spacing:.14em;color:#7469df;font-weight:850}
+    .step h3{font-size:24px;letter-spacing:-.035em;margin:20px 0 8px}
+    .step p{font-size:12px;line-height:1.6;color:#65777b;margin:0}
 
-    /* FINAL VISUAL */
-    .final{display:grid;grid-template-columns:.9fr 1.1fr;min-height:620px;border-top:1px solid var(--line)}
-    .final-copy{padding:78px max(5vw,44px);display:flex;flex-direction:column;justify-content:center;background:#07131a}
-    .final-copy h2{font-size:clamp(46px,5.5vw,76px);line-height:.96;letter-spacing:-.06em;margin:14px 0 20px}
-    .final-copy p{font-size:14px;color:#9ca5b5;line-height:1.72;max-width:560px;margin:0}
-    .final-copy .cta{align-self:flex-start;margin-top:27px}
-    .final-photo{position:relative;overflow:hidden;min-height:620px}
-    .final-photo img{width:100%;height:100%;object-fit:cover;filter:saturate(.72) brightness(.65)}
-    .final-photo:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(7,19,26,.2),transparent 35%),linear-gradient(180deg,transparent 55%,rgba(8,9,11,.4))}
-    .final-note{position:absolute;z-index:2;right:8%;bottom:9%;font-family:Georgia,serif;font-style:italic;text-align:right;font-size:clamp(25px,3vw,40px);line-height:1.04;text-shadow:0 4px 20px rgba(0,0,0,.45)}
-    .testing{margin-top:13px;font-size:9px;color:#687182;letter-spacing:.12em;text-transform:uppercase}
+    /* FINAL */
+    .final{padding:54px 0 84px;background:var(--ink)}
+    .final-card{position:relative;min-height:560px;border-radius:30px;overflow:hidden;border:1px solid var(--line)}
+    .final-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.78) brightness(.60)}
+    .final-card:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(5,17,23,.88),rgba(5,17,23,.46) 55%,rgba(5,17,23,.10))}
+    .final-copy{position:relative;z-index:2;max-width:650px;padding:88px 66px}
+    .final-copy h2{font-size:clamp(48px,6vw,78px);line-height:.95;letter-spacing:-.06em;margin:12px 0 18px}
+    .final-copy p{font-size:14px;line-height:1.7;color:#c0cdd0;max-width:530px;margin:0}
+    .final-copy .cta{margin-top:25px}
+    .private-testing{margin-top:14px;font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:#87999e}
 
     footer{padding:24px 0;border-top:1px solid var(--line)}
-    .footer{display:flex;justify-content:space-between;align-items:center;gap:20px;color:#70798a;font-size:10px}
-    .footer-links{display:flex;gap:18px;flex-wrap:wrap}
+    .footer{display:flex;justify-content:space-between;align-items:center;gap:18px;color:#758a90;font-size:10px}
+    .footer-links{display:flex;gap:16px;flex-wrap:wrap}
 
     @media(max-width:920px){
       .navlinks{display:none}
-      .hero{grid-template-columns:1fr;padding-top:58px}
-      .hero-copy{text-align:center}
-      .hero p{margin-left:auto;margin-right:auto}
-      .hero-actions,.hero-trust{justify-content:center}
-      .hero-visual{width:100%;max-width:680px;margin:0 auto;min-height:560px}
-      .story-row,.highlight,.keyboard-layout,.final{grid-template-columns:1fr}
-      .story-row:nth-child(even) .story-image{order:0}
-      .highlight{gap:32px}.keyboard-layout{gap:42px}
-      .privacy-grid{grid-template-columns:1fr}
-      .visual-moments-grid{grid-template-columns:1fr}
-      .moment-stack{grid-template-columns:1fr 1fr;grid-template-rows:none}
-      .final-photo{min-height:460px}
+      .quick-grid{grid-template-columns:1fr 1fr}
+      .split,.live-panel{grid-template-columns:1fr}
+      .split.reverse .split-media{order:0}
+      .split-media{min-height:460px}
+      .live-photo{min-height:440px}
+      .privacy-grid,.compat-grid{grid-template-columns:1fr}
     }
     @media(max-width:640px){
-      .wrap{width:100%;max-width:100%;padding-left:18px;padding-right:18px;margin:0 auto}
+      .wrap{padding:0 18px}
       .nav{height:64px}.brand{font-size:18px}.brand img{width:31px;height:31px}
-      .topbar .wrap{padding-left:20px;padding-right:20px}
-      .hero{display:block;min-height:0;padding:42px 0 64px}
-      .hero-copy{width:100%;max-width:100%}
-      .hero h1{font-size:64px}.hero h2{font-size:33px}.hero p{font-size:14px}
-      .hero-visual{position:relative;width:100%;max-width:100%;min-height:0;margin-top:34px;aspect-ratio:4/5}
-      .hero-photo{position:absolute;inset:0;width:100%;height:100%;border-radius:24px}
-      .float-bubble{font-size:10px;line-height:1.42;max-width:54%;padding:10px 11px;border-radius:15px}
-      .float-bubble.one{top:14%;right:4%}.float-bubble.two{top:39%;right:5%}
-      .hero-script{font-size:23px;right:5%;bottom:7%;max-width:70%}
-      .hero-image-label{left:5%;bottom:6%;font-size:8px}
-      .visual-moments{padding-bottom:72px}
-      .visual-moments-grid{display:block;padding-top:18px}
-      .moment-large,.moment-small{width:100%;min-height:0;aspect-ratio:4/5;border-radius:22px;margin-bottom:14px}
-      .moment-stack{display:block}
-      .moment-copy{left:20px;right:20px;bottom:20px}
-      .moment-copy strong{font-size:25px}
-      .privacy,.situations,.highlights,.keyboard,.compat,.easy{padding:78px 0}
-      .privacy-head,.editorial-head{width:100%;max-width:100%;padding:0;margin-left:auto;margin-right:auto}
-      .section-title{font-size:43px;line-height:1.02;max-width:100%}
-      .section-lead{font-size:14px;max-width:100%}
-      .privacy-grid{margin-top:42px;width:100%}
-      .privacy-item{width:100%;min-width:0;min-height:0;padding:25px 22px;border-radius:21px}
-      .privacy-item h3{font-size:25px;margin-top:25px}
-      .privacy-item p{font-size:13px}
-      .privacy-note{width:100%;max-width:100%;padding:17px 18px}
-      .editorial-head{margin-bottom:40px}
-      .story-row{display:block;width:100%;min-height:0;padding:42px 0}
-      .story-image{width:100%;height:auto;aspect-ratio:4/3;border-radius:21px;margin-bottom:26px}
-      .story-copy{width:100%;min-width:0}
-      .story-copy h3,.highlight h3,.keyboard-copy h3{font-size:39px;max-width:100%}
-      .highlight{display:block;width:100%;min-height:0;padding:46px 0}
-      .highlight>div:first-child{width:100%;min-width:0;margin-bottom:28px}
-      .showcase{width:100%;max-width:100%;min-height:320px;border-radius:21px;padding:20px}
-      .spec,.kbd-row{grid-template-columns:1fr;gap:5px}
-      .keyboard-layout{display:block;width:100%}
-      .keyboard-video{width:100%;max-width:390px;margin:0 auto 38px}
-      .keyboard-copy{width:100%;min-width:0}
-      .compat-shell{width:100%;max-width:100%;padding:24px 20px;border-radius:22px}
-      .compat-grid{grid-template-columns:1fr;gap:28px}
-      .compat-copy h3{font-size:39px}
-      .steps{grid-template-columns:1fr;gap:32px;margin-top:44px}
-      .step{border-right:0;padding:0 12px}
-      .final{display:block;width:100%}
-      .final-copy{padding:62px 22px}.final-copy h2{font-size:47px}
-      .final-photo{width:100%;min-height:0;aspect-ratio:4/5}
+      .hero{padding:24px 0 58px}
+      .hero-card{min-height:650px;border-radius:24px}
+      .hero-card:after{background:linear-gradient(0deg,rgba(4,15,21,.92) 0%,rgba(4,15,21,.62) 56%,rgba(4,15,21,.10) 100%)}
+      .hero-copy{position:absolute;left:0;right:0;bottom:0;padding:34px 24px}
+      .hero h1{font-size:51px}
+      .hero p{font-size:14px}
+      .hero-points span:nth-child(n+4){display:none}
+      .quick{padding:72px 0}
+      .section-head{margin-bottom:36px}
+      .section-head h2{font-size:42px}
+      .section-head p{font-size:14px}
+      .quick-grid{grid-template-columns:1fr}
+      .quick-card{min-height:390px}
+      .split{display:block;min-height:0}
+      .split-media{width:100%;min-height:0;aspect-ratio:4/3}
+      .split-media.video{aspect-ratio:auto;padding:28px 18px}
+      .split-copy{padding:48px 22px}
+      .split-copy h2{font-size:42px}
+      .feature{grid-template-columns:1fr;gap:4px}
+      .live{padding:72px 0}
+      .live-panel{display:block}
+      .live-photo{min-height:0;aspect-ratio:4/3}
+      .live-copy{padding:38px 24px}
+      .live-copy h2{font-size:41px}
+      .privacy,.compat,.easy{padding:72px 0}
+      .privacy-card,.compat-card{min-height:0}
+      .steps{grid-template-columns:1fr;gap:30px}
+      .step{border-right:0;padding:0 14px}
+      .final{padding:24px 0 62px}
+      .final-card{min-height:620px;border-radius:24px}
+      .final-card:after{background:linear-gradient(0deg,rgba(5,17,23,.92),rgba(5,17,23,.30) 66%,rgba(5,17,23,.08))}
+      .final-copy{position:absolute;left:0;right:0;bottom:0;padding:34px 24px}
+      .final-copy h2{font-size:48px}
       .footer{flex-direction:column;align-items:flex-start}
     }
-
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   </style>
 </head>
@@ -324,300 +214,219 @@
     <div class="wrap nav">
       <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
       <nav class="navlinks" aria-label="Ana navigation">
-        <a href="#privacy">Privacy</a>
-        <a href="#situations">Real life</a>
-        <a href="#highlights">Capabilities</a>
+        <a href="#capabilities">Capabilities</a>
         <a href="#keyboard">Keyboard</a>
+        <a href="#privacy">Privacy</a>
         <a href="#compatibility">Compatibility</a>
-        <a href="#easy">Learning curve</a>
       </nav>
       <a class="cta" href="/">Try Ana →</a>
     </div>
   </header>
 
   <main id="top">
-    <section>
-      <div class="wrap hero">
-        <div class="hero-copy">
-          <div class="hero-badge"><i>✦</i> Privacy-first multilingual communication</div>
-          <h1>Ana</h1>
-          <h2>Your meaning.<br><span class="accent">Any language.</span></h2>
-          <p>Type, translate, reply, understand documents and photos, follow meetings and handle multilingual conversations — while keeping normal keyboard use local and cloud AI behind clear user actions.</p>
-          <div class="hero-actions">
-            <a class="cta" href="/">Try Ana →</a>
-            <a class="ghost" href="#privacy">How privacy works</a>
+    <section class="hero">
+      <div class="wrap">
+        <article class="hero-card">
+          <img src="https://images.pexels.com/photos/19682344/pexels-photo-19682344.jpeg?auto=compress&cs=tinysrgb&w=1800" alt="Traveler using a phone with luggage at a train station">
+          <div class="hero-copy">
+            <div class="hero-badge">Privacy-first multilingual communication</div>
+            <h1>Say what you mean.<br><span class="accent">In any language.</span></h1>
+            <p>Ana helps you write, translate, reply and understand the world around you — without changing how you already communicate.</p>
+            <div class="hero-actions">
+              <a class="cta" href="/">Try Ana →</a>
+              <a class="ghost" href="#capabilities">See how Ana works</a>
+            </div>
+            <div class="hero-points">
+              <span>Privacy-first</span>
+              <span>Works where you already type</span>
+              <span>Short learning curve</span>
+            </div>
           </div>
-          <div class="hero-trust">
-            <span>Local-first typing</span>
-            <span>Privacy Shield</span>
-            <span>Sensitive-field protection</span>
-            <span>Incognito</span>
-            <span>Per-app AI control</span>
-          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="quick" id="capabilities">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="kicker">WHAT ANA HELPS WITH</div>
+          <h2>Language help for the things you already do.</h2>
         </div>
 
-        <div class="hero-visual">
-          <div class="hero-photo">
-            <img src="https://images.pexels.com/photos/19682344/pexels-photo-19682344.jpeg?auto=compress&cs=tinysrgb&w=1800" alt="Traveler checking her phone with luggage at a train station">
-          </div>
-          <div class="float-bubble one">Can you tell her I'd like to change my train to tomorrow?</div>
-          <div class="float-bubble two">Of course. I'll ask what options are available.</div>
-          <div class="hero-image-label">ANA IN REAL LIFE</div>
-          <div class="hero-script">Your meaning.<br>Any language.</div>
+        <div class="quick-grid">
+          <article class="quick-card">
+            <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person messaging on a smartphone">
+            <div class="quick-copy"><small>MESSAGES</small><h3>Reply naturally.</h3></div>
+          </article>
+          <article class="quick-card">
+            <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a clean desk">
+            <div class="quick-copy"><small>DOCUMENTS</small><h3>Translate PDF & Word.</h3></div>
+          </article>
+          <article class="quick-card">
+            <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler photographing street signs with a smartphone">
+            <div class="quick-copy"><small>PICTURES</small><h3>Understand what you see.</h3></div>
+          </article>
+          <article class="quick-card">
+            <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People discussing work around a laptop">
+            <div class="quick-copy"><small>CONVERSATIONS</small><h3>Follow what is being said.</h3></div>
+          </article>
         </div>
       </div>
     </section>
 
-    <section class="visual-moments" aria-label="Ana in real life">
-      <div class="wrap visual-moments-grid">
-        <article class="moment-large">
-          <img src="https://images.pexels.com/photos/4260314/pexels-photo-4260314.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Mother helping her daughter with schoolwork at home">
-          <div class="moment-copy">
-            <small>FAMILY ACROSS LANGUAGES</small>
-            <strong>More understanding. Less translating in your head.</strong>
-            <span>Translate, reply and communicate naturally when everyday life moves between languages.</span>
+    <section class="splits">
+      <article class="split">
+        <div class="split-media">
+          <img src="https://images.pexels.com/photos/8970674/pexels-photo-8970674.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Document, pen and laptop arranged on a desk">
+        </div>
+        <div class="split-copy">
+          <div class="kicker">DOCUMENT TRANSLATION</div>
+          <h2>Translate the document.<br>Keep the document.</h2>
+          <p>Ana translates PDF and Word files while preserving the structure that makes them useful.</p>
+          <div class="features">
+            <div class="feature"><strong>PDF</strong><span>Native and scanned documents.</span></div>
+            <div class="feature"><strong>Word</strong><span>Editable .docx output.</span></div>
+            <div class="feature"><strong>Structure</strong><span>Tables, headings, images, headers and footers retained.</span></div>
+            <div class="feature"><strong>Review</strong><span>Original · Translated · Compare.</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="split reverse">
+        <div class="split-media">
+          <img src="https://images.pexels.com/photos/9798546/pexels-photo-9798546.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Restaurant menu board on a city street">
+        </div>
+        <div class="split-copy">
+          <div class="kicker">PICTURE TRANSLATION</div>
+          <h2>Point. Translate.<br>Understand.</h2>
+          <p>Ana puts translated text back where it appears instead of giving you a disconnected block of OCR text.</p>
+          <div class="features">
+            <div class="feature"><strong>In place</strong><span>Translated overlay follows the original text area.</span></div>
+            <div class="feature"><strong>Compare</strong><span>Switch between original and translated views.</span></div>
+            <div class="feature"><strong>Inspect</strong><span>Zoom into small or difficult text.</span></div>
+            <div class="feature"><strong>Uncertainty</strong><span>Hard-to-read OCR can be flagged instead of guessed.</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="split">
+        <div class="split-media">
+          <img src="https://images.pexels.com/photos/7342998/pexels-photo-7342998.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="Person using a smartphone to send a message">
+        </div>
+        <div class="split-copy">
+          <div class="kicker">REPLY · WRITE · CORRECT · TRANSLATE</div>
+          <h2>Understand the message.<br>Know what to say back.</h2>
+          <p>Copy or select a message, tell Ana how you want to answer if needed, review the suggestion and paste it back.</p>
+          <div class="reply-mini">
+            <div class="msg in">Could we move tomorrow’s appointment to the afternoon?</div>
+            <div class="msg out">Yes, the afternoon works for me. What time would suit you best?</div>
+            <div class="review"><span>Reject</span><span>Accept</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="split reverse" id="keyboard">
+        <div class="split-media video">
+          <div class="phone-frame">
+            <video autoplay muted loop playsinline preload="metadata" aria-label="Real Ana Keyboard demo">
+              <source src="/meet-ana/ana-keyboard-demo.mp4" type="video/mp4">
+            </video>
+          </div>
+        </div>
+        <div class="split-copy">
+          <div class="kicker">REAL ANA KEYBOARD · ANDROID</div>
+          <h2>Ana where you already type.</h2>
+          <p>Normal typing stays familiar. Ana’s language tools are there when you choose them.</p>
+          <div class="features">
+            <div class="feature"><strong>Translate</strong><span>Translate without leaving the app.</span></div>
+            <div class="feature"><strong>Write</strong><span>Turn rough intent into ready-to-send text.</span></div>
+            <div class="feature"><strong>Correct</strong><span>Review full paragraph changes before replacing.</span></div>
+            <div class="feature"><strong>Reply</strong><span>Draft from selected or copied context.</span></div>
+            <div class="feature"><strong>Enter</strong><span>Search, Next, Go, Send or newline depending on the field.</span></div>
+            <div class="feature"><strong>More</strong><span>Voice, clipboard, symbols, personal dictionary and learned corrections.</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="live">
+      <div class="wrap">
+        <article class="live-panel">
+          <div class="live-photo">
+            <img src="https://images.pexels.com/photos/7433900/pexels-photo-7433900.jpeg?auto=compress&cs=tinysrgb&w=1600" alt="People having a focused work meeting">
+          </div>
+          <div class="live-copy">
+            <div class="kicker">LIVE & MEETINGS</div>
+            <h2>Stay in the conversation.</h2>
+            <p>Ana also helps when the information is being spoken instead of typed.</p>
+            <div class="live-list">
+              <div class="live-item"><strong>Live</strong><span>Back-and-forth spoken translation.</span></div>
+              <div class="live-item"><strong>Meeting Listen</strong><span>Rolling transcript and translated meeting text.</span></div>
+              <div class="live-item"><strong>Talk for Me</strong><span>Routine dialogue assistance with material decisions kept with you.</span><div class="testing-chip">Private testing</div></div>
+            </div>
           </div>
         </article>
-        <div class="moment-stack">
-          <article class="moment-small">
-            <img src="https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Doctor and patient talking during a consultation">
-            <div class="moment-copy">
-              <small>APPOINTMENTS</small>
-              <strong>Understand the conversation. Keep the decision yours.</strong>
-            </div>
-          </article>
-          <article class="moment-small">
-            <img src="https://images.pexels.com/photos/4606721/pexels-photo-4606721.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler holding a phone and boarding pass at an airport">
-            <div class="moment-copy">
-              <small>TRAVEL</small>
-              <strong>Signs, tickets and questions — without the language wall.</strong>
-            </div>
-          </article>
-        </div>
       </div>
     </section>
 
     <section class="privacy" id="privacy">
       <div class="wrap">
-        <div class="privacy-head">
-          <div class="kicker">PRIVACY IS THE PRODUCT, TOO</div>
-          <h2 class="section-title">Useful when you ask.<br><span class="accent">Quiet when you don't.</span></h2>
-          <div class="rule"></div>
-          <p class="section-lead">Using Ana Keyboard should not mean continuously sending everything you type to an AI service. Normal typing and cloud AI are deliberately separated.</p>
+        <div class="section-head">
+          <div class="kicker">PRIVACY</div>
+          <h2>Useful when you ask.<br>Quiet when you don’t.</h2>
+          <p>Ana separates normal typing from cloud AI instead of treating every keystroke as an AI request.</p>
         </div>
-
         <div class="privacy-grid">
-          <article class="privacy-item"><div class="num">01 · LOCAL FIRST</div><h3>Normal typing is not a cloud request.</h3><p>Key input, local suggestions, autocorrection, learned words and glide decoding can work on-device. Smart paragraph correction is a separate opt-in feature.</p></article>
-          <article class="privacy-item"><div class="num">02 · PRIVATE FIELDS</div><h3>Passwords and OTPs are treated differently.</h3><p>Ana disables AI behaviour in sensitive fields. Clipboard and voice features are also kept away from private input contexts.</p></article>
-          <article class="privacy-item"><div class="num">03 · PRIVACY SHIELD</div><h3>Protect sensitive values before AI.</h3><p>When enabled, Ana can mask recognised personal values before cloud processing and restore them after the AI response.</p></article>
-          <article class="privacy-item"><div class="num">04 · USER CONTROL</div><h3>Incognito and per-app controls actually change behaviour.</h3><p>Incognito pauses AI, learning and clipboard history. AI actions can also stay disabled in apps where you do not want them.</p></article>
+          <article class="privacy-card"><small>LOCAL FIRST</small><h3>Normal typing stays local.</h3><p>Basic typing, suggestions, autocorrection, learned words and glide do not need a cloud AI round-trip.</p></article>
+          <article class="privacy-card"><small>PRIVATE CONTEXTS</small><h3>Sensitive fields are treated differently.</h3><p>Password and OTP-style fields disable Ana AI behaviour and keep voice and clipboard features away.</p></article>
+          <article class="privacy-card"><small>YOU CONTROL AI</small><h3>AI is a choice.</h3><p>Privacy Shield, Incognito and per-app controls decide when Ana is allowed to use cloud features.</p></article>
         </div>
-        <div class="privacy-note"><strong>Reply does not read your screen.</strong> Ana uses text you deliberately select, copy or place in the editor. It does not silently scrape surrounding WhatsApp, Gmail or other app content.</div>
-      </div>
-    </section>
-
-    <section class="situations" id="situations">
-      <div class="wrap">
-        <div class="editorial-head">
-          <div class="kicker">REAL SITUATIONS. LESS FRICTION.</div>
-          <h2 class="section-title">What does Ana<br><span class="accent">actually solve?</span></h2>
-          <div class="rule"></div>
-        </div>
-
-        <article class="story-row">
-          <div class="story-image"><img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1400" alt="Woman using her smartphone in a Berlin cafe"></div>
-          <div class="story-copy">
-            <div class="kicker">MESSAGES & REPLIES</div>
-            <h3>A message arrives in a language you don't naturally write in.</h3>
-            <p>Copy or select it, tap Reply, tell Ana how you want to answer if needed, review the result and paste it back into the conversation.</p>
-            <div class="micro"><span>Reply</span><span>Translate</span><span>Write</span><span>Accept / Reject</span></div>
-          </div>
-        </article>
-
-        <article class="story-row">
-          <div class="story-image"><img src="https://images.pexels.com/photos/7433900/pexels-photo-7433900.jpeg?auto=compress&cs=tinysrgb&w=1400" alt="Team discussing work around a laptop and documents"></div>
-          <div class="story-copy">
-            <div class="kicker">MEETINGS & WORK</div>
-            <h3>Follow the meeting without translating every sentence in your head.</h3>
-            <p>Ana can keep a rolling transcript and translated text alongside a longer conversation, so you can concentrate on what is being discussed.</p>
-            <div class="micro"><span>Meeting Listen</span><span>Transcript</span><span>Live translation</span></div>
-          </div>
-        </article>
-
-        <article class="story-row">
-          <div class="story-image"><img src="https://images.pexels.com/photos/4101416/pexels-photo-4101416.jpeg?auto=compress&cs=tinysrgb&w=1400" alt="Application form, pen and laptop on an organized desk"></div>
-          <div class="story-copy">
-            <div class="kicker">DOCUMENTS & PAPERWORK</div>
-            <h3>Understand the document without losing the document.</h3>
-            <p>PDF and Word translation keep the structure useful: headings, tables, images, headers and formatting stay part of the result instead of becoming a plain block of translated text.</p>
-            <div class="micro"><span>PDF</span><span>Scanned PDF</span><span>Word .docx</span><span>Compare</span></div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="highlights" id="highlights">
-      <div class="wrap">
-        <div class="editorial-head">
-          <div class="kicker">THE MAIN HIGHLIGHTS</div>
-          <h2 class="section-title">One Ana.<br><span class="accent">Several places language gets hard.</span></h2>
-          <div class="rule"></div>
-        </div>
-
-        <article class="highlight">
-          <div>
-            <div class="kicker">WRITE · CORRECT · REPLY · TRANSLATE</div>
-            <h3>Ana lives where the words are being written.</h3>
-            <p>Use Ana Keyboard inside other Android apps. Translate a draft, turn rough intent into a finished message, correct a paragraph or generate a reply from copied/selected context.</p>
-            <div class="specs">
-              <div class="spec"><strong>Reply</strong><span>Copy/select the message, optionally give an instruction, review, then paste.</span></div>
-              <div class="spec"><strong>Correct</strong><span>Scrollable full Before / After review or safe automatic application.</span></div>
-              <div class="spec"><strong>Write</strong><span>Turn rough notes or intent into ready-to-send text.</span></div>
-              <div class="spec"><strong>Translate</strong><span>Meaning-first translation with glossary and context.</span></div>
-            </div>
-          </div>
-          <div class="showcase">
-            <div class="reply-demo">
-              <div class="bubble in">“Könnten wir den Termin auf morgen verschieben?”</div>
-              <div class="bubble out">Yes, tomorrow works for me. What time would suit you best?</div>
-              <div class="approval"><span>Reject</span><span>Accept</span></div>
-            </div>
-          </div>
-        </article>
-
-        <article class="highlight">
-          <div>
-            <div class="kicker">PDF · WORD · PICTURES</div>
-            <h3>Translate the content without throwing away the format.</h3>
-            <p>Ana treats layout as part of the meaning. PDF and Word translation preserve structure, while picture translation puts translated text back into the visual area where it belongs.</p>
-            <div class="specs">
-              <div class="spec"><strong>PDF</strong><span>Native and scanned PDFs with positioned reconstruction.</span></div>
-              <div class="spec"><strong>Word</strong><span>Editable .docx output with tables, headers, footers, images and styles retained.</span></div>
-              <div class="spec"><strong>Pictures</strong><span>In-place translated overlay, zoom, compare and export.</span></div>
-              <div class="spec"><strong>Review</strong><span>Original · Translated · Compare.</span></div>
-            </div>
-          </div>
-          <div class="showcase">
-            <div class="doc-stack">
-              <div class="doc"><small>Original PDF</small><b>Elternbrief zum Schuljahresbeginn</b><span>Structured document · 3 pages</span></div>
-              <div class="doc goldline"><small>Ana translated</small><b>Letter to parents for the start of the school year</b><span>Layout preserved · ready to compare</span></div>
-              <div class="doc"><small>Word output</small><b>Editable .docx</b><span>Tables · images · headers · styles retained</span></div>
-            </div>
-          </div>
-        </article>
-
-        <article class="highlight">
-          <div>
-            <div class="kicker">LIVE · MEETINGS · TALK FOR ME</div>
-            <h3>When the language problem is happening in real time.</h3>
-            <p>Live helps with spoken back-and-forth communication. Meeting Listen follows longer conversations with transcript and translated text. Talk for Me remains in private testing for routine dialogue with decision boundaries.</p>
-            <div class="specs">
-              <div class="spec"><strong>Live</strong><span>Back-and-forth spoken interpretation.</span></div>
-              <div class="spec"><strong>Meetings</strong><span>Rolling transcript and translated meeting text.</span></div>
-              <div class="spec"><strong>Talk for Me</strong><span>Routine dialogue; material decisions stay with the owner.</span></div>
-            </div>
-          </div>
-          <div class="showcase">
-            <div class="meeting-demo">
-              <div class="meeting-head"><strong>Meeting Listen</strong><span class="live"><i></i> Listening</span></div>
-              <div class="transcript">
-                <div class="tline"><b>Speaker 1</b>We need the revised capacity plan before Friday.</div>
-                <div class="tline"><b>Ana · German</b>Wir brauchen den überarbeiteten Kapazitätsplan vor Freitag.</div>
-                <div class="tline"><b>Speaker 2</b>I’ll update the numbers after today’s review.</div>
-                <div class="tline"><b>Ana · German</b>Ich aktualisiere die Zahlen nach der heutigen Prüfung.</div>
-              </div>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="keyboard" id="keyboard">
-      <div class="wrap">
-        <div class="editorial-head">
-          <div class="kicker">REAL ANA KEYBOARD</div>
-          <h2 class="section-title">Not a mockup.<br><span class="accent">The actual keyboard.</span></h2>
-          <div class="rule"></div>
-        </div>
-
-        <div class="keyboard-layout">
-          <div class="keyboard-video">
-            <div class="keyboard-tag">REAL PRODUCT DEMO</div>
-            <video autoplay muted loop playsinline preload="metadata" aria-label="Real Ana Keyboard correcting and translating text">
-              <source src="/meet-ana/ana-keyboard-demo.mp4" type="video/mp4">
-            </video>
-          </div>
-          <div class="keyboard-copy">
-            <div class="kicker">FAMILIAR FIRST</div>
-            <h3>Powerful features without making the keyboard feel foreign.</h3>
-            <p>The typing path stays focused on responsiveness. Ana’s AI tools sit around that familiar core rather than turning every keystroke into an AI workflow.</p>
-            <div class="kbd-list">
-              <div class="kbd-row"><strong>Context-aware Enter</strong><span>Search, Next, Go, Send or Done when the active field asks for it; newline in multiline writing.</span></div>
-              <div class="kbd-row"><strong>Correction control</strong><span>Review first or apply safe corrections automatically.</span></div>
-              <div class="kbd-row"><strong>Second symbol page</strong><span>Currencies, brackets, maths and special characters.</span></div>
-              <div class="kbd-row"><strong>Voice + rich input</strong><span>Voice typing, clipboard, emoji and GIF support.</span></div>
-              <div class="kbd-row"><strong>Personal learning</strong><span>Dictionary, learned corrections and glossary support.</span></div>
-              <div class="kbd-row"><strong>Privacy</strong><span>Normal typing stays local; sensitive fields and Incognito change what Ana is allowed to do.</span></div>
-            </div>
-          </div>
-        </div>
+        <div class="privacy-note"><strong>Reply does not read your screen.</strong> Ana only uses text you deliberately select, copy or place in the editor.</div>
       </div>
     </section>
 
     <section class="compat" id="compatibility">
       <div class="wrap">
-        <div class="editorial-head">
-          <div class="kicker">FITS INTO THE TOOLS YOU ALREADY USE</div>
-          <h2 class="section-title">Ana does not need to become<br><span class="accent">another isolated app.</span></h2>
-          <div class="rule"></div>
-          <p class="section-lead">Use Ana directly, use Ana Keyboard inside other Android apps, or bring selected Ana capabilities into your own product or internal workflow.</p>
+        <div class="section-head">
+          <div class="kicker">COMPATIBILITY</div>
+          <h2>Ana fits into the tools you already use.</h2>
+          <p>Use Ana directly, across Android apps, or bring selected capabilities into an existing product or internal workflow.</p>
         </div>
-
-        <div class="compat-shell">
-          <div class="compat-grid">
-            <div class="compat-copy">
-              <div class="kicker">BUILT TO FIT</div>
-              <h3>Use Ana your way.</h3>
-              <p>For an individual, Ana can work as a keyboard and communication assistant across the apps already being used. For a product or business workflow, Ana’s translation, writing, transcription and language capabilities can also be connected to the experience you already have instead of forcing users into a separate interface.</p>
-              <p class="compat-note">Integration scope depends on the product, workflow and privacy requirements. Ana does not need access to unrelated app content to provide a focused capability.</p>
-            </div>
-            <div class="compat-flow" aria-label="Ways Ana can fit into existing tools">
-              <div class="compat-node"><strong>Across your apps</strong><span>Use Ana Keyboard where you already type, reply and translate.</span></div>
-              <div class="compat-arrow">↓</div>
-              <div class="compat-node"><strong>As its own workspace</strong><span>Use Ana for documents, pictures, meetings and live language help.</span></div>
-              <div class="compat-arrow">↓</div>
-              <div class="compat-node"><strong>Inside your own tool</strong><span>Bring selected Ana capabilities into an existing product or internal workflow.</span></div>
-            </div>
-          </div>
+        <div class="compat-grid">
+          <article class="compat-card"><small>ANA APP</small><h3>Use Ana directly.</h3><p>Documents, pictures, meetings and live language help in Ana’s own workspace.</p></article>
+          <article class="compat-card"><small>ANA KEYBOARD</small><h3>Use Ana across apps.</h3><p>Translate, write, correct and reply where you already type on Android.</p></article>
+          <article class="compat-card"><small>YOUR TOOL</small><h3>Bring Ana into your workflow.</h3><p>Selected Ana capabilities can fit into an existing product or internal business process.</p></article>
         </div>
       </div>
     </section>
 
-    <section class="easy" id="easy">
+    <section class="easy">
       <div class="wrap">
-        <div class="kicker">A SHORT LEARNING CURVE</div>
-        <h2 class="section-title">You already know<br><span class="accent">how to use Ana.</span></h2>
-        <div class="rule"></div>
-        <p class="section-lead">Ana is built around actions people already understand. You do not need to learn prompt engineering before it becomes useful.</p>
+        <div class="section-head">
+          <div class="kicker">SHORT LEARNING CURVE</div>
+          <h2>You already know how to use Ana.</h2>
+          <p>No prompt-engineering course required.</p>
+        </div>
         <div class="steps">
-          <article class="step"><div class="n">01</div><h3>Start where you are</h3><p>Type, copy, speak, photograph or upload what you already have.</p></article>
-          <article class="step"><div class="n">02</div><h3>Choose the action</h3><p>Translate, Reply, Write, Correct, listen to the meeting or open the document.</p></article>
-          <article class="step"><div class="n">03</div><h3>Review and use</h3><p>Accept, reject, compare, edit, paste or export the result.</p></article>
+          <article class="step"><small>01</small><h3>Start with what you have.</h3><p>Type, speak, copy, photograph or upload.</p></article>
+          <article class="step"><small>02</small><h3>Choose what you need.</h3><p>Translate, Reply, Write, Correct or Listen.</p></article>
+          <article class="step"><small>03</small><h3>Review and use.</h3><p>Accept, reject, compare, edit, paste or export.</p></article>
         </div>
       </div>
     </section>
 
     <section class="final">
-      <div class="final-copy">
-        <div class="kicker">ANA · PRIVATE TESTING</div>
-        <h2>Speak for you.<br>Hear for you.<br><span class="accent">Write for you.</span></h2>
-        <p>Ana is being built for multilingual life without making people surrender control of every word they type. Useful when you need it. Quiet when you don't.</p>
-        <a class="cta" href="/">Try Ana →</a>
-        <div class="testing">Product experience may change during private testing</div>
-      </div>
-      <div class="final-photo">
-        <img src="https://images.pexels.com/photos/3885587/pexels-photo-3885587.jpeg?auto=compress&cs=tinysrgb&w=1800" alt="Business traveler using a smartphone with luggage outside an airport">
-        <div class="final-note">Language shouldn't<br>get in the way.</div>
+      <div class="wrap">
+        <article class="final-card">
+          <img src="https://images.pexels.com/photos/3885587/pexels-photo-3885587.jpeg?auto=compress&cs=tinysrgb&w=1800" alt="Traveler using a smartphone with luggage">
+          <div class="final-copy">
+            <div class="kicker">ANA · PRIVATE TESTING</div>
+            <h2>Language shouldn’t<br>get in the way.</h2>
+            <p>Ana helps you communicate without forcing you to change the way you already work.</p>
+            <a class="cta" href="/">Try Ana →</a>
+            <div class="private-testing">Product experience may change during private testing</div>
+          </div>
+        </article>
       </div>
     </section>
   </main>
@@ -626,9 +435,10 @@
     <div class="wrap footer">
       <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
       <div class="footer-links">
+        <a href="#capabilities">Capabilities</a>
+        <a href="#keyboard">Keyboard</a>
         <a href="#privacy">Privacy</a>
-        <a href="#situations">Real life</a>
-        <a href="#highlights">Capabilities</a>
+        <a href="#compatibility">Compatibility</a>
         <a href="/learn/">Learn</a>
       </div>
       <span>© 2026 Ana</span>
