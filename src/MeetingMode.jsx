@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
+import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, startTimedUsage } from './usageQuota.js'
 import './meeting-notes.css'
 import './meeting-modes.css'
 
@@ -171,6 +172,7 @@ export default function MeetingMode() {
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
+  const quotaSessionRef = useRef(null), quotaTimerRef = useRef(null), quotaDeadlineRef = useRef(null), quotaExpiredRef = useRef(false)
   const targetRef = useRef(target), meetingModeRef = useRef(meetingMode), startedAtRef = useRef(Number(saved.startedAt) || 0)
   const originalTextRef = useRef(clean(saved.originalText)), translatedTextRef = useRef(clean(saved.translatedText))
   const originalBufferRef = useRef(''), translatedBufferRef = useRef(''), transcriptionItemsRef = useRef(new Map()), transcriptionOrderRef = useRef([])
@@ -415,9 +417,53 @@ export default function MeetingMode() {
     try { peerRef.current?.close() } catch {}; peerRef.current = null
   }
   const stopTracks = () => { streamRef.current?.getTracks?.().forEach(track => track.stop()); streamRef.current = null }
+  const stopQuotaClock = () => {
+    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current)
+    if (quotaDeadlineRef.current) clearTimeout(quotaDeadlineRef.current)
+    quotaTimerRef.current = null
+    quotaDeadlineRef.current = null
+  }
+  const closeQuotaSession = async () => {
+    stopQuotaClock()
+    const id = quotaSessionRef.current
+    quotaSessionRef.current = null
+    if (!id) return
+    try { await endTimedUsage(id) } catch {}
+  }
+  const startQuotaSession = async kind => {
+    await closeQuotaSession()
+    quotaExpiredRef.current = false
+    const quota = await startTimedUsage(kind)
+    quotaSessionRef.current = quota.sessionId
+
+    const expire = () => {
+      if (quotaExpiredRef.current || !activeRef.current) return
+      quotaExpiredRef.current = true
+      setError('This week’s tester allowance for this meeting mode has been used. Ana is ending the meeting safely now.')
+      stopQuotaClock()
+      void endMeeting()
+    }
+
+    if (!quota.isAdmin && Number.isFinite(quota.remainingSeconds)) {
+      quotaDeadlineRef.current = setTimeout(expire, Math.max(1000, quota.remainingSeconds * 1000))
+    }
+
+    quotaTimerRef.current = setInterval(async () => {
+      const id = quotaSessionRef.current
+      if (!id || quotaExpiredRef.current || !activeRef.current) return
+      try {
+        const state = await heartbeatTimedUsage(id)
+        if (state && !state.allowed) expire()
+      } catch {
+        // The hard deadline still protects the allowance if a heartbeat is briefly unavailable.
+      }
+    }, 15000)
+
+    return quota
+  }
   function discardActiveMeeting() {
     activeRef.current = false; pausedRef.current = false; clearCommitTimer()
-    try { if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop() } catch {}; recorderRef.current = null; closeRealtime(false); stopTracks()
+    try { if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop() } catch {}; recorderRef.current = null; closeRealtime(false); stopTracks(); void closeQuotaSession()
   }
 
   const connectPeer = async ({ stream, token, onEvent }) => {
@@ -441,12 +487,14 @@ export default function MeetingMode() {
     })
   }
   const startTranslation = async stream => {
-    const tokenResponse = await fetch('/api/realtime-translation-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetLanguage: codeFor(targetRef.current) }) }), tokenData = await tokenResponse.json()
+    const headers = await authenticatedHeaders({ 'Content-Type': 'application/json' })
+    const tokenResponse = await fetch('/api/realtime-translation-token', { method: 'POST', headers, body: JSON.stringify({ targetLanguage: codeFor(targetRef.current), quotaSessionId: quotaSessionRef.current }) }), tokenData = await tokenResponse.json()
     if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime meeting translation.')
     await connectPeer({ stream, token: tokenData.value, onEvent: handleTranslationEvent })
   }
   const startLiveTranscription = async stream => {
-    const hints = glossaryHints(), tokenResponse = await fetch('/api/realtime-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'transcription', languages: ['en', 'de', 'hi'], keywords: hints.keywords, context: hints.context }) }), tokenData = await tokenResponse.json()
+    const hints = glossaryHints(), headers = await authenticatedHeaders({ 'Content-Type': 'application/json' })
+    const tokenResponse = await fetch('/api/realtime-token', { method: 'POST', headers, body: JSON.stringify({ mode: 'transcription', languages: ['en', 'de', 'hi'], keywords: hints.keywords, context: hints.context, quotaSessionId: quotaSessionRef.current }) }), tokenData = await tokenResponse.json()
     if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start live transcription.')
     await connectPeer({ stream, token: tokenData.value, onEvent: handleTranscriptionEvent })
   }
@@ -459,6 +507,7 @@ export default function MeetingMode() {
     originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setLiveOriginal(''); setLiveTranslation('')
     originalTextRef.current = ''; translatedTextRef.current = ''; setOriginalText(''); setTranslatedText(''); try { localStorage.removeItem(STORAGE_KEY) } catch {}
     try {
+      await startQuotaSession(meetingModeRef.current === 'mom' ? 'meeting_notes' : 'meeting_live')
       const stream = await getMeetingStream(); streamRef.current = stream
       stream.getTracks().forEach(track => track.addEventListener('ended', () => { if (activeRef.current) setError('Audio sharing ended. Press End meeting to prepare the transcript and notes from what was recorded.') }, { once: true }))
       startRecorder(stream); const now = Date.now(); startedAtRef.current = now; setStartedAt(now); setElapsed(0)
@@ -466,7 +515,7 @@ export default function MeetingMode() {
       if (meetingModeRef.current === 'transcript') await startLiveTranscription(stream); else await startTranslation(stream)
       setSessionState('listening')
     } catch (err) {
-      setError(err.message || 'Ana could not start the meeting.'); activeRef.current = false; try { await stopRecorder() } catch {}; closeRealtime(false); stopTracks(); setSessionState('idle')
+      setError(err.message || 'Ana could not start the meeting.'); activeRef.current = false; try { await stopRecorder() } catch {}; closeRealtime(false); stopTracks(); await closeQuotaSession(); setSessionState('idle')
     }
   }
 
@@ -569,7 +618,7 @@ export default function MeetingMode() {
     if (!activeRef.current || processing) return
     const mode = meetingModeRef.current, liveOriginalFinal = mode === 'translate' ? appendText(originalTextRef.current, originalBufferRef.current) : appendText(originalTextRef.current, liveOriginal), liveTranslationFinal = appendText(translatedTextRef.current, translatedBufferRef.current), start = startedAtRef.current || Date.now(), end = Date.now()
     activeRef.current = false; pausedRef.current = false; setPaused(false); setSessionState('processing'); setNotesStatus('transcribing')
-    let recording = null; try { recording = await stopRecorder() } catch {}; closeRealtime(false); stopTracks()
+    let recording = null; try { recording = await stopRecorder() } catch {}; closeRealtime(false); stopTracks(); await closeQuotaSession()
     let finalTranscript = clean(liveOriginalFinal), finalSegments = [], finalTranscriptError = '', retainedAudioPath = ''
     try {
       if (recording?.size) {
