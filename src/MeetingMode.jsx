@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
-import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, startTimedUsage } from './usageQuota.js'
+import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, refundFixedTimedUsage, reserveFixedTimedUsage, startTimedUsage } from './usageQuota.js'
 import './meeting-notes.css'
 import './meeting-modes.css'
 
@@ -25,9 +25,9 @@ const MOM_TEMPLATES = [
 ]
 
 const MEETING_MODES = [
-  { id: 'translate', title: 'Live translate', description: 'Live transcript + translation', icon: Languages },
-  { id: 'transcript', title: 'Live transcript', description: 'See the transcript live. No translation.', icon: Mic },
-  { id: 'mom', title: 'MOM only', description: 'No live text. Record now, prepare notes at the end.', icon: FileAudio },
+  { id: 'translate', title: 'Live translate', description: 'Live translation · shares the 1h/week live allowance', icon: Languages },
+  { id: 'transcript', title: 'Live transcript', description: 'See the transcript live · 1h/week', icon: Mic },
+  { id: 'mom', title: 'Meeting notes', description: 'Quiet recording + transcript + MOM · 3h/week', icon: FileAudio },
 ]
 
 const LANGUAGE_CODES = {
@@ -106,6 +106,34 @@ function extensionForMime(mime = '') {
   if (value.includes('wav')) return 'wav'
   return 'webm'
 }
+async function audioFileDurationSeconds(file) {
+  if (!file || typeof Audio === 'undefined' || typeof URL === 'undefined') return 0
+  const url = URL.createObjectURL(file)
+  try {
+    return await new Promise(resolve => {
+      const audio = new Audio()
+      const finish = value => {
+        audio.removeAttribute('src')
+        try { audio.load() } catch {}
+        resolve(Number.isFinite(value) && value > 0 ? value : 0)
+      }
+      const timer = setTimeout(() => finish(0), 8000)
+      audio.preload = 'metadata'
+      audio.onloadedmetadata = () => {
+        clearTimeout(timer)
+        finish(Number(audio.duration) || 0)
+      }
+      audio.onerror = () => {
+        clearTimeout(timer)
+        finish(0)
+      }
+      audio.src = url
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 function glossaryHints() {
   const glossary = readJson(GLOSSARY_KEY, [])
   if (!Array.isArray(glossary)) return { keywords: [], context: '' }
@@ -507,8 +535,8 @@ export default function MeetingMode() {
     originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setLiveOriginal(''); setLiveTranslation('')
     originalTextRef.current = ''; translatedTextRef.current = ''; setOriginalText(''); setTranslatedText(''); try { localStorage.removeItem(STORAGE_KEY) } catch {}
     try {
-      await startQuotaSession(meetingModeRef.current === 'mom' ? 'meeting_notes' : 'meeting_live')
       const stream = await getMeetingStream(); streamRef.current = stream
+      await startQuotaSession(meetingModeRef.current === 'mom' ? 'meeting_notes' : 'meeting_live')
       stream.getTracks().forEach(track => track.addEventListener('ended', () => { if (activeRef.current) setError('Audio sharing ended. Press End meeting to prepare the transcript and notes from what was recorded.') }, { once: true }))
       startRecorder(stream); const now = Date.now(); startedAtRef.current = now; setStartedAt(now); setElapsed(0)
       if (meetingModeRef.current === 'mom') { setSessionState('listening'); return }
@@ -687,10 +715,15 @@ export default function MeetingMode() {
     if (file.size > MAX_FINAL_AUDIO_BYTES) { setError('This audio file is larger than the supported final transcription size.'); return }
     setImportingAudio(true); setError(''); setNotesError(''); setNotesStatus('transcribing'); setSessionState('processing')
     const end = Date.now()
+    let quotaReservationId = ''
     try {
+      const durationSeconds = await audioFileDurationSeconds(file)
+      if (!durationSeconds) throw new Error('Ana could not determine the audio duration before applying the tester allowance.')
+      const reservation = await reserveFixedTimedUsage('meeting_notes', Math.ceil(durationSeconds), file.name)
+      quotaReservationId = reservation.sessionId
       const result = await transcribeRecording(file, keepAudio)
       const segments = result.segments
-      const durationMs = segments.length ? Math.max(...segments.map(item => Number(item.end) || 0)) * 1000 : 0
+      const durationMs = segments.length ? Math.max(...segments.map(item => Number(item.end) || 0)) * 1000 : durationSeconds * 1000
       const start = durationMs ? end - durationMs : end
       setStartedAt(start); startedAtRef.current = start; setElapsed(durationMs)
       setTranscriptSegments(segments); setSpeakerNames({}); setTranscriptDirty(false)
@@ -701,6 +734,7 @@ export default function MeetingMode() {
       setConsentVerified(false)
       setKeepAudio(false)
     } catch (err) {
+      if (quotaReservationId) await refundFixedTimedUsage(quotaReservationId)
       setSessionState('idle'); setNotesStatus('error'); setNotesError(err?.message || 'Could not import this meeting audio.')
     } finally { setImportingAudio(false) }
   }
