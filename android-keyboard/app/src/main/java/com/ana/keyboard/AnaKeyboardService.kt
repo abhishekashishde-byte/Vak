@@ -90,6 +90,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var lastAutoCorrection: AutoCorrectionRecord? = null
     private var lastSentenceCorrection: SentenceCorrectionRecord? = null
     private var pendingSentenceProposal: SentenceProposal? = null
+    private var pendingReplyProposal: ReplyProposal? = null
     private var smartSentenceToken = 0
     private var lastSmartSentenceChecked = ""
     @Volatile private var smartSentenceInFlight = false
@@ -146,6 +147,21 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val suffix: String,
         val trailing: String,
         val connection: InputConnection
+    )
+    private data class ReplyRequestSource(
+        val message: String,
+        val instruction: String,
+        val editorText: String,
+        val selected: Boolean,
+        val insertOnly: Boolean
+    )
+    private data class ReplyProposal(
+        val reply: String,
+        val editorText: String,
+        val selected: Boolean,
+        val insertOnly: Boolean,
+        val connection: InputConnection,
+        val shieldedCount: Int
     )
 
     private val smartSentenceRunnable = Runnable { runSmartSentenceCorrection() }
@@ -265,6 +281,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 .also { toolbar.addView(it) }
             addAi("translate", "Translate", AnaApi.Action.TRANSLATE)
             addAi("write", "Write", AnaApi.Action.WRITE)
+            if (show("reply")) toolbar.addView(actionButton("Reply") { runReplyAction() }.also { aiButtons += it })
             addAi("correct", "Correct", AnaApi.Action.FIX)
             addAi("shorter", "Shorter", AnaApi.Action.SHORTER)
             addAi("friendly", "Friendly", AnaApi.Action.FRIENDLY)
@@ -361,7 +378,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 minimumWidth = 0
                 setTextColor(Color.WHITE)
                 backgroundTintList = ColorStateList.valueOf(Color.rgb(72, 72, 72))
-                setOnClickListener { rejectSentenceProposal() }
+                setOnClickListener { rejectActiveProposal() }
             }, LinearLayout.LayoutParams(dp(72), dp(48)).apply { marginEnd = dp(5) })
             addView(Button(this@AnaKeyboardService).apply {
                 text = "Accept"
@@ -371,7 +388,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 minimumWidth = 0
                 setTextColor(Color.BLACK)
                 backgroundTintList = ColorStateList.valueOf(Color.rgb(230, 181, 65))
-                setOnClickListener { applySentenceProposal() }
+                setOnClickListener { applyActiveProposal() }
             }, LinearLayout.LayoutParams(dp(72), dp(48)))
         }
         root.addView(correctionPreview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(118)))
@@ -503,6 +520,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         lastAutoCorrection = null
         lastSentenceCorrection = null
         pendingSentenceProposal = null
+        pendingReplyProposal = null
         if (::correctionPreview.isInitialized) correctionPreview.visibility = View.GONE
         lastSmartSentenceChecked = ""
         smartSentenceToken++
@@ -809,6 +827,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onKey(code: String) {
+        if (pendingReplyProposal != null) {
+            dismissReplyProposal()
+            finishExplicitAiAction()
+        }
         if (pendingSentenceProposal != null) dismissSentenceProposal(markChecked = false)
         if (code == "CURSOR_LEFT" || code == "CURSOR_RIGHT") {
             smartSentenceToken++
@@ -1070,6 +1092,67 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (markChecked && proposal != null) lastSmartSentenceChecked = proposal.original
         pendingSentenceProposal = null
         if (::correctionPreview.isInitialized) correctionPreview.visibility = View.GONE
+    }
+
+    private fun rejectActiveProposal() {
+        if (pendingReplyProposal != null) rejectReplyProposal()
+        else rejectSentenceProposal()
+    }
+
+    private fun applyActiveProposal() {
+        if (pendingReplyProposal != null) applyReplyProposal()
+        else applySentenceProposal()
+    }
+
+    private fun dismissReplyProposal() {
+        pendingReplyProposal = null
+        if (::correctionPreview.isInitialized) correctionPreview.visibility = View.GONE
+    }
+
+    private fun rejectReplyProposal() {
+        if (pendingReplyProposal == null) return
+        dismissReplyProposal()
+        finishExplicitAiAction()
+        showStatus("Reply rejected — your text was left unchanged")
+    }
+
+    private fun applyReplyProposal() {
+        val proposal = pendingReplyProposal ?: return
+        val connection = currentInputConnection
+        if (connection == null || connection !== proposal.connection || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) {
+            dismissReplyProposal()
+            finishExplicitAiAction()
+            showStatus("Text field changed — reply not inserted")
+            return
+        }
+
+        val stillMatches = when {
+            proposal.selected -> connection.getSelectedText(0)?.toString() == proposal.editorText
+            proposal.insertOnly -> currentDraftLine(connection).isBlank()
+            proposal.editorText.isNotEmpty() -> connection.getTextBeforeCursor(proposal.editorText.length, 0)?.toString() == proposal.editorText
+            else -> true
+        }
+        if (!stillMatches) {
+            dismissReplyProposal()
+            finishExplicitAiAction()
+            showStatus("Draft changed — reply not inserted")
+            return
+        }
+
+        finishLocalComposition(connection)
+        if (proposal.selected || proposal.insertOnly) {
+            connection.commitText(proposal.reply, 1)
+        } else {
+            connection.deleteSurroundingText(proposal.editorText.length, 0)
+            connection.commitText(proposal.reply, 1)
+        }
+
+        val protected = proposal.shieldedCount
+        dismissReplyProposal()
+        finishExplicitAiAction()
+        clearSuggestions()
+        refreshShiftFromEditor()
+        showStatus(if (protected > 0) "Reply inserted • Privacy Shield protected $protected" else "Reply inserted")
     }
 
     private fun rejectSentenceProposal() {
@@ -2091,6 +2174,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         // compete with Translate / Write / tone actions later.
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
+        dismissReplyProposal()
         dismissSentenceProposal(markChecked = false)
         explicitAiActionInFlight = true
         return ExplicitActionText(source.text, aiText, source.selected)
@@ -2105,7 +2189,148 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         dismissSentenceProposal(markChecked = false)
     }
 
+    private fun currentDraftLine(connection: InputConnection): String {
+        val before = connection.getTextBeforeCursor(8000, 0)?.toString().orEmpty()
+        val lineStart = before.lastIndexOf('\n') + 1
+        return before.substring(lineStart).takeLast(8000)
+    }
+
+    private fun primaryClipboardText(): String {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return ""
+        return try {
+            val clip = clipboardManager.primaryClip
+            if (clip == null || clip.itemCount == 0) ""
+            else clip.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty().take(8000)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun clipboardWasRecentlyCopied(text: String): Boolean {
+        if (text.isBlank()) return false
+        val item = KeyboardPrefs.clipboardItems(this).firstOrNull { it.text == text }
+        val age = item?.let { System.currentTimeMillis() - it.createdAt } ?: Long.MAX_VALUE
+        return age in 0..(10L * 60L * 1000L)
+    }
+
+    private fun replyRequestSource(): ReplyRequestSource? {
+        val connection = currentInputConnection ?: return null
+        val selected = connection.getSelectedText(0)?.toString().orEmpty()
+        if (selected.isNotBlank()) {
+            return ReplyRequestSource(selected.take(8000), "", selected, true, false)
+        }
+
+        val draft = currentDraftLine(connection)
+        val clipboard = primaryClipboardText()
+        val freshClipboard = clipboard.isNotBlank() && clipboardWasRecentlyCopied(clipboard)
+
+        if (freshClipboard && !draft.trim().equals(clipboard.trim(), ignoreCase = false)) {
+            if (draft.isBlank()) {
+                return ReplyRequestSource(clipboard, "", "", false, true)
+            }
+            if (draft.length <= 1200) {
+                return ReplyRequestSource(clipboard, draft, draft, false, false)
+            }
+        }
+
+        if (draft.isNotBlank()) return ReplyRequestSource(draft.take(8000), "", draft, false, false)
+        if (clipboard.isNotBlank()) return ReplyRequestSource(clipboard, "", "", false, true)
+        return null
+    }
+
+    private fun runReplyAction() {
+        if (isSensitiveField()) {
+            showStatus("Ana AI is disabled in private fields")
+            return
+        }
+        if (KeyboardPrefs.incognitoEnabled(this)) {
+            showStatus("Ana AI is disabled in Incognito mode")
+            return
+        }
+        if (!isAppAiAllowed()) {
+            showStatus("Ana AI is off for this app")
+            return
+        }
+
+        val baseUrl = KeyboardPrefs.baseUrl(this)
+        if (baseUrl.isBlank()) {
+            showStatus("Open Ana Keyboard settings and set your Ana address")
+            return
+        }
+
+        val source = replyRequestSource()
+        if (source == null) {
+            showStatus("Copy or select the message you want to reply to, then tap Reply")
+            return
+        }
+
+        smartSentenceToken++
+        mainHandler.removeCallbacks(smartSentenceRunnable)
+        dismissSentenceProposal(markChecked = false)
+        dismissReplyProposal()
+        explicitAiActionInFlight = true
+
+        val connection = currentInputConnection ?: run {
+            finishExplicitAiAction()
+            return
+        }
+        val target = KeyboardPrefs.target(this)
+        val shieldEnabled = KeyboardPrefs.privacyShieldEnabled(this)
+        setAiBusy(true)
+        showStatus(if (shieldEnabled) "ANA AI • drafting reply in $target… • Privacy Shield active" else "ANA AI • drafting reply in $target…")
+
+        executor.execute {
+            try {
+                val result = AnaApi.reply(baseUrl, source.message, source.instruction, target, shieldEnabled, cloudGlossary())
+                mainHandler.post {
+                    if (currentInputConnection !== connection) {
+                        finishExplicitAiAction()
+                        setAiBusy(false)
+                        showStatus("Text field changed — reply was not inserted")
+                        return@post
+                    }
+
+                    val stillMatches = when {
+                        source.selected -> connection.getSelectedText(0)?.toString() == source.editorText
+                        source.insertOnly -> currentDraftLine(connection).isBlank()
+                        source.editorText.isNotEmpty() -> connection.getTextBeforeCursor(source.editorText.length, 0)?.toString() == source.editorText
+                        else -> true
+                    }
+                    if (!stillMatches) {
+                        finishExplicitAiAction()
+                        setAiBusy(false)
+                        showStatus("Draft changed — Ana left it untouched")
+                        return@post
+                    }
+
+                    pendingReplyProposal = ReplyProposal(
+                        reply = result.text,
+                        editorText = source.editorText,
+                        selected = source.selected,
+                        insertOnly = source.insertOnly,
+                        connection = connection,
+                        shieldedCount = result.shieldedCount
+                    )
+                    correctionPreviewText.text = "Reply:\n\n" + result.text
+                    correctionPreview.visibility = View.VISIBLE
+                    setAiBusy(false)
+                    showStatus("Reply ready — read it, then Accept or Reject")
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    finishExplicitAiAction()
+                    setAiBusy(false)
+                    showStatus(error.message ?: "Ana could not draft the reply")
+                }
+            }
+        }
+    }
+
     private fun runAnaAction(action: AnaApi.Action) {
+        if (action == AnaApi.Action.REPLY) {
+            runReplyAction()
+            return
+        }
         if (isSensitiveField()) {
             showStatus("Ana AI is disabled in private fields")
             return
@@ -2127,6 +2352,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (source == null) {
             val message = when (action) {
                 AnaApi.Action.WRITE -> "Type or dictate what you want to write, then tap Write"
+                AnaApi.Action.REPLY -> "Copy or select the message you want to reply to, then tap Reply"
                 AnaApi.Action.FIX -> "Type or select the message you want Ana to correct"
                 else -> "Type or select some text first"
             }
@@ -2140,6 +2366,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         setAiBusy(true)
         val busyMessage = when (action) {
             AnaApi.Action.WRITE -> "ANA AI • writing in $target…"
+            AnaApi.Action.REPLY -> "ANA AI • drafting reply in $target…"
             AnaApi.Action.FIX -> "ANA AI • correcting to $target…"
             AnaApi.Action.TRANSLATE -> "ANA AI • translating to $target…"
             AnaApi.Action.SHORTER -> "ANA AI • shortening…"
