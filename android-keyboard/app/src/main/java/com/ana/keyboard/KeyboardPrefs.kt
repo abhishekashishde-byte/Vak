@@ -240,6 +240,7 @@ object KeyboardPrefs {
     val toolbarActionOptions = listOf(
         "translate" to "Translate",
         "write" to "Write",
+        "reply" to "Reply",
         "correct" to "Correct",
         "shorter" to "Shorter",
         "friendly" to "Friendly",
@@ -255,7 +256,7 @@ object KeyboardPrefs {
         "voice_edit" to "Voice edit",
         "voice" to "Voice"
     )
-    private val defaultToolbarActions = setOf("translate", "write", "correct", "clipboard", "undo", "private", "voice")
+    private val defaultToolbarActions = setOf("translate", "write", "reply", "correct", "clipboard", "undo", "private", "voice")
 
     fun toolbarActions(context: Context): Set<String> =
         prefs(context).getStringSet(KEY_TOOLBAR_ACTIONS, defaultToolbarActions)?.toSet() ?: defaultToolbarActions
