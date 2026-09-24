@@ -6,7 +6,7 @@
   <title>Ana — Say what you mean. In any language.</title>
   <meta name="description" content="Ana is a privacy-first multilingual communication assistant for writing, replies, translation, documents, pictures, meetings and live conversations." />
   <meta name="theme-color" content="#07131a" />
-  <link rel="icon" type="image/png" href="/ana-app-icon.png" />
+  <link rel="icon" type="image/svg+xml" href="/ana-app-icon.svg" />
   <style>
     :root{
       --ink:#07131a;
@@ -41,7 +41,7 @@
     .topbar{position:sticky;top:0;z-index:50;background:rgba(7,19,26,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
     .nav{height:72px;display:flex;align-items:center;justify-content:space-between;gap:22px}
     .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:850}
-    .brand img{width:34px;height:34px;filter:invert(1)}
+    .brand img{width:106px;height:auto;filter:invert(1)}
     .navlinks{display:flex;align-items:center;gap:24px;color:#a9b7bc;font-size:12px;font-weight:700}
     .navlinks a:hover{color:#fff}
     .cta,.ghost{
@@ -216,7 +216,7 @@
     }
     @media(max-width:640px){
       .wrap{padding:0 18px}
-      .nav{height:64px}.brand{font-size:18px}.brand img{width:31px;height:31px}
+      .nav{height:64px}.brand{font-size:18px}.brand img{width:98px;height:auto}
       .hero{padding:24px 0 58px}
       .hero-card{min-height:650px;border-radius:24px}
       .hero-card:after{background:linear-gradient(0deg,rgba(4,15,21,.92) 0%,rgba(4,15,21,.62) 56%,rgba(4,15,21,.10) 100%)}
@@ -263,7 +263,7 @@
 <body>
   <header class="topbar">
     <div class="wrap nav">
-      <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
+      <a class="brand" href="#top"><img src="/ana-logo.svg" alt="Ana"></a>
       <nav class="navlinks" aria-label="Ana navigation">
         <a href="#products">Products</a>
         <a href="#keyboard">Keyboard</a>
@@ -585,7 +585,7 @@
 
   <footer>
     <div class="wrap footer">
-      <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
+      <a class="brand" href="#top"><img src="/ana-logo.svg" alt="Ana"></a>
       <div class="footer-links">
         <a href="#products">Products</a>
         <a href="#keyboard">Keyboard</a>
