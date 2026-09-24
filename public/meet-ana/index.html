@@ -68,16 +68,47 @@
     .hero-points span{border:1px solid rgba(255,255,255,.12);background:rgba(5,16,22,.38);backdrop-filter:blur(8px);border-radius:999px;padding:7px 10px;font-size:9px;color:#c4d0d2}
 
     /* QUICK CARDS */
-    .quick{padding:96px 0;background:var(--paper);color:var(--darkText)}
+    .quick{padding:96px 0 108px;background:var(--paper);color:var(--darkText);overflow:hidden}
     .quick .section-head p{color:var(--mutedDark)}
-    .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-    .quick-card{position:relative;min-height:430px;border-radius:24px;overflow:hidden;background:#cfd9d7}
-    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.78) brightness(.72)}
-    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 28%,rgba(5,15,20,.9))}
-    .quick-copy{position:absolute;z-index:2;left:22px;right:22px;bottom:22px;color:#fff}
-    .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#b8c9cc}
-    .quick-copy h3{font-size:28px;line-height:1.02;letter-spacing:-.04em;margin:7px 0 9px}
-    .quick-copy p{font-size:11px;line-height:1.5;color:#c4d0d2;margin:0}
+    .product-stack{max-width:680px;margin:0 auto;position:relative}
+    .stack-stage{
+      position:relative;height:520px;touch-action:pan-y;user-select:none;
+      perspective:1200px;isolation:isolate
+    }
+    .quick-card{
+      position:absolute;inset:0;border-radius:28px;overflow:hidden;background:#cfd9d7;
+      box-shadow:0 24px 60px rgba(15,35,43,.16);
+      transform-origin:50% 100%;
+      transition:transform .48s cubic-bezier(.22,.8,.2,1),opacity .35s ease,filter .35s ease;
+      will-change:transform,opacity;
+      cursor:grab
+    }
+    .quick-card:active{cursor:grabbing}
+    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.8) brightness(.72);pointer-events:none}
+    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 24%,rgba(5,15,20,.92))}
+    .quick-card[data-depth="0"]{z-index:4;transform:translate3d(0,0,0) scale(1);opacity:1}
+    .quick-card[data-depth="1"]{z-index:3;transform:translate3d(0,18px,-40px) scale(.965);opacity:.92;filter:saturate(.92)}
+    .quick-card[data-depth="2"]{z-index:2;transform:translate3d(0,36px,-80px) scale(.93);opacity:.72;filter:saturate(.82)}
+    .quick-card[data-depth="3"]{z-index:1;transform:translate3d(0,50px,-110px) scale(.90);opacity:.46;filter:saturate(.72)}
+    .quick-card.is-dragging{transition:none}
+    .quick-copy{position:absolute;z-index:2;left:28px;right:28px;bottom:28px;color:#fff;pointer-events:none}
+    .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#c4d3d5}
+    .quick-copy h3{font-size:34px;line-height:1;letter-spacing:-.045em;margin:8px 0 10px}
+    .quick-copy p{font-size:12px;line-height:1.5;color:#d1dcde;margin:0}
+    .stack-controls{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:42px}
+    .stack-arrow{
+      width:42px;height:42px;border-radius:50%;border:1px solid var(--darkLine);
+      background:#fff;color:#183039;font-size:18px;display:grid;place-items:center;cursor:pointer;
+      transition:transform .2s ease,background .2s ease
+    }
+    .stack-arrow:hover{background:#e9efee;transform:translateY(-1px)}
+    .stack-dots{display:flex;align-items:center;gap:7px}
+    .stack-dot{
+      width:7px;height:7px;border:0;border-radius:999px;background:#b6c2c0;padding:0;cursor:pointer;
+      transition:width .25s ease,background .25s ease
+    }
+    .stack-dot.active{width:24px;background:#756be0}
+    .stack-hint{text-align:center;margin-top:13px;color:#78888c;font-size:10px}
 
     /* SPLIT SECTIONS */
     .splits{background:var(--paper);color:var(--darkText)}
@@ -161,7 +192,6 @@
 
     @media(max-width:920px){
       .navlinks{display:none}
-      .quick-grid{grid-template-columns:1fr 1fr}
       .split,.live-panel{grid-template-columns:1fr}
       .split.reverse .split-media{order:0}
       .split-media{min-height:460px}
@@ -182,8 +212,13 @@
       .section-head{margin-bottom:36px}
       .section-head h2{font-size:42px}
       .section-head p{font-size:14px}
-      .quick-grid{grid-template-columns:1fr}
-      .quick-card{min-height:390px}
+      .product-stack{max-width:100%}
+      .stack-stage{height:min(116vw,500px);min-height:420px}
+      .quick-card{border-radius:24px}
+      .quick-copy{left:22px;right:22px;bottom:23px}
+      .quick-copy h3{font-size:31px}
+      .stack-controls{margin-top:38px}
+      .stack-hint{font-size:9px}
       .split{display:block;min-height:0}
       .split-media{width:100%;min-height:0;aspect-ratio:4/3}
       .split-media.video{aspect-ratio:auto;padding:28px 18px}
@@ -254,42 +289,56 @@
           <p>Start here. Everything else on this page belongs to one of these four product areas.</p>
         </div>
 
-        <div class="quick-grid">
-          <article class="quick-card">
-            <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person messaging on a smartphone">
-            <div class="quick-copy">
-              <small>ANA KEYBOARD</small>
-              <h3>Communicate where you already type.</h3>
-              <p>Write · Correct · Reply · Translate · Voice</p>
-            </div>
-          </article>
+        <div class="product-stack" data-product-stack>
+          <div class="stack-stage" aria-label="Ana product areas. Swipe or use the controls to browse.">
+            <article class="quick-card" data-stack-card data-depth="0">
+              <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person messaging on a smartphone">
+              <div class="quick-copy">
+                <small>ANA KEYBOARD</small>
+                <h3>Communicate where you already type.</h3>
+                <p>Write · Correct · Reply · Translate · Voice</p>
+              </div>
+            </article>
 
-          <article class="quick-card">
-            <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a clean desk">
-            <div class="quick-copy">
-              <small>ANA DOCUMENTS</small>
-              <h3>Translate without losing the document.</h3>
-              <p>PDF · Scanned PDF · Word · Compare</p>
-            </div>
-          </article>
+            <article class="quick-card" data-stack-card data-depth="1">
+              <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a clean desk">
+              <div class="quick-copy">
+                <small>ANA DOCUMENTS</small>
+                <h3>Translate without losing the document.</h3>
+                <p>PDF · Scanned PDF · Word · Compare</p>
+              </div>
+            </article>
 
-          <article class="quick-card">
-            <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler photographing street signs with a smartphone">
-            <div class="quick-copy">
-              <small>ANA VISION</small>
-              <h3>Understand text in the world around you.</h3>
-              <p>Camera · Pictures · Signs · Menus · Labels</p>
-            </div>
-          </article>
+            <article class="quick-card" data-stack-card data-depth="2">
+              <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Traveler photographing street signs with a smartphone">
+              <div class="quick-copy">
+                <small>ANA VISION</small>
+                <h3>Understand text in the world around you.</h3>
+                <p>Camera · Pictures · Signs · Menus · Labels</p>
+              </div>
+            </article>
 
-          <article class="quick-card">
-            <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People discussing work around a laptop">
-            <div class="quick-copy">
-              <small>ANA LIVE</small>
-              <h3>Follow conversations as they happen.</h3>
-              <p>Live translation · Meetings · Talk for Me</p>
+            <article class="quick-card" data-stack-card data-depth="3">
+              <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People discussing work around a laptop">
+              <div class="quick-copy">
+                <small>ANA LIVE</small>
+                <h3>Follow conversations as they happen.</h3>
+                <p>Live translation · Meetings · Talk for Me</p>
+              </div>
+            </article>
+          </div>
+
+          <div class="stack-controls" aria-label="Product carousel controls">
+            <button class="stack-arrow" type="button" data-stack-prev aria-label="Previous Ana product">←</button>
+            <div class="stack-dots" role="tablist" aria-label="Ana products">
+              <button class="stack-dot active" type="button" data-stack-dot="0" aria-label="Ana Keyboard" aria-selected="true"></button>
+              <button class="stack-dot" type="button" data-stack-dot="1" aria-label="Ana Documents" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="2" aria-label="Ana Vision" aria-selected="false"></button>
+              <button class="stack-dot" type="button" data-stack-dot="3" aria-label="Ana Live" aria-selected="false"></button>
             </div>
-          </article>
+            <button class="stack-arrow" type="button" data-stack-next aria-label="Next Ana product">→</button>
+          </div>
+          <div class="stack-hint">Swipe the card to explore Ana</div>
         </div>
       </div>
     </section>
@@ -464,5 +513,92 @@
       <span>© 2026 Ana</span>
     </div>
   </footer>
+  <script>
+    (() => {
+      const root = document.querySelector('[data-product-stack]');
+      if (!root) return;
+
+      const stage = root.querySelector('.stack-stage');
+      const cards = Array.from(root.querySelectorAll('[data-stack-card]'));
+      const dots = Array.from(root.querySelectorAll('[data-stack-dot]'));
+      const prev = root.querySelector('[data-stack-prev]');
+      const next = root.querySelector('[data-stack-next]');
+      let active = 0;
+      let pointerId = null;
+      let startX = 0;
+      let currentX = 0;
+
+      const render = () => {
+        cards.forEach((card, index) => {
+          const depth = (index - active + cards.length) % cards.length;
+          card.dataset.depth = String(depth);
+          card.setAttribute('aria-hidden', depth === 0 ? 'false' : 'true');
+          card.style.pointerEvents = depth === 0 ? 'auto' : 'none';
+          if (depth !== 0) {
+            card.classList.remove('is-dragging');
+            card.style.removeProperty('transform');
+          }
+        });
+        dots.forEach((dot, index) => {
+          const selected = index === active;
+          dot.classList.toggle('active', selected);
+          dot.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      };
+
+      const goTo = (index) => {
+        active = (index + cards.length) % cards.length;
+        render();
+      };
+
+      const release = (event) => {
+        if (pointerId === null) return;
+        const card = cards[active];
+        const delta = currentX - startX;
+        try { stage.releasePointerCapture(pointerId); } catch (_) {}
+        pointerId = null;
+        card.classList.remove('is-dragging');
+        card.style.removeProperty('transform');
+
+        if (Math.abs(delta) > 58) {
+          goTo(active + (delta < 0 ? 1 : -1));
+        } else {
+          render();
+        }
+      };
+
+      stage.addEventListener('pointerdown', (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        pointerId = event.pointerId;
+        startX = currentX = event.clientX;
+        stage.setPointerCapture(pointerId);
+        cards[active].classList.add('is-dragging');
+      });
+
+      stage.addEventListener('pointermove', (event) => {
+        if (event.pointerId !== pointerId) return;
+        currentX = event.clientX;
+        const delta = Math.max(-150, Math.min(150, currentX - startX));
+        const rotate = delta / 28;
+        cards[active].style.transform =
+          'translate3d(' + delta + 'px,' + Math.abs(delta) * 0.035 + 'px,0) rotate(' + rotate + 'deg) scale(' + (1 - Math.abs(delta) / 2400) + ')';
+      });
+
+      stage.addEventListener('pointerup', release);
+      stage.addEventListener('pointercancel', release);
+
+      prev.addEventListener('click', () => goTo(active - 1));
+      next.addEventListener('click', () => goTo(active + 1));
+      dots.forEach((dot, index) => dot.addEventListener('click', () => goTo(index)));
+
+      stage.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') goTo(active - 1);
+        if (event.key === 'ArrowRight') goTo(active + 1);
+      });
+      stage.tabIndex = 0;
+
+      render();
+    })();
+  </script>
 </body>
 </html>
