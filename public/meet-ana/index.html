@@ -3,441 +3,583 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ana — Private by design. Useful everywhere.</title>
-  <meta name="description" content="Ana is a privacy-first multilingual communication assistant for typing, translation, replies, documents, photos, live conversations and meetings." />
-  <meta name="theme-color" content="#0e0e0d" />
+  <title>Ana — Private by design. Natural to use.</title>
+  <meta name="description" content="Ana is a privacy-first multilingual communication assistant for typing, replies, translation, documents, photos, live conversations and meetings." />
+  <meta name="theme-color" content="#0b0d12" />
   <link rel="icon" type="image/png" href="/ana-app-icon.png" />
   <style>
     :root{
-      --bg:#f5f1e8;
-      --paper:#fffdf8;
-      --ink:#11110f;
-      --muted:#6f6a60;
-      --line:#ddd5c8;
-      --dark:#0e0e0d;
-      --dark2:#171713;
-      --gold:#c6a96b;
-      --gold2:#e5d1a0;
-      --green:#a9c8a0;
-      --radius:24px;
+      --bg:#0b0d12;
+      --bg2:#10131a;
+      --panel:#12161d;
+      --panel2:#171b22;
+      --text:#f7f5ef;
+      --muted:#9ca5b8;
+      --muted2:#737b8d;
+      --gold:#e2a53a;
+      --gold2:#f0bd55;
+      --line:rgba(255,255,255,.095);
+      --line-gold:rgba(226,165,58,.28);
+      --soft-gold:rgba(226,165,58,.085);
+      --max:1160px;
       font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     }
     *{box-sizing:border-box}
-    html{scroll-behavior:smooth}
-    body{margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+    html{scroll-behavior:smooth;background:var(--bg)}
+    body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden}
     a{color:inherit;text-decoration:none}
-    button{font:inherit}
-    img,video{max-width:100%}
-    .wrap{width:min(1180px,calc(100% - 36px));margin:auto}
-    .nav{
-      position:sticky;top:0;z-index:50;
-      background:rgba(245,241,232,.9);backdrop-filter:blur(16px);
-      border-bottom:1px solid rgba(17,17,15,.08)
+    img,video{display:block;max-width:100%}
+    .wrap{width:min(var(--max),calc(100% - 42px));margin:auto}
+    .gold{color:var(--gold)}
+    .kicker{
+      color:#9ba4b9;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase
     }
-    .nav-inner{height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em}
-    .brand img{width:34px;height:34px}.brand span{font-size:18px}
-    .nav-links{display:flex;gap:24px;font-size:12px;font-weight:700;color:#625d54}
-    .nav-links a:hover{color:#111}
-    .nav-cta,.button{
-      display:inline-flex;align-items:center;justify-content:center;gap:8px;
-      background:var(--dark);color:#fff;border-radius:999px;padding:11px 16px;
-      font-size:12px;font-weight:800;border:1px solid var(--dark)
+    .section-title{
+      font-size:clamp(42px,5.4vw,72px);line-height:1.02;letter-spacing:-.055em;margin:14px 0 0;font-weight:800
     }
-    .button.secondary{background:transparent;color:var(--ink);border-color:#bfb5a6}
-    .eyebrow{font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#8a7447}
+    .section-rule{width:116px;height:4px;background:var(--gold2);border-radius:999px;margin:30px auto 0}
+    .section-lead{
+      max-width:760px;margin:26px auto 0;color:var(--muted);font-size:17px;line-height:1.75;text-align:center
+    }
+
+    /* nav */
+    .topbar{
+      position:sticky;top:0;z-index:50;background:rgba(11,13,18,.92);
+      backdrop-filter:blur(16px);border-bottom:1px solid var(--line)
+    }
+    .nav{height:74px;display:flex;align-items:center;justify-content:space-between;gap:26px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.025em}
+    .brand img{width:34px;height:34px;filter:invert(1)}
+    .navlinks{display:flex;align-items:center;gap:26px;color:#a7afc0;font-size:12px;font-weight:700}
+    .navlinks a{white-space:nowrap}.navlinks a:hover{color:#fff}
+    .try{
+      display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
+      background:linear-gradient(135deg,var(--gold2),#d89024);color:#15120c;
+      font-weight:900;font-size:12px;padding:11px 17px;border:1px solid rgba(255,255,255,.08);
+      box-shadow:0 10px 28px rgba(226,165,58,.16)
+    }
+
+    /* hero */
     .hero{
-      min-height:700px;display:grid;grid-template-columns:1.02fr .98fr;
-      gap:56px;align-items:center;padding:76px 0 68px
+      min-height:780px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      text-align:center;padding:96px 0 88px;position:relative;overflow:hidden
     }
-    .hero h1{font-size:clamp(52px,6.6vw,88px);line-height:.94;letter-spacing:-.065em;margin:12px 0 22px;max-width:740px}
-    .hero h1 em{font-style:normal;color:#9a7b3f}
-    .hero .lead{font-size:18px;line-height:1.6;color:#575248;max-width:680px;margin:0}
-    .hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin:28px 0 19px}
-    .hero-note{font-size:11px;color:#777064;display:flex;gap:8px;align-items:center}
-    .hero-note b{color:#292720}
-    .privacy-pills{display:flex;gap:7px;flex-wrap:wrap;margin-top:24px}
-    .privacy-pills span{border:1px solid #d3c8b8;background:rgba(255,255,255,.48);padding:8px 10px;border-radius:999px;font-size:10px;font-weight:750;color:#554e43}
-    .demo-shell{
-      background:var(--dark);border-radius:30px;padding:12px;box-shadow:0 32px 80px rgba(22,20,15,.24);
-      position:relative;overflow:hidden
+    .hero:before{
+      content:"";position:absolute;inset:-20% -20% 0;
+      background:
+        radial-gradient(circle at 50% 40%,rgba(226,165,58,.14),transparent 26%),
+        radial-gradient(circle at 12% 18%,rgba(39,89,185,.17),transparent 28%),
+        radial-gradient(circle at 88% 62%,rgba(185,111,35,.10),transparent 26%);
+      pointer-events:none
     }
-    .demo-shell:before{content:"REAL ANA KEYBOARD";position:absolute;z-index:3;left:26px;top:26px;color:#fff;background:rgba(0,0,0,.64);border:1px solid rgba(255,255,255,.15);padding:7px 9px;border-radius:999px;font-size:9px;font-weight:850;letter-spacing:.08em}
-    .demo-shell video{display:block;width:100%;aspect-ratio:9/16;max-height:590px;object-fit:cover;border-radius:21px;background:#111}
-    .proof{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(255,255,255,.3)}
-    .proof-grid{display:grid;grid-template-columns:repeat(4,1fr)}
-    .proof-grid div{padding:20px 18px;border-right:1px solid var(--line)}
-    .proof-grid div:last-child{border-right:0}
-    .proof-grid strong{display:block;font-size:15px;letter-spacing:-.02em}
-    .proof-grid span{display:block;font-size:10px;color:#777064;margin-top:4px;line-height:1.4}
+    .hero:after{
+      content:"";position:absolute;inset:0;opacity:.34;pointer-events:none;
+      background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+      background-size:48px 48px;
+      mask-image:linear-gradient(to bottom,transparent,black 22%,black 78%,transparent)
+    }
+    .hero-content{position:relative;z-index:2;max-width:930px}
+    .hero-badge{
+      display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line-gold);
+      background:rgba(18,22,29,.74);border-radius:999px;padding:10px 16px;
+      color:#b6bfd0;font-size:12px;margin-bottom:30px
+    }
+    .hero-badge i{font-style:normal;color:var(--gold2);font-size:18px}
+    .hero h1{
+      margin:0;font-size:clamp(64px,9vw,118px);line-height:.88;letter-spacing:-.075em;
+      background:linear-gradient(180deg,#f3b343 5%,#d78b28 92%);
+      color:transparent;background-clip:text;-webkit-background-clip:text
+    }
+    .hero h2{
+      margin:24px 0 0;font-size:clamp(30px,4.2vw,56px);line-height:1.05;
+      letter-spacing:-.04em;font-weight:450;color:#f4f2ed
+    }
+    .hero p{
+      max-width:730px;margin:28px auto 0;color:#a7afc0;font-size:17px;line-height:1.75
+    }
+    .hero-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:30px}
+    .ghost{
+      display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);
+      border-radius:999px;padding:11px 17px;color:#c1c7d3;font-size:12px;font-weight:800;background:rgba(255,255,255,.025)
+    }
+    .hero-trust{
+      display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:36px
+    }
+    .hero-trust span{
+      border:1px solid rgba(255,255,255,.08);background:rgba(17,20,27,.68);
+      padding:8px 11px;border-radius:999px;font-size:10px;color:#929bad
+    }
 
-    section{padding:92px 0}
-    .section-head{max-width:780px;margin-bottom:36px}
-    .section-head h2{font-size:clamp(38px,5vw,62px);line-height:.98;letter-spacing:-.055em;margin:10px 0 15px}
-    .section-head p{font-size:15px;line-height:1.65;color:var(--muted);max-width:700px;margin:0}
+    /* shared editorial sections */
+    .editorial{padding:112px 0;border-top:1px solid var(--line)}
+    .editorial-head{text-align:center;max-width:900px;margin:0 auto 66px}
+    .editorial-head .section-title .gold{display:inline}
+    .story-stack{display:grid;gap:28px;max-width:920px;margin:auto}
+    .story{
+      min-height:410px;border:1px solid var(--line);border-radius:28px;padding:44px 48px;
+      background:linear-gradient(145deg,#12161d,#0f1218);
+      display:grid;grid-template-columns:94px 1fr;gap:34px;align-items:start;
+      box-shadow:0 18px 60px rgba(0,0,0,.16)
+    }
+    .story-icon{
+      width:74px;height:74px;border-radius:18px;display:grid;place-items:center;
+      border:1px solid var(--line-gold);background:var(--soft-gold);color:var(--gold2);font-size:28px
+    }
+    .story h3{font-size:clamp(28px,3.2vw,42px);line-height:1.08;letter-spacing:-.04em;margin:6px 0 16px}
+    .story p{color:var(--muted);font-size:16px;line-height:1.8;margin:0;max-width:680px}
+    .story .micro{
+      display:flex;gap:9px;flex-wrap:wrap;margin-top:28px
+    }
+    .story .micro span{
+      border:1px solid var(--line);border-radius:999px;padding:7px 9px;color:#a8afbd;font-size:10px
+    }
 
-    .privacy-hero{background:var(--dark);color:#fff}
-    .privacy-hero .eyebrow{color:var(--gold2)}
-    .privacy-hero .section-head p{color:#bdb7ab}
-    .privacy-layout{display:grid;grid-template-columns:.82fr 1.18fr;gap:54px;align-items:start}
-    .privacy-statement{position:sticky;top:105px}
-    .privacy-statement h2{font-size:clamp(42px,5.5vw,68px);line-height:.98;letter-spacing:-.055em;margin:12px 0 18px}
-    .privacy-statement h2 span{color:var(--gold2)}
-    .privacy-statement p{color:#bdb7ab;line-height:1.65;max-width:520px}
-    .privacy-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .privacy-card{background:var(--dark2);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:22px;min-height:190px}
-    .privacy-card .ico{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#29271f;color:var(--gold2);font-size:16px;margin-bottom:18px}
-    .privacy-card h3{font-size:17px;margin:0 0 7px;letter-spacing:-.02em}
-    .privacy-card p{font-size:12px;line-height:1.55;color:#aaa399;margin:0}
-    .privacy-foot{margin-top:14px;font-size:10px;color:#8e887f;line-height:1.55}
+    /* privacy */
+    .privacy{
+      padding:118px 0;border-top:1px solid var(--line);
+      background:
+        radial-gradient(circle at 50% 20%,rgba(226,165,58,.07),transparent 34%),
+        #0d1016
+    }
+    .privacy-intro{text-align:center;max-width:900px;margin:0 auto}
+    .privacy-intro .section-title{max-width:850px;margin:14px auto 0}
+    .privacy-intro .section-lead{max-width:760px}
+    .privacy-grid{
+      max-width:970px;margin:72px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:22px
+    }
+    .privacy-item{
+      min-height:260px;border:1px solid var(--line);border-radius:26px;padding:34px;
+      background:#12161d
+    }
+    .privacy-item .num{font-size:11px;color:var(--gold2);font-weight:900;letter-spacing:.12em}
+    .privacy-item h3{font-size:26px;letter-spacing:-.035em;margin:34px 0 12px}
+    .privacy-item p{font-size:14px;color:var(--muted);line-height:1.75;margin:0}
+    .privacy-note{
+      max-width:970px;margin:18px auto 0;border:1px solid var(--line-gold);
+      background:rgba(226,165,58,.055);border-radius:20px;padding:20px 22px;
+      font-size:12px;color:#aeb4c0;line-height:1.65
+    }
+    .privacy-note strong{color:#f1f0ea}
 
-    .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .feature-card{background:var(--paper);border:1px solid var(--line);border-radius:21px;padding:24px;min-height:245px;position:relative}
-    .feature-card.flag{background:#171613;color:#fff;border-color:#171613}
-    .feature-card .tag{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:850;color:#9d8352}
-    .feature-card.flag .tag{color:#d9c188}
-    .feature-card h3{font-size:23px;letter-spacing:-.035em;margin:34px 0 8px}
-    .feature-card p{font-size:12px;line-height:1.55;color:#70695f;margin:0}
-    .feature-card.flag p{color:#c1baaf}
-    .feature-card ul{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:7px}
-    .feature-card li{font-size:11px;color:#5f594f;padding-left:16px;position:relative;line-height:1.45}
-    .feature-card.flag li{color:#d1cbc1}
-    .feature-card li:before{content:"✓";position:absolute;left:0;color:#9b7e43;font-weight:900}
+    /* product pillars */
+    .pillars{padding:118px 0;border-top:1px solid var(--line)}
+    .pillar{
+      min-height:540px;border-top:1px solid var(--line);
+      display:grid;grid-template-columns:.8fr 1.2fr;gap:70px;padding:70px 0;align-items:center
+    }
+    .pillar:first-of-type{margin-top:62px}
+    .pillar-copy .kicker{color:#8f98aa}
+    .pillar-copy h3{font-size:clamp(38px,4.4vw,62px);line-height:.98;letter-spacing:-.055em;margin:12px 0 18px}
+    .pillar-copy p{color:var(--muted);font-size:15px;line-height:1.75;margin:0}
+    .pillar-list{display:grid;gap:0;margin-top:26px}
+    .pillar-list div{display:grid;grid-template-columns:170px 1fr;gap:20px;border-top:1px solid var(--line);padding:14px 0}
+    .pillar-list strong{font-size:12px;color:#f3f1ec}.pillar-list span{font-size:12px;color:#939cad;line-height:1.5}
+    .feature-visual{
+      min-height:420px;border-radius:30px;border:1px solid var(--line-gold);
+      background:
+        radial-gradient(circle at 50% 15%,rgba(226,165,58,.14),transparent 28%),
+        linear-gradient(145deg,#171b22,#0f1218);
+      padding:34px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden
+    }
+    .feature-visual:after{
+      content:"";position:absolute;width:300px;height:300px;border-radius:50%;
+      border:1px solid rgba(226,165,58,.09);box-shadow:0 0 0 45px rgba(226,165,58,.025),0 0 0 90px rgba(226,165,58,.015)
+    }
+    .doc-stack{position:relative;z-index:2;width:min(420px,92%);display:grid;gap:12px}
+    .doc{
+      border:1px solid rgba(255,255,255,.10);background:#171b23;border-radius:18px;padding:19px 20px
+    }
+    .doc small{color:#777f91;font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+    .doc b{display:block;margin-top:6px;font-size:16px}.doc span{display:block;color:#9ba3b3;font-size:11px;margin-top:5px}
+    .doc.goldline{border-color:rgba(226,165,58,.36)}
+    .reply-demo{position:relative;z-index:2;width:min(460px,95%);display:grid;gap:12px}
+    .bubble{
+      max-width:82%;border-radius:18px;padding:15px 17px;font-size:12px;line-height:1.55
+    }
+    .bubble.in{background:#1a1f27;color:#c5cbd6;border:1px solid var(--line)}
+    .bubble.out{background:linear-gradient(135deg,#e8b14c,#d58c28);color:#17120a;margin-left:auto;font-weight:700}
+    .approval{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+    .approval span{border:1px solid var(--line);border-radius:999px;padding:8px 11px;font-size:10px;color:#9da5b4}
+    .approval span:last-child{background:#e2a53a;color:#17120a;border-color:#e2a53a;font-weight:900}
+    .meeting-demo{position:relative;z-index:2;width:min(460px,95%)}
+    .meeting-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .meeting-head strong{font-size:13px}.live-dot{display:inline-flex;gap:6px;align-items:center;color:#9ca4b2;font-size:10px}
+    .live-dot i{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px rgba(226,165,58,.8)}
+    .transcript{display:grid;gap:10px}
+    .line{border-left:2px solid rgba(226,165,58,.45);padding:8px 0 8px 14px;color:#a8b0be;font-size:11px;line-height:1.55}
+    .line b{color:#f0eee8;font-size:10px;display:block;margin-bottom:3px}
 
-    .visual-block{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}
-    .visual-card{border-radius:25px;padding:30px;background:#ded5c7;border:1px solid #d1c5b6;min-height:440px;display:flex;flex-direction:column}
-    .visual-card.dark{background:#151513;color:#fff;border-color:#151513}
-    .visual-card h3{font-size:33px;letter-spacing:-.045em;margin:8px 0 12px}
-    .visual-card>p{font-size:13px;line-height:1.6;color:#675f55;margin:0;max-width:520px}
-    .visual-card.dark>p{color:#bbb4aa}
-    .spec-list{margin-top:auto;display:grid;gap:8px;padding-top:28px}
-    .spec{display:flex;justify-content:space-between;gap:20px;padding:11px 0;border-top:1px solid rgba(17,17,15,.12);font-size:11px}
-    .dark .spec{border-color:rgba(255,255,255,.12)}
-    .spec strong{font-size:11px}.spec span{text-align:right;color:#766e62}.dark .spec span{color:#aaa399}
+    /* keyboard */
+    .keyboard{padding:118px 0;border-top:1px solid var(--line);background:#0d1016}
+    .keyboard-inner{max-width:1020px;margin:auto}
+    .keyboard-video{
+      margin:62px auto 0;width:min(420px,100%);padding:10px;border-radius:32px;
+      background:#050608;border:1px solid rgba(255,255,255,.10);
+      box-shadow:0 36px 90px rgba(0,0,0,.42)
+    }
+    .keyboard-video video{width:100%;border-radius:24px;max-height:650px;object-fit:cover}
+    .keyboard-features{max-width:900px;margin:70px auto 0;display:grid;grid-template-columns:1fr 1fr}
+    .kf{padding:28px 28px 28px 0;border-top:1px solid var(--line)}
+    .kf:nth-child(even){padding-left:28px;border-left:1px solid var(--line)}
+    .kf h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em}
+    .kf p{font-size:12px;color:var(--muted);line-height:1.65;margin:0}
 
-    .keyboard-showcase{background:#e7dfd2;border-top:1px solid #d8cdbc;border-bottom:1px solid #d8cdbc}
-    .keyboard-layout{display:grid;grid-template-columns:.9fr 1.1fr;gap:50px;align-items:start}
-    .kbd-list{display:grid;gap:9px}
-    .kbd-row{display:grid;grid-template-columns:120px 1fr;gap:16px;padding:14px 0;border-top:1px solid rgba(17,17,15,.13)}
-    .kbd-row strong{font-size:12px}.kbd-row span{font-size:11px;line-height:1.5;color:#6d655b}
-    .kbd-badge{display:inline-flex;margin-top:20px;background:#171613;color:#fff;border-radius:999px;padding:9px 12px;font-size:10px;font-weight:800}
+    /* easy */
+    .easy{padding:118px 0;text-align:center;border-top:1px solid var(--line)}
+    .easy-steps{max-width:900px;margin:68px auto 0;display:grid;grid-template-columns:repeat(3,1fr)}
+    .easy-step{padding:0 34px;border-right:1px solid var(--line)}
+    .easy-step:last-child{border-right:0}
+    .easy-step .n{font-size:11px;color:var(--gold);font-weight:900;letter-spacing:.1em}
+    .easy-step h3{font-size:26px;letter-spacing:-.04em;margin:22px 0 9px}
+    .easy-step p{font-size:12px;color:var(--muted);line-height:1.6;margin:0}
 
-    .live-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .live-card{border-top:1px solid #bfb5a6;padding:23px 4px 0;min-height:220px}
-    .live-card b{font-size:10px;color:#8a7447;letter-spacing:.1em;text-transform:uppercase}
-    .live-card h3{font-size:25px;letter-spacing:-.04em;margin:18px 0 9px}
-    .live-card p{font-size:12px;line-height:1.6;color:#6f685e;margin:0}
+    /* languages + final */
+    .languages{padding:110px 0;border-top:1px solid var(--line);text-align:center}
+    .language-row{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;max-width:950px;margin:42px auto 0}
+    .language-row span{border:1px solid var(--line);border-radius:999px;padding:9px 12px;color:#9ea6b5;font-size:10px}
+    .language-note{max-width:680px;margin:18px auto 0;color:#717a8b;font-size:10px;line-height:1.55}
+    .final{
+      min-height:600px;display:flex;align-items:center;text-align:center;border-top:1px solid var(--line);
+      background:
+        radial-gradient(circle at 50% 50%,rgba(226,165,58,.12),transparent 27%),
+        #0a0c11
+    }
+    .final-content{max-width:860px;margin:auto}
+    .final h2{font-size:clamp(50px,7vw,88px);line-height:.94;letter-spacing:-.065em;margin:14px 0 24px}
+    .final p{max-width:650px;margin:0 auto;color:#9ca5b5;line-height:1.7;font-size:14px}
+    .final .try{margin-top:28px;padding:13px 21px;font-size:13px}
+    .testing{margin-top:14px;color:#6f7787;font-size:9px;text-transform:uppercase;letter-spacing:.12em}
 
-    .languages{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
-    .languages span{padding:9px 11px;border:1px solid #d4cabd;border-radius:999px;background:rgba(255,255,255,.5);font-size:10px;font-weight:700}
-    .language-note{font-size:10px!important;margin-top:14px!important;color:#81796e!important}
-
-    .honesty{background:#d8cebE;border-radius:24px;padding:30px;margin-top:38px;display:grid;grid-template-columns:.35fr 1.65fr;gap:25px;align-items:start}
-    .honesty strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase}
-    .honesty p{font-size:12px;line-height:1.6;color:#5f584f;margin:0}
-
-    .final{background:var(--dark);color:#fff;padding:88px 0}
-    .final-inner{display:grid;grid-template-columns:1fr auto;gap:30px;align-items:end}
-    .final h2{font-size:clamp(42px,5.5vw,68px);line-height:.97;letter-spacing:-.055em;margin:10px 0 14px}
-    .final p{color:#b9b2a8;font-size:13px;line-height:1.6;max-width:650px}
-    .final .button{background:var(--gold2);color:#171613;border-color:var(--gold2);white-space:nowrap}
-    .testing{display:inline-flex;margin-top:12px;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:7px 9px;font-size:9px;color:#a9a299}
-
-    footer{padding:24px 0;border-top:1px solid #d7cebf}
-    .footer-inner{display:flex;justify-content:space-between;gap:18px;align-items:center;font-size:10px;color:#7c7469}
-    .footer-links{display:flex;gap:16px;flex-wrap:wrap}
+    footer{border-top:1px solid var(--line);padding:25px 0}
+    .footer{display:flex;align-items:center;justify-content:space-between;gap:18px;color:#70798a;font-size:10px}
+    .footer-links{display:flex;gap:18px;flex-wrap:wrap}
 
     @media(max-width:900px){
-      .nav-links{display:none}
-      .hero,.privacy-layout,.keyboard-layout{grid-template-columns:1fr}
-      .hero{padding-top:52px}
-      .demo-shell{max-width:520px;margin:auto;width:100%}
-      .privacy-statement{position:static}
-      .feature-grid,.live-grid{grid-template-columns:1fr 1fr}
-      .visual-block{grid-template-columns:1fr}
-      .proof-grid{grid-template-columns:1fr 1fr}.proof-grid div:nth-child(2){border-right:0}.proof-grid div:nth-child(-n+2){border-bottom:1px solid var(--line)}
-      .honesty{grid-template-columns:1fr}
+      .navlinks{display:none}
+      .pillar{grid-template-columns:1fr;gap:34px}
+      .privacy-grid{grid-template-columns:1fr}
+      .story{grid-template-columns:72px 1fr}
+      .keyboard-features{grid-template-columns:1fr}
+      .kf:nth-child(even){padding-left:0;border-left:0}
+      .easy-steps{grid-template-columns:1fr;gap:34px}
+      .easy-step{border-right:0;padding:0 12px}
     }
-    @media(max-width:620px){
-      .wrap{width:min(100% - 24px,1180px)}
-      .nav-inner{height:62px}
-      .hero{min-height:0;padding:42px 0 50px;gap:30px}
-      .hero h1{font-size:48px}
-      .hero .lead{font-size:15px}
-      section{padding:68px 0}
-      .feature-grid,.live-grid,.privacy-grid{grid-template-columns:1fr}
-      .feature-card{min-height:0}
-      .proof-grid{grid-template-columns:1fr}.proof-grid div{border-right:0;border-bottom:1px solid var(--line)}.proof-grid div:last-child{border-bottom:0}
-      .visual-card{min-height:370px;padding:24px}
-      .kbd-row{grid-template-columns:1fr;gap:5px}
-      .final-inner{grid-template-columns:1fr;align-items:start}
-      .footer-inner{flex-direction:column;align-items:flex-start}
+    @media(max-width:640px){
+      .wrap{width:min(var(--max),calc(100% - 28px))}
+      .nav{height:64px}
+      .brand{font-size:18px}.brand img{width:31px;height:31px}
+      .try{padding:9px 13px}
+      .hero{min-height:720px;padding:78px 0 68px}
+      .hero h1{font-size:62px}
+      .hero h2{font-size:34px}
+      .hero p{font-size:14px;line-height:1.7}
+      .editorial,.privacy,.pillars,.keyboard,.easy,.languages{padding:82px 0}
+      .editorial-head{margin-bottom:44px}
+      .section-title{font-size:46px}
+      .section-lead{font-size:14px}
+      .story{display:block;min-height:0;padding:28px 25px;border-radius:22px}
+      .story-icon{width:58px;height:58px;border-radius:16px;font-size:23px;margin-bottom:32px}
+      .story h3{font-size:31px}
+      .story p{font-size:14px}
+      .privacy-grid{margin-top:48px}
+      .privacy-item{min-height:0;padding:26px;border-radius:22px}
+      .pillar{min-height:0;padding:54px 0}
+      .pillar-copy h3{font-size:43px}
+      .pillar-list div{grid-template-columns:1fr;gap:5px}
+      .feature-visual{min-height:340px;padding:22px;border-radius:23px}
+      .keyboard-video{margin-top:44px}
+      .keyboard-features{margin-top:50px}
+      .kf{padding:22px 0}
+      .easy-steps{margin-top:48px}
+      .final{min-height:520px}
+      .final h2{font-size:54px}
+      .footer{flex-direction:column;align-items:flex-start}
     }
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   </style>
 </head>
 <body>
-  <header class="nav">
-    <div class="wrap nav-inner">
-      <a class="brand" href="#top" aria-label="Ana home">
-        <img src="/ana-logo.svg" alt="" />
-        <span>Ana</span>
-      </a>
-      <nav class="nav-links" aria-label="Ana navigation">
+  <header class="topbar">
+    <div class="wrap nav">
+      <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
+      <nav class="navlinks" aria-label="Ana navigation">
         <a href="#privacy">Privacy</a>
-        <a href="#product">Product</a>
-        <a href="#documents">Documents & Photos</a>
+        <a href="#situations">What Ana Solves</a>
+        <a href="#product">Capabilities</a>
         <a href="#keyboard">Keyboard</a>
-        <a href="#live">Live & Meetings</a>
+        <a href="#easy">Why It Feels Easy</a>
       </nav>
-      <a class="nav-cta" href="/">Open Ana →</a>
+      <a class="try" href="/">Try Ana →</a>
     </div>
   </header>
 
   <main id="top">
-    <section>
-      <div class="wrap hero">
-        <div>
-          <div class="eyebrow">PRIVACY-FIRST MULTILINGUAL COMMUNICATION</div>
-          <h1>Your words are yours.<br><em>Ana helps with the rest.</em></h1>
-          <p class="lead">Write, translate, reply, understand documents and photos, follow conversations and meetings, or use Ana directly from your Android keyboard — without turning normal typing into a permanent cloud feed.</p>
-          <div class="hero-actions">
-            <a class="button" href="/">Try Ana →</a>
-            <a class="button secondary" href="#privacy">See how privacy works</a>
-          </div>
-          <div class="hero-note"><b>Private testing.</b> The product is moving quickly, so features and behaviour can still change.</div>
-          <div class="privacy-pills">
-            <span>Local-first normal typing</span>
-            <span>Protected sensitive fields</span>
-            <span>Privacy Shield for AI text</span>
-            <span>Incognito mode</span>
-          </div>
+    <section class="hero">
+      <div class="wrap hero-content">
+        <div class="hero-badge"><i>✦</i> Privacy-first multilingual communication</div>
+        <h1>Ana</h1>
+        <h2>Say what you mean.<br><span class="gold">In any language.</span></h2>
+        <p>Ana helps you type, translate, reply, understand documents and photos, follow meetings and handle multilingual conversations — while keeping ordinary keyboard use local and putting cloud AI behind clear user actions.</p>
+        <div class="hero-actions">
+          <a class="try" href="/">Try Ana →</a>
+          <a class="ghost" href="#privacy">How privacy works</a>
         </div>
-        <div class="demo-shell">
+        <div class="hero-trust">
+          <span>Local-first typing</span>
+          <span>Sensitive-field protection</span>
+          <span>Privacy Shield</span>
+          <span>Incognito</span>
+          <span>Per-app AI control</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="privacy" id="privacy">
+      <div class="wrap">
+        <div class="privacy-intro">
+          <div class="kicker">PRIVACY IS THE PRODUCT, TOO</div>
+          <h2 class="section-title">Useful when you ask.<br><span class="gold">Quiet when you don't.</span></h2>
+          <div class="section-rule"></div>
+          <p class="section-lead">Ana is designed so using the keyboard does not mean continuously sending what you type to an AI service. Cloud features are separated from normal typing and protected by explicit controls.</p>
+        </div>
+
+        <div class="privacy-grid">
+          <article class="privacy-item">
+            <div class="num">01 · LOCAL FIRST</div>
+            <h3>Normal typing is not a cloud request.</h3>
+            <p>Key input, local suggestions, autocorrection, learned words and glide decoding can work on-device. Smart paragraph correction is a separate opt-in feature.</p>
+          </article>
+          <article class="privacy-item">
+            <div class="num">02 · PRIVATE FIELDS</div>
+            <h3>Passwords and OTPs are treated differently.</h3>
+            <p>Ana disables AI behaviour in sensitive fields. Clipboard and voice features are also kept away from private input contexts.</p>
+          </article>
+          <article class="privacy-item">
+            <div class="num">03 · PRIVACY SHIELD</div>
+            <h3>Protect sensitive values before AI.</h3>
+            <p>When enabled, Ana can mask recognised personal values before cloud AI processing and restore them afterwards.</p>
+          </article>
+          <article class="privacy-item">
+            <div class="num">04 · USER CONTROL</div>
+            <h3>Incognito and per-app controls actually change behaviour.</h3>
+            <p>Incognito pauses AI, learning and clipboard history. AI actions can also remain disabled in apps where you do not want them.</p>
+          </article>
+        </div>
+
+        <div class="privacy-note"><strong>Reply does not read your screen.</strong> Ana uses text you deliberately select, copy or place in the editor. It does not silently scrape surrounding WhatsApp, Gmail or other app content.</div>
+      </div>
+    </section>
+
+    <section class="editorial" id="situations">
+      <div class="wrap">
+        <div class="editorial-head">
+          <div class="kicker">REAL SITUATIONS. LESS FRICTION.</div>
+          <h2 class="section-title">What does Ana<br><span class="gold">actually solve?</span></h2>
+          <div class="section-rule"></div>
+        </div>
+
+        <div class="story-stack">
+          <article class="story">
+            <div class="story-icon">↩</div>
+            <div>
+              <h3>A message arrives in a language you don't naturally write in.</h3>
+              <p>Copy or select it, tap Reply, optionally tell Ana how you want to answer, review the proposed response, then paste it. No separate translation app. No rewriting the whole context yourself.</p>
+              <div class="micro"><span>Reply</span><span>Translate</span><span>Accept / Reject</span></div>
+            </div>
+          </article>
+
+          <article class="story">
+            <div class="story-icon">▤</div>
+            <div>
+              <h3>A school letter, contract or form lands in your inbox.</h3>
+              <p>Upload the PDF or Word file. Ana translates inside the document structure so headings, tables, images, headers and formatting stay useful instead of collapsing into plain text.</p>
+              <div class="micro"><span>PDF</span><span>Scanned PDF</span><span>Word .docx</span><span>Compare views</span></div>
+            </div>
+          </article>
+
+          <article class="story">
+            <div class="story-icon">◎</div>
+            <div>
+              <h3>You need to understand a menu, sign or printed page now.</h3>
+              <p>Take a picture. Ana locates visible text, translates it and rebuilds the result in place, with zoom, comparison and uncertainty indicators for harder OCR regions.</p>
+              <div class="micro"><span>Camera</span><span>Picture translation</span><span>Save result</span></div>
+            </div>
+          </article>
+
+          <article class="story">
+            <div class="story-icon">◉</div>
+            <div>
+              <h3>A meeting moves faster than your second language.</h3>
+              <p>Ana can follow the conversation with rolling transcription and translated text so you can stay focused on the discussion rather than mentally translating every sentence.</p>
+              <div class="micro"><span>Meeting Listen</span><span>Transcript</span><span>Live translation</span></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="pillars" id="product">
+      <div class="wrap">
+        <div class="editorial-head">
+          <div class="kicker">ONE ANA. THREE CORE JOBS.</div>
+          <h2 class="section-title">Type better. Understand more.<br><span class="gold">Switch less.</span></h2>
+          <div class="section-rule"></div>
+        </div>
+
+        <article class="pillar">
+          <div class="pillar-copy">
+            <div class="kicker">WRITE & REPLY</div>
+            <h3>Ana lives where the words are being written.</h3>
+            <p>Translate, Write, Correct and Reply work directly from Ana Keyboard, with review controls before AI-generated text replaces your draft.</p>
+            <div class="pillar-list">
+              <div><strong>Translate</strong><span>Meaning-first translation from typed, pasted or dictated text.</span></div>
+              <div><strong>Write</strong><span>Turn rough intent into a finished message.</span></div>
+              <div><strong>Correct</strong><span>Paragraph-level grammar, wording and clarity correction.</span></div>
+              <div><strong>Reply</strong><span>Use selected or copied context and approve before insertion.</span></div>
+            </div>
+          </div>
+          <div class="feature-visual">
+            <div class="reply-demo">
+              <div class="bubble in">“Könnten wir den Termin auf morgen verschieben?”</div>
+              <div class="bubble out">Yes, tomorrow works for me. What time would suit you best?</div>
+              <div class="approval"><span>Reject</span><span>Accept</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="pillar" id="documents">
+          <div class="pillar-copy">
+            <div class="kicker">DOCUMENTS & VISION</div>
+            <h3>Translate the content without throwing away the format.</h3>
+            <p>PDF, Word and picture translation are built around structure. Ana tries to preserve where information belongs, not merely extract the words and dump a translation underneath.</p>
+            <div class="pillar-list">
+              <div><strong>PDF</strong><span>Native and scanned PDFs with positioned reconstruction.</span></div>
+              <div><strong>Word</strong><span>Editable .docx output with existing document structure retained.</span></div>
+              <div><strong>Picture</strong><span>In-place translation overlay with style hints where reliable.</span></div>
+              <div><strong>Review</strong><span>Original, Translated and Compare views.</span></div>
+            </div>
+          </div>
+          <div class="feature-visual">
+            <div class="doc-stack">
+              <div class="doc"><small>Original</small><b>Elternbrief zum Schuljahresbeginn</b><span>Structured PDF · 3 pages</span></div>
+              <div class="doc goldline"><small>Ana translated</small><b>Letter to parents for the start of the school year</b><span>Layout preserved · ready to compare</span></div>
+              <div class="doc"><small>Word output</small><b>Editable .docx</b><span>Tables · headers · images · styles retained</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="pillar">
+          <div class="pillar-copy">
+            <div class="kicker">LIVE & MEETINGS</div>
+            <h3>When the language problem is happening in real time.</h3>
+            <p>Use Live for back-and-forth interpretation or Meeting Listen for longer sessions. Talk for Me remains in private testing for routine dialogue with decision boundaries.</p>
+            <div class="pillar-list">
+              <div><strong>Live</strong><span>Back-and-forth spoken interpretation.</span></div>
+              <div><strong>Meetings</strong><span>Rolling transcript and translated meeting text.</span></div>
+              <div><strong>Talk for Me</strong><span>Routine dialogue with material choices kept with the user.</span></div>
+            </div>
+          </div>
+          <div class="feature-visual">
+            <div class="meeting-demo">
+              <div class="meeting-head"><strong>Meeting Listen</strong><span class="live-dot"><i></i> Listening</span></div>
+              <div class="transcript">
+                <div class="line"><b>Speaker 1</b>We need the revised capacity plan before Friday.</div>
+                <div class="line"><b>Ana · German</b>Wir brauchen den überarbeiteten Kapazitätsplan vor Freitag.</div>
+                <div class="line"><b>Speaker 2</b>I’ll update the numbers after today’s review.</div>
+                <div class="line"><b>Ana · German</b>Ich aktualisiere die Zahlen nach der heutigen Prüfung.</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="keyboard" id="keyboard">
+      <div class="wrap keyboard-inner">
+        <div class="editorial-head">
+          <div class="kicker">ANA KEYBOARD · ANDROID</div>
+          <h2 class="section-title">Type normally.<br><span class="gold">Ana helps as you go.</span></h2>
+          <div class="section-rule"></div>
+          <p class="section-lead">The keyboard is designed to stay familiar. Normal typing remains normal typing; Ana’s AI tools appear when you actually need them.</p>
+        </div>
+
+        <div class="keyboard-video">
           <video autoplay muted loop playsinline preload="metadata" aria-label="Real Ana Keyboard demo">
             <source src="/meet-ana/ana-keyboard-demo.mp4" type="video/mp4" />
           </video>
         </div>
-      </div>
-    </section>
 
-    <div class="proof">
-      <div class="wrap proof-grid">
-        <div><strong>Short learning curve</strong><span>Ana fits into the way you already type, reply, translate and communicate.</span></div>
-        <div><strong>PDF + Word</strong><span>Translate documents while keeping their structure.</span></div>
-        <div><strong>Photos + camera</strong><span>Translate text where it appears, not in a separate wall of text.</span></div>
-        <div><strong>Live + meetings</strong><span>Follow spoken language with transcripts and translation.</span></div>
-      </div>
-    </div>
-
-    <section class="privacy-hero" id="privacy">
-      <div class="wrap privacy-layout">
-        <div class="privacy-statement">
-          <div class="eyebrow">PRIVACY IS NOT A FOOTNOTE</div>
-          <h2>Ana should help you communicate.<br><span>Not quietly collect your typing.</span></h2>
-          <p>The keyboard is built so ordinary typing and local correction stay separate from Ana’s cloud AI features. When cloud AI is needed, the user chooses the feature or explicitly enables it.</p>
-          <p class="privacy-foot">Ana is still in private testing. Privacy controls reduce exposure, but users should still avoid sending information to any AI service that they are not comfortable processing in the cloud.</p>
-        </div>
-        <div class="privacy-grid">
-          <article class="privacy-card">
-            <div class="ico">⌨</div>
-            <h3>Normal typing stays local</h3>
-            <p>Basic key input, local suggestions, autocorrection, learned words and glide decoding do not need a cloud request. Smart paragraph correction is a separate opt-in feature.</p>
-          </article>
-          <article class="privacy-card">
-            <div class="ico">◇</div>
-            <h3>Sensitive fields are treated differently</h3>
-            <p>Password and OTP-style fields disable Ana AI behaviour. Clipboard and voice features are also kept out of private input contexts.</p>
-          </article>
-          <article class="privacy-card">
-            <div class="ico">◎</div>
-            <h3>Privacy Shield before AI</h3>
-            <p>When enabled, Ana can mask recognised sensitive values such as names, emails, amounts and banking-style identifiers before sending text for AI processing, then restore the protected values afterwards.</p>
-          </article>
-          <article class="privacy-card">
-            <div class="ico">◐</div>
-            <h3>Incognito really changes behaviour</h3>
-            <p>Incognito mode pauses Ana AI, learning and clipboard history instead of merely changing the colour of the keyboard.</p>
-          </article>
-          <article class="privacy-card">
-            <div class="ico">▣</div>
-            <h3>Per-app AI control</h3>
-            <p>Ana can keep AI actions disabled for apps where you do not want them, while the keyboard itself remains usable.</p>
-          </article>
-          <article class="privacy-card">
-            <div class="ico">✓</div>
-            <h3>Reply does not scrape your screen</h3>
-            <p>Ana replies only to text you deliberately select, copy or place in the editor. It does not silently read surrounding WhatsApp, Gmail or other app content.</p>
-          </article>
+        <div class="keyboard-features">
+          <div class="kf"><h3>Context-aware Enter</h3><p>Search, Next, Go, Send or Done when the active field asks for it; newline in multiline writing fields.</p></div>
+          <div class="kf"><h3>Correction your way</h3><p>Review the full proposed change with Accept / Reject, or choose automatic application for safe paragraph corrections.</p></div>
+          <div class="kf"><h3>Two symbol pages</h3><p>Currencies, brackets, mathematical symbols and special characters without crowding normal typing.</p></div>
+          <div class="kf"><h3>Voice, clipboard, emoji & GIF</h3><p>Useful rich-input tools stay inside the keyboard instead of making you constantly switch apps.</p></div>
+          <div class="kf"><h3>Learning that stays useful</h3><p>Personal dictionary, learned corrections and glossary support help Ana adapt to the words you actually use.</p></div>
+          <div class="kf"><h3>Fast path stays local</h3><p>Basic typing, local suggestions, autocorrection and glide do not need a cloud AI round-trip.</p></div>
         </div>
       </div>
     </section>
 
-    <section id="product">
+    <section class="easy" id="easy">
       <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">WHAT ANA ACTUALLY DOES</div>
-          <h2>One assistant for the places where language gets in the way.</h2>
-          <p>No giant “AI platform” claim. These are the product experiences already built into Ana today.</p>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card flag">
-            <div class="tag">TEXT</div>
-            <h3>Translate</h3>
-            <p>Meaning-first translation for typed, pasted or dictated text, including multilingual and mixed-language input.</p>
-            <ul><li>Natural target-language phrasing</li><li>Personal glossary support</li><li>German register and regional variants</li></ul>
+        <div class="kicker">A SHORT LEARNING CURVE</div>
+        <h2 class="section-title">You already know<br><span class="gold">how to use Ana.</span></h2>
+        <div class="section-rule"></div>
+        <p class="section-lead">Ana is built around actions people already understand. You do not need to learn prompt engineering before the product becomes useful.</p>
+
+        <div class="easy-steps">
+          <article class="easy-step">
+            <div class="n">01</div>
+            <h3>Type or copy</h3>
+            <p>Start from the text, message, document or conversation you already have.</p>
           </article>
-          <article class="feature-card">
-            <div class="tag">WRITING</div>
-            <h3>Write + Correct</h3>
-            <p>Turn rough intent into a finished message, or clean up a draft without losing the facts you supplied.</p>
-            <ul><li>Write from rough notes</li><li>Paragraph-level correction</li><li>Friendly, formal, shorter, du / Sie</li></ul>
+          <article class="easy-step">
+            <div class="n">02</div>
+            <h3>Choose the action</h3>
+            <p>Translate, Reply, Write, Correct, listen to the meeting or open the document.</p>
           </article>
-          <article class="feature-card">
-            <div class="tag">REPLY</div>
-            <h3>Reply</h3>
-            <p>Copy or select a message, tell Ana how you want to answer if needed, review the result and paste it.</p>
-            <ul><li>Selected or copied message context</li><li>Optional reply instruction</li><li>Accept / Reject before insertion</li></ul>
-          </article>
-          <article class="feature-card">
-            <div class="tag">DOCUMENTS</div>
-            <h3>PDF + Word</h3>
-            <p>Translate documents without flattening them into plain text.</p>
-            <ul><li>Native and scanned PDFs</li><li>Editable Word .docx output</li><li>Original / Translated / Compare</li></ul>
-          </article>
-          <article class="feature-card">
-            <div class="tag">VISION</div>
-            <h3>Picture translation</h3>
-            <p>Read a sign, menu, form or image and place the translated text back where it belongs.</p>
-            <ul><li>In-place translated overlay</li><li>Zoom + comparison slider</li><li>Save translated image</li></ul>
-          </article>
-          <article class="feature-card">
-            <div class="tag">VOICE</div>
-            <h3>Live + Meetings</h3>
-            <p>Follow spoken language through live interpretation, meeting transcription and translated text.</p>
-            <ul><li>Live conversation support</li><li>Meeting transcript</li><li>Translated meeting text</li></ul>
+          <article class="easy-step">
+            <div class="n">03</div>
+            <h3>Review and use</h3>
+            <p>Ana gives you something you can inspect, accept, compare, edit or export.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="documents">
+    <section class="languages">
       <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">DOCUMENTS & PHOTOS</div>
-          <h2>The translation should still look like the thing you uploaded.</h2>
-          <p>Ana does not treat layout as decoration. For documents and pictures, understanding where the text belongs is part of the translation job.</p>
-        </div>
-        <div class="visual-block">
-          <article class="visual-card">
-            <div class="eyebrow">DOCUMENT TRANSLATION</div>
-            <h3>PDF and Word, with structure kept intact.</h3>
-            <p>PDF translation rebuilds translated text into the original page structure. Word translation works inside the DOCX package so the result remains editable instead of becoming a screenshot.</p>
-            <div class="spec-list">
-              <div class="spec"><strong>PDF</strong><span>Native + scanned</span></div>
-              <div class="spec"><strong>Word</strong><span>.docx, editable output</span></div>
-              <div class="spec"><strong>Preserved</strong><span>Tables, headings, images, headers, footers, styling</span></div>
-              <div class="spec"><strong>Review</strong><span>Original · Translated · Compare</span></div>
-              <div class="spec"><strong>Layout check</strong><span>Dense PDF areas can be compacted and flagged</span></div>
-            </div>
-          </article>
-          <article class="visual-card dark">
-            <div class="eyebrow">PICTURE TRANSLATION</div>
-            <h3>Same image. Different language.</h3>
-            <p>Ana locates visible text, translates it and rebuilds an overlay in the same visual area. When OCR can estimate them reliably, alignment, weight, font family and colours are carried into the translated result.</p>
-            <div class="spec-list">
-              <div class="spec"><strong>Views</strong><span>Original · Translated · Compare</span></div>
-              <div class="spec"><strong>Inspect</strong><span>Pinch and zoom for small text</span></div>
-              <div class="spec"><strong>Uncertainty</strong><span>Hard-to-read and handwritten areas can be flagged</span></div>
-              <div class="spec"><strong>Export</strong><span>Save translated image</span></div>
-              <div class="spec"><strong>Direction</strong><span>RTL handling for Urdu</span></div>
-            </div>
-          </article>
-        </div>
-        <div class="honesty">
-          <strong>Worth saying clearly</strong>
-          <p>Layout preservation is difficult across languages because translated text can be much longer or shorter than the original. Ana adapts sizing and can compact dense PDF translations, but a complex legal form, handwritten scan or heavily designed document can still need a visual check before you rely on it.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="keyboard-showcase" id="keyboard">
-      <div class="wrap keyboard-layout">
-        <div class="section-head">
-          <div class="eyebrow">ANA KEYBOARD · ANDROID</div>
-          <h2>Ana where you already type.</h2>
-          <p>The keyboard is not meant to replace every Android keyboard trick overnight. The focus is fast normal typing, useful language tools and clear control over when AI becomes involved.</p>
-          <span class="kbd-badge">Current keyboard: private testing</span>
-        </div>
-        <div class="kbd-list">
-          <div class="kbd-row"><strong>Typing</strong><span>Local suggestions, autocorrection, personal dictionary, learned corrections, glide typing and adaptive touch behaviour.</span></div>
-          <div class="kbd-row"><strong>AI actions</strong><span>Translate, Write, Correct, Reply, Shorter, Friendly, Formal, Du and Sie.</span></div>
-          <div class="kbd-row"><strong>Correction control</strong><span>Review first with a scrollable full Before / After panel, or choose automatic application for safe paragraph corrections.</span></div>
-          <div class="kbd-row"><strong>Context-aware Enter</strong><span>Search, Next, Go, Send or Done when the active field asks for it; newline for multiline writing fields.</span></div>
-          <div class="kbd-row"><strong>Symbols</strong><span>Two symbol pages with currencies, brackets, mathematical and special characters.</span></div>
-          <div class="kbd-row"><strong>Voice + rich input</strong><span>Voice typing, voice edit, clipboard, emoji and GIF support.</span></div>
-          <div class="kbd-row"><strong>Languages</strong><span>English, German QWERTZ, Hinglish-friendly typing and language switching.</span></div>
-          <div class="kbd-row"><strong>Customisation</strong><span>Themes, sizing, background, one-handed options and configurable toolbar actions.</span></div>
-        </div>
-      </div>
-    </section>
-
-    <section id="live">
-      <div class="wrap">
-        <div class="section-head">
-          <div class="eyebrow">SPOKEN LANGUAGE</div>
-          <h2>When typing is not the problem.</h2>
-          <p>Ana also helps when the information is being spoken around you instead of sitting in a text box.</p>
-        </div>
-        <div class="live-grid">
-          <article class="live-card">
-            <b>Live Interpreter</b>
-            <h3>Back-and-forth conversation</h3>
-            <p>Use Ana when two people are speaking different languages and each side needs to understand the other.</p>
-          </article>
-          <article class="live-card">
-            <b>Meeting Listen</b>
-            <h3>Longer conversations</h3>
-            <p>Follow a meeting with rolling transcription and translated text, then keep the useful written output.</p>
-          </article>
-          <article class="live-card">
-            <b>Talk for Me · private testing</b>
-            <h3>Ana handles the routine dialogue</h3>
-            <p>Give Ana a goal and constraints. Routine interaction can continue while material choices such as prices, appointments or commitments remain with you.</p>
-          </article>
-        </div>
-
-        <div class="section-head" style="margin-top:70px;margin-bottom:12px">
-          <div class="eyebrow">LANGUAGES</div>
-          <h2>Built for multilingual life.</h2>
-          <p>Including mixed-language use and regional German preferences rather than assuming every conversation stays neatly inside one language.</p>
-        </div>
-        <div class="languages">
-          <span>English</span><span>German</span><span>Schwäbisch</span><span>Bairisch</span><span>Plattdeutsch</span><span>Hindi</span><span>Hinglish</span><span>Bengali</span><span>Tamil</span><span>Telugu</span><span>Marathi</span><span>Gujarati</span><span>Punjabi</span><span>Malayalam</span><span>Kannada</span><span>Urdu</span><span>French</span><span>Spanish</span><span>Italian</span>
+        <div class="kicker">MULTILINGUAL BY DESIGN</div>
+        <h2 class="section-title">Built for the way<br><span class="gold">real life mixes languages.</span></h2>
+        <div class="section-rule"></div>
+        <div class="language-row">
+          <span>English</span><span>German</span><span>Schwäbisch</span><span>Bairisch</span><span>Plattdeutsch</span>
+          <span>Hindi</span><span>Hinglish</span><span>Bengali</span><span>Tamil</span><span>Telugu</span>
+          <span>Marathi</span><span>Gujarati</span><span>Punjabi</span><span>Malayalam</span><span>Kannada</span>
+          <span>Urdu</span><span>French</span><span>Spanish</span><span>Italian</span>
         </div>
         <p class="language-note">Speech recognition and translation quality can vary by language, accent, audio quality and environment.</p>
       </div>
     </section>
 
     <section class="final">
-      <div class="wrap final-inner">
-        <div>
-          <div class="eyebrow">ANA · PRIVATE TESTING</div>
-          <h2>Language help should feel useful.<br>Privacy should feel obvious.</h2>
-          <p>Ana is being built around both: useful communication tools when you ask for them, and clear boundaries when you do not.</p>
-          <span class="testing">Product experience may change as testing continues</span>
-        </div>
-        <a class="button" href="/">Open Ana →</a>
+      <div class="wrap final-content">
+        <div class="kicker">ANA · PRIVATE TESTING</div>
+        <h2>Useful enough to stay.<br><span class="gold">Private enough to trust.</span></h2>
+        <p>Ana is still evolving. The aim is simple: make multilingual communication easier without making people surrender control of every word they type.</p>
+        <a class="try" href="/">Try Ana →</a>
+        <div class="testing">Product experience may change during private testing</div>
       </div>
     </section>
   </main>
 
   <footer>
-    <div class="wrap footer-inner">
-      <a class="brand" href="#top"><img src="/ana-logo.svg" alt="" /><span>Ana</span></a>
+    <div class="wrap footer">
+      <a class="brand" href="#top"><img src="/ana-logo.svg" alt=""><span>Ana</span></a>
       <div class="footer-links">
         <a href="#privacy">Privacy</a>
-        <a href="#product">Product</a>
+        <a href="#situations">What Ana Solves</a>
+        <a href="#product">Capabilities</a>
         <a href="/learn/">Learn</a>
         <a href="/developers/">Developers</a>
       </div>
