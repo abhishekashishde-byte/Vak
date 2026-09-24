@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, Languages, ListChecks, Mic, Pause, Send, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
+import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, startTimedUsage } from './usageQuota.js'
 
 const HOME_LANGS = [
   { name: 'English', code: 'en-US' },
@@ -117,6 +118,10 @@ export default function TalkForMeRealtime() {
   const awaitingClosingRef = useRef(false)
   const closingResponseRef = useRef(null)
   const finishingRef = useRef(false)
+  const quotaSessionRef = useRef(null)
+  const quotaTimerRef = useRef(null)
+  const quotaDeadlineRef = useRef(null)
+  const quotaExpiredRef = useRef(false)
 
   const speechSupported = typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
   const realtimeSupported = typeof window !== 'undefined' && Boolean(window.RTCPeerConnection && navigator.mediaDevices?.getUserMedia)
@@ -199,6 +204,52 @@ export default function TalkForMeRealtime() {
     try { audioContextRef.current?.close() } catch {}
     audioContextRef.current = null
     blobRef.current?.style.setProperty('--voice', '0')
+  }
+
+  const stopQuotaClock = () => {
+    if (quotaTimerRef.current) clearInterval(quotaTimerRef.current)
+    if (quotaDeadlineRef.current) clearTimeout(quotaDeadlineRef.current)
+    quotaTimerRef.current = null
+    quotaDeadlineRef.current = null
+  }
+
+  const closeTalkQuota = async () => {
+    stopQuotaClock()
+    const id = quotaSessionRef.current
+    quotaSessionRef.current = null
+    if (!id) return
+    try { await endTimedUsage(id) } catch {}
+  }
+
+  const startTalkQuota = async () => {
+    await closeTalkQuota()
+    quotaExpiredRef.current = false
+    const quota = await startTimedUsage('talk')
+    quotaSessionRef.current = quota.sessionId
+
+    const expire = () => {
+      if (quotaExpiredRef.current) return
+      quotaExpiredRef.current = true
+      setError('Your 1-hour Talk for Me tester allowance has been used for this week.')
+      stopQuotaClock()
+      if (stage === 'conversation' || activeRef.current) void buildDebrief(true)
+      else endRealtime(false)
+    }
+
+    if (!quota.isAdmin && Number.isFinite(quota.remainingSeconds)) {
+      quotaDeadlineRef.current = setTimeout(expire, Math.max(1000, quota.remainingSeconds * 1000))
+    }
+
+    quotaTimerRef.current = setInterval(async () => {
+      const id = quotaSessionRef.current
+      if (!id || quotaExpiredRef.current) return
+      try {
+        const state = await heartbeatTimedUsage(id)
+        if (state && !state.allowed) expire()
+      } catch {}
+    }, 15000)
+
+    return quota
   }
 
   const startMeter = stream => {
@@ -505,6 +556,7 @@ CRITICAL FACT VERIFICATION — mandatory:
     closingResponseRef.current = null
 
     try {
+      await startTalkQuota()
       // Keep microphone access directly attached to the user's Start tap on iOS/WebKit.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -512,7 +564,12 @@ CRITICAL FACT VERIFICATION — mandatory:
       mediaRef.current = stream
       startMeter(stream)
 
-      const tokenResponse = await fetch('/api/realtime-token', { method: 'POST' })
+      const tokenHeaders = await authenticatedHeaders({ 'Content-Type': 'application/json' })
+      const tokenResponse = await fetch('/api/realtime-token', {
+        method: 'POST',
+        headers: tokenHeaders,
+        body: JSON.stringify({ quotaSessionId: quotaSessionRef.current }),
+      })
       const tokenData = await tokenResponse.json()
       if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start Ana voice.')
 
@@ -647,6 +704,7 @@ CRITICAL FACT VERIFICATION — mandatory:
       setError(err.message || 'Ana could not start the realtime conversation.')
       setSessionState('idle')
       endRealtime(false)
+      await closeTalkQuota()
     }
   }
 
@@ -736,6 +794,7 @@ CRITICAL FACT VERIFICATION — mandatory:
     setSessionState('idle')
     awaitingClosingRef.current = false
     closingResponseRef.current = null
+    void closeTalkQuota()
     if (returnToReady) setStage('ready')
   }
 
