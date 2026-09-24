@@ -671,7 +671,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><AnaMark className="ana-brand-mark"/><div><strong>Ana</strong></div></div>
+      <div className="brand"><AnaMark className="ana-brand-mark"/></div>
       <div className="header-actions"><button className="ghost" onClick={() => setGlossaryOpen(true)}>Glossary <span className="badge">{glossary.length}</span></button><button className="ghost icon-only" title="Sign out" onClick={() => supabase?.auth.signOut()}><LogOut size={16}/></button></div>
     </header>
 
