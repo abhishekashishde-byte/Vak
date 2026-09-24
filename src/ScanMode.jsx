@@ -278,9 +278,8 @@ export default function ScanMode() {
     if (!layout.blocks.length) throw new Error('Ana could not find translatable text in this Word document.')
 
     const sourceText = docxLayoutToPlainText(layout)
-    const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0
-    const pageCount = Math.max(1, Math.ceil(wordCount / 450))
-    if (pageCount > 10) throw new Error('Tester document translation is limited to about 10 Word pages per document.')
+    const pageCount = Math.max(1, Number(layout.pageCount || 1))
+    if (pageCount > 10) throw new Error('Tester document translation is limited to 10 pages per document.')
     const reservation = await startDocumentUsage(pageCount, selected.name)
     const quotaUsageId = reservation.usageId
     let completed = false
