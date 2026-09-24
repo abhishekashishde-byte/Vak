@@ -15,6 +15,19 @@ export default function AuthGate() {
     let initialising = true
     let persistenceUserId = ''
     let persistencePromise = Promise.resolve()
+    const forceFreshLogin = (() => {
+      try {
+        const url = new URL(window.location.href)
+        const shouldForce = url.searchParams.get('auth') === 'login'
+        if (shouldForce) {
+          url.searchParams.delete('auth')
+          window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+        }
+        return shouldForce
+      } catch {
+        return false
+      }
+    })()
 
     const startPersistence = user => {
       if (!user?.id) return Promise.resolve()
@@ -28,6 +41,17 @@ export default function AuthGate() {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return
+
+      if (forceFreshLogin && data.session) {
+        stopAccountPersistence()
+        await supabase.auth.signOut()
+        if (!active) return
+        setSession(null)
+        initialising = false
+        setReady(true)
+        return
+      }
+
       const nextSession = data.session || null
       setSession(nextSession)
       if (nextSession?.user) await startPersistence(nextSession.user)
