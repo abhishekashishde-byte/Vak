@@ -39,6 +39,20 @@ function wordParts(zip) {
     })
 }
 
+async function savedDocxPageCount(zip) {
+  const entry = zip.file('docProps/app.xml')
+  if (!entry) return 0
+  try {
+    const source = await entry.async('string')
+    const doc = parseXml(source, 'docProps/app.xml')
+    const node = nodesByLocalName(doc, 'Pages')[0]
+    const value = Number(node?.textContent || 0)
+    return Number.isFinite(value) && value > 0 ? Math.ceil(value) : 0
+  } catch {
+    return 0
+  }
+}
+
 function runStyleFingerprint(run) {
   const rPr = directChildByLocalName(run, 'rPr')
   return rPr ? new XMLSerializer().serializeToString(rPr) : ''
@@ -78,6 +92,7 @@ function normalizePreview(text) {
 
 export async function extractDocxLayout(file) {
   const zip = await JSZip.loadAsync(file)
+  const savedPageCount = await savedDocxPageCount(zip)
   const parts = wordParts(zip)
   if (!parts.length) throw new Error('This Word file does not contain a readable document body.')
 
@@ -154,7 +169,19 @@ export async function extractDocxLayout(file) {
     })
   }
 
-  return { kind: 'docx', blocks, parts, paragraphOrder }
+  const documentText = blocks.map(block => String(block.text || '')).join(' ').trim()
+  const wordCount = documentText ? documentText.split(/\s+/).length : 0
+  const estimatedPageCount = Math.max(1, Math.ceil(wordCount / 450))
+  const pageCount = savedPageCount || estimatedPageCount
+
+  return {
+    kind: 'docx',
+    blocks,
+    parts,
+    paragraphOrder,
+    pageCount,
+    pageCountSource: savedPageCount ? 'document' : 'estimated',
+  }
 }
 
 export function docxLayoutToPlainText(layout, translations = null) {
