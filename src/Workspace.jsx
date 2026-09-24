@@ -17,6 +17,7 @@ import ConversationPrepMode from './ConversationPrepMode.jsx'
 import EmergencyPhrasebook from './EmergencyPhrasebook.jsx'
 import PracticeMode from './PracticeMode.jsx'
 import DomainControl from './DomainControl.jsx'
+import UsageStatus from './UsageStatus.jsx'
 import { installDomainFetchInterceptor } from './domainEngine.js'
 import './live.css'
 import './talk.css'
@@ -98,6 +99,8 @@ export default function Workspace() {
         <button className="ana-privacy-quick" type="button" onClick={() => setSettingsOpen(true)} title="Privacy & memory" aria-label="Privacy and memory settings"><ShieldCheck size={17}/></button>
       </div>
     </nav>
+
+    <UsageStatus/>
 
     <div className="ana-mode-content">
       {mode === 'translate' && <App onOpenCamera={() => chooseMode('camera')} onOpenDocuments={() => chooseMode('scan')}/>} 
