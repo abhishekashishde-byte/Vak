@@ -42,3 +42,33 @@ export async function validateTesterSession(req, kind, sessionId) {
     return { ok: false, status: 503, error: error?.message || 'Could not verify tester allowance.' }
   }
 }
+
+
+export async function validateDocumentUsage(req, usageId) {
+  const auth = cleanBearer(req)
+  if (!auth) return { ok: false, status: 401, error: 'Please sign in again.' }
+  if (!usageId) return { ok: false, status: 403, error: 'Document tester allowance is required.' }
+
+  const { url, key } = supabaseConfig()
+  if (!url || !key) return { ok: false, status: 503, error: 'Ana account services are unavailable.' }
+
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/ana_validate_document_usage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: key,
+        Authorization: auth,
+      },
+      body: JSON.stringify({ p_usage_id: usageId }),
+    })
+    const text = await response.text()
+    if (!response.ok) {
+      const message = (() => { try { return JSON.parse(text)?.message || text } catch { return text } })()
+      return { ok: false, status: response.status === 401 ? 401 : 403, error: String(message || '').includes('ANA_DOCUMENT_USAGE_INVALID') ? 'This document tester allowance is no longer active.' : (message || 'Could not verify document allowance.') }
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, status: 503, error: error?.message || 'Could not verify document allowance.' }
+  }
+}
