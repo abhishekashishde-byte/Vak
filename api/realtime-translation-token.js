@@ -1,4 +1,5 @@
 import { publicDomain, resolveDomain } from '../server/domain.js'
+import { validateTesterSession } from '../server/usageQuota.js'
 
 const ALLOWED_LANGUAGES = new Set([
   'de', 'en', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it',
@@ -7,6 +8,9 @@ const ALLOWED_LANGUAGES = new Set([
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
+
+  const quota = await validateTesterSession(req, 'meeting_live', req.body?.quotaSessionId)
+  if (!quota.ok) return res.status(quota.status).json({ error: quota.error })
 
   const requested = String(req.body?.targetLanguage || 'en').trim().toLowerCase()
   const targetLanguage = ALLOWED_LANGUAGES.has(requested) ? requested : 'en'
