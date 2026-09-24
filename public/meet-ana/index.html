@@ -67,49 +67,44 @@
     .hero-points{display:flex;gap:8px;flex-wrap:wrap;margin-top:25px}
     .hero-points span{border:1px solid rgba(255,255,255,.12);background:rgba(5,16,22,.38);backdrop-filter:blur(8px);border-radius:999px;padding:7px 10px;font-size:9px;color:#c4d0d2}
 
-    /* QUICK CARDS */
-    .quick{padding:96px 0 108px;background:var(--paper);color:var(--darkText);overflow:hidden}
+    /* CORE CAPABILITIES */
+    .quick{padding:96px 0 104px;background:var(--paper);color:var(--darkText)}
     .quick .section-head p{color:var(--mutedDark)}
-    .product-stack{max-width:680px;margin:0 auto;position:relative}
-    .stack-stage{
-      position:relative;height:520px;touch-action:pan-y;user-select:none;
-      perspective:1200px;isolation:isolate
+    .cap-grid{
+      display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+      max-width:1080px;margin:0 auto
     }
-    .quick-card{
-      position:absolute;inset:0;border-radius:28px;overflow:hidden;background:#cfd9d7;
-      box-shadow:0 24px 60px rgba(15,35,43,.16);
-      transform-origin:50% 100%;
-      transition:transform .48s cubic-bezier(.22,.8,.2,1),opacity .35s ease,filter .35s ease;
-      will-change:transform,opacity;
-      cursor:grab
+    .cap-card{
+      min-height:250px;border:1px solid var(--darkLine);border-radius:22px;
+      background:#fff;padding:26px;display:flex;flex-direction:column;
+      box-shadow:0 10px 26px rgba(18,43,53,.05)
     }
-    .quick-card:active{cursor:grabbing}
-    .quick-card img{position:absolute;inset:0;height:100%;object-fit:cover;filter:saturate(.8) brightness(.72);pointer-events:none}
-    .quick-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 24%,rgba(5,15,20,.92))}
-    .quick-card[data-depth="0"]{z-index:4;transform:translate3d(0,0,0) scale(1);opacity:1}
-    .quick-card[data-depth="1"]{z-index:3;transform:translate3d(0,18px,-40px) scale(.965);opacity:.92;filter:saturate(.92)}
-    .quick-card[data-depth="2"]{z-index:2;transform:translate3d(0,36px,-80px) scale(.93);opacity:.72;filter:saturate(.82)}
-    .quick-card[data-depth="3"]{z-index:1;transform:translate3d(0,50px,-110px) scale(.90);opacity:.46;filter:saturate(.72)}
-    .quick-card[data-depth="hidden"]{z-index:0;transform:translate3d(0,60px,-130px) scale(.88);opacity:0;pointer-events:none}
-    .quick-card.is-dragging{transition:none}
-    .quick-copy{position:absolute;z-index:2;left:28px;right:28px;bottom:28px;color:#fff;pointer-events:none}
-    .quick-copy small{font-size:9px;letter-spacing:.15em;font-weight:850;color:#c4d3d5}
-    .quick-copy h3{font-size:34px;line-height:1;letter-spacing:-.045em;margin:8px 0 10px}
-    .quick-copy p{font-size:12px;line-height:1.5;color:#d1dcde;margin:0}
-    .stack-controls{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:42px}
-    .stack-arrow{
-      width:42px;height:42px;border-radius:50%;border:1px solid var(--darkLine);
-      background:#fff;color:#183039;font-size:18px;display:grid;place-items:center;cursor:pointer;
-      transition:transform .2s ease,background .2s ease
+    .cap-card.featured{
+      background:linear-gradient(145deg,#10242d,#173641);
+      color:#fff;border-color:rgba(105,222,208,.24)
     }
-    .stack-arrow:hover{background:#e9efee;transform:translateY(-1px)}
-    .stack-dots{display:flex;align-items:center;justify-content:center;gap:6px;max-width:210px;flex-wrap:wrap}
-    .stack-dot{
-      width:7px;height:7px;border:0;border-radius:999px;background:#b6c2c0;padding:0;cursor:pointer;
-      transition:width .25s ease,background .25s ease
+    .cap-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .cap-label{
+      font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:850;color:#756be0
     }
-    .stack-dot.active{width:24px;background:#756be0}
-    .stack-hint{text-align:center;margin-top:13px;color:#78888c;font-size:10px}
+    .featured .cap-label{color:#9ce6dd}
+    .cap-badge{
+      font-size:8px;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
+      padding:5px 7px;background:#eef2f1;color:#62767a;font-weight:800
+    }
+    .featured .cap-badge{background:rgba(255,255,255,.08);color:#b9cbd0}
+    .cap-card h3{
+      font-size:27px;line-height:1.04;letter-spacing:-.04em;margin:28px 0 10px
+    }
+    .cap-card p{
+      font-size:12px;line-height:1.65;color:#64777b;margin:0
+    }
+    .featured p{color:#b8c9cd}
+    .cap-card strong{font-weight:850}
+    .cap-foot{
+      margin-top:auto;padding-top:22px;font-size:10px;line-height:1.5;color:#7b8b8f
+    }
+    .featured .cap-foot{color:#91aab0}
 
     /* SPLIT SECTIONS */
     .splits{background:var(--paper);color:var(--darkText)}
@@ -213,13 +208,9 @@
       .section-head{margin-bottom:36px}
       .section-head h2{font-size:42px}
       .section-head p{font-size:14px}
-      .product-stack{max-width:100%}
-      .stack-stage{height:min(116vw,500px);min-height:420px}
-      .quick-card{border-radius:24px}
-      .quick-copy{left:22px;right:22px;bottom:23px}
-      .quick-copy h3{font-size:31px}
-      .stack-controls{margin-top:38px}
-      .stack-hint{font-size:9px}
+      .cap-grid{grid-template-columns:1fr}
+      .cap-card{min-height:0;padding:24px 22px}
+      .cap-card h3{font-size:26px;margin-top:24px}
       .split{display:block;min-height:0}
       .split-media{width:100%;min-height:0;aspect-ratio:4/3}
       .split-media.video{aspect-ratio:auto;padding:28px 18px}
@@ -285,111 +276,74 @@
     <section class="quick" id="products">
       <div class="wrap">
         <div class="section-head">
-          <div class="kicker">WHAT ANA CAN DO</div>
-          <h2>Nine ways Ana helps you communicate.</h2>
-          <p>From writing a message to understanding a meeting, these are the core things you can ask Ana to do.</p>
+          <div class="kicker">WHAT ANA DOES</div>
+          <h2>One assistant. Several jobs.</h2>
+          <p>No guessing, no hidden feature list. These are the main things Ana can do for you.</p>
         </div>
 
-        <div class="product-stack" data-product-stack>
-          <div class="stack-stage" aria-label="Ana features. Swipe or use the controls to browse.">
-            <article class="quick-card" data-stack-card data-depth="0">
-              <img src="https://images.pexels.com/photos/261949/pexels-photo-261949.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person writing a message on a laptop">
-              <div class="quick-copy">
-                <small>WRITE FOR ME</small>
-                <h3>Turn a rough thought into a finished message.</h3>
-                <p>From a few words to something ready to send.</p>
-              </div>
-            </article>
+        <div class="cap-grid">
+          <article class="cap-card featured">
+            <div class="cap-top"><span class="cap-label">WRITE FOR YOU</span></div>
+            <h3>Turn an idea into something ready to send.</h3>
+            <p>Give Ana a rough thought, a few words or the point you want to make. Ana writes the message for you.</p>
+            <div class="cap-foot">Messages · emails · replies · everyday writing</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="1">
-              <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person replying to a message on a smartphone">
-              <div class="quick-copy">
-                <small>REPLY FOR ME</small>
-                <h3>Understand the message and answer it.</h3>
-                <p>Use selected or copied context, review, then paste.</p>
-              </div>
-            </article>
+          <article class="cap-card featured">
+            <div class="cap-top"><span class="cap-label">REPLY FOR YOU</span></div>
+            <h3>Reply to messages without opening a separate AI app.</h3>
+            <p>Select or copy the message, tap Reply in Ana Keyboard, review the answer and use it in the app you are already in.</p>
+            <div class="cap-foot">Works from Ana Keyboard inside other Android apps</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="2">
-              <img src="https://images.pexels.com/photos/4050291/pexels-photo-4050291.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person editing text on a laptop">
-              <div class="quick-copy">
-                <small>CORRECT</small>
-                <h3>Fix the writing without changing what you mean.</h3>
-                <p>Grammar · spelling · clarity · full paragraphs</p>
-              </div>
-            </article>
+          <article class="cap-card">
+            <div class="cap-top"><span class="cap-label">CORRECT YOUR WRITING</span></div>
+            <h3>Fix the whole sentence or paragraph.</h3>
+            <p>Ana checks grammar, spelling, wording and clarity while keeping the meaning you intended.</p>
+            <div class="cap-foot">Review changes before accepting them</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="3">
-              <img src="https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a phone while traveling">
-              <div class="quick-copy">
-                <small>TRANSLATE</small>
-                <h3>Say the same thing naturally in another language.</h3>
-                <p>Typed · pasted · dictated · mixed-language text</p>
-              </div>
-            </article>
+          <article class="cap-card">
+            <div class="cap-top"><span class="cap-label">TRANSLATE TEXT</span></div>
+            <h3>Translate what you write, paste or dictate.</h3>
+            <p>Ana focuses on meaning and natural phrasing rather than mechanical word-for-word translation.</p>
+            <div class="cap-foot">Typed · pasted · dictated · mixed-language text</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="hidden">
-              <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, paper and pen on a desk">
-              <div class="quick-copy">
-                <small>DOCUMENT TRANSLATION</small>
-                <h3>Translate PDF and Word without losing the structure.</h3>
-                <p>PDF · scanned PDF · Word · Compare</p>
-              </div>
-            </article>
+          <article class="cap-card">
+            <div class="cap-top"><span class="cap-label">TRANSLATE DOCUMENTS</span></div>
+            <h3>Translate PDF and Word without throwing away the layout.</h3>
+            <p>Ana preserves document structure such as headings, tables, images, headers and formatting wherever possible.</p>
+            <div class="cap-foot">PDF · scanned PDF · Word · Original / Translated / Compare</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="hidden">
-              <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person photographing signs with a smartphone">
-              <div class="quick-copy">
-                <small>PICTURE TRANSLATION</small>
-                <h3>Understand the text in front of you.</h3>
-                <p>Camera · pictures · signs · menus · labels</p>
-              </div>
-            </article>
+          <article class="cap-card">
+            <div class="cap-top"><span class="cap-label">TRANSLATE PICTURES & SIGNS</span></div>
+            <h3>Point your camera at the text you need to understand.</h3>
+            <p>Use Ana for signs, menus, notices, labels and pictures, with translated text placed back into the visual context.</p>
+            <div class="cap-foot">Camera · pictures · signs · menus · labels</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="hidden">
-              <img src="https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Two people speaking during an appointment">
-              <div class="quick-copy">
-                <small>LIVE INTERPRETER</small>
-                <h3>Follow a conversation across languages.</h3>
-                <p>Back-and-forth spoken translation</p>
-              </div>
-            </article>
+          <article class="cap-card featured">
+            <div class="cap-top"><span class="cap-label">INTERPRET MEETINGS</span></div>
+            <h3>Follow a meeting even when the language changes.</h3>
+            <p>Ana can listen, transcribe and translate longer conversations so you can stay focused on what is being discussed.</p>
+            <div class="cap-foot">Live transcript · translated meeting text</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="hidden">
-              <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People in a meeting around a laptop">
-              <div class="quick-copy">
-                <small>MEETING LISTEN</small>
-                <h3>Keep up with the meeting as it happens.</h3>
-                <p>Transcript · translated text · longer conversations</p>
-              </div>
-            </article>
+          <article class="cap-card">
+            <div class="cap-top"><span class="cap-label">TALK FOR YOU</span><span class="cap-badge">Early access</span></div>
+            <h3>Let Ana handle routine back-and-forth.</h3>
+            <p>Tell Ana what you need. It can help carry the conversation while important choices and commitments stay with you.</p>
+            <div class="cap-foot">Useful for routine service and appointment conversations</div>
+          </article>
 
-            <article class="quick-card" data-stack-card data-depth="hidden">
-              <img src="https://images.pexels.com/photos/7433900/pexels-photo-7433900.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People having a focused conversation at work">
-              <div class="quick-copy">
-                <small>TALK FOR ME</small>
-                <h3>Let Ana help with routine back-and-forth.</h3>
-                <p>Important decisions still stay with you · Early access</p>
-              </div>
-            </article>
-          </div>
-
-          <div class="stack-controls" aria-label="Product carousel controls">
-            <button class="stack-arrow" type="button" data-stack-prev aria-label="Previous Ana product">←</button>
-            <div class="stack-dots" role="tablist" aria-label="Ana features">
-              <button class="stack-dot active" type="button" data-stack-dot="0" aria-label="Write for Me" aria-selected="true"></button>
-              <button class="stack-dot" type="button" data-stack-dot="1" aria-label="Reply for Me" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="2" aria-label="Correct" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="3" aria-label="Translate" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="4" aria-label="Document Translation" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="5" aria-label="Picture Translation" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="6" aria-label="Live Interpreter" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="7" aria-label="Meeting Listen" aria-selected="false"></button>
-              <button class="stack-dot" type="button" data-stack-dot="8" aria-label="Talk for Me" aria-selected="false"></button>
-            </div>
-            <button class="stack-arrow" type="button" data-stack-next aria-label="Next Ana product">→</button>
-          </div>
-          <div class="stack-hint">Swipe the card to explore Ana</div>
+          <article class="cap-card featured">
+            <div class="cap-top"><span class="cap-label">PROTECT YOUR DATA</span></div>
+            <h3>Privacy is built into how Ana works.</h3>
+            <p>Normal typing can stay local. Sensitive fields are treated differently, and Privacy Shield, Incognito and per-app controls limit when cloud AI is used.</p>
+            <div class="cap-foot">Local-first typing · sensitive-field protection · user control</div>
+          </article>
         </div>
       </div>
     </section>
@@ -564,93 +518,6 @@
       <span>© 2026 Ana</span>
     </div>
   </footer>
-  <script>
-    (() => {
-      const root = document.querySelector('[data-product-stack]');
-      if (!root) return;
 
-      const stage = root.querySelector('.stack-stage');
-      const cards = Array.from(root.querySelectorAll('[data-stack-card]'));
-      const dots = Array.from(root.querySelectorAll('[data-stack-dot]'));
-      const prev = root.querySelector('[data-stack-prev]');
-      const next = root.querySelector('[data-stack-next]');
-      let active = 0;
-      let pointerId = null;
-      let startX = 0;
-      let currentX = 0;
-
-      const render = () => {
-        cards.forEach((card, index) => {
-          const rawDepth = (index - active + cards.length) % cards.length;
-          const depth = rawDepth > 3 ? 'hidden' : String(rawDepth);
-          card.dataset.depth = depth;
-          card.setAttribute('aria-hidden', rawDepth === 0 ? 'false' : 'true');
-          card.style.pointerEvents = rawDepth === 0 ? 'auto' : 'none';
-          if (rawDepth !== 0) {
-            card.classList.remove('is-dragging');
-            card.style.removeProperty('transform');
-          }
-        });
-        dots.forEach((dot, index) => {
-          const selected = index === active;
-          dot.classList.toggle('active', selected);
-          dot.setAttribute('aria-selected', selected ? 'true' : 'false');
-        });
-      };
-
-      const goTo = (index) => {
-        active = (index + cards.length) % cards.length;
-        render();
-      };
-
-      const release = (event) => {
-        if (pointerId === null) return;
-        const card = cards[active];
-        const delta = currentX - startX;
-        try { stage.releasePointerCapture(pointerId); } catch (_) {}
-        pointerId = null;
-        card.classList.remove('is-dragging');
-        card.style.removeProperty('transform');
-
-        if (Math.abs(delta) > 58) {
-          goTo(active + (delta < 0 ? 1 : -1));
-        } else {
-          render();
-        }
-      };
-
-      stage.addEventListener('pointerdown', (event) => {
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
-        pointerId = event.pointerId;
-        startX = currentX = event.clientX;
-        stage.setPointerCapture(pointerId);
-        cards[active].classList.add('is-dragging');
-      });
-
-      stage.addEventListener('pointermove', (event) => {
-        if (event.pointerId !== pointerId) return;
-        currentX = event.clientX;
-        const delta = Math.max(-150, Math.min(150, currentX - startX));
-        const rotate = delta / 28;
-        cards[active].style.transform =
-          'translate3d(' + delta + 'px,' + Math.abs(delta) * 0.035 + 'px,0) rotate(' + rotate + 'deg) scale(' + (1 - Math.abs(delta) / 2400) + ')';
-      });
-
-      stage.addEventListener('pointerup', release);
-      stage.addEventListener('pointercancel', release);
-
-      prev.addEventListener('click', () => goTo(active - 1));
-      next.addEventListener('click', () => goTo(active + 1));
-      dots.forEach((dot, index) => dot.addEventListener('click', () => goTo(index)));
-
-      stage.addEventListener('keydown', (event) => {
-        if (event.key === 'ArrowLeft') goTo(active - 1);
-        if (event.key === 'ArrowRight') goTo(active + 1);
-      });
-      stage.tabIndex = 0;
-
-      render();
-    })();
-  </script>
 </body>
 </html>
