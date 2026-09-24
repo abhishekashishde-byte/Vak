@@ -1,4 +1,5 @@
 import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
+import { validateTesterSession } from '../server/usageQuota.js'
 
 const TRANSCRIPTION_LANGUAGES = new Set(['en', 'de', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it'])
 
@@ -104,6 +105,10 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured.' })
 
   const mode = String(req.body?.mode || '').trim().toLowerCase()
+  const usageKind = mode === 'transcription' ? 'meeting_live' : 'talk'
+  const quota = await validateTesterSession(req, usageKind, req.body?.quotaSessionId)
+  if (!quota.ok) return res.status(quota.status).json({ error: quota.error })
+
   const configured = mode === 'transcription' ? transcriptionSession(req.body) : voiceSession(req.body)
 
   try {
