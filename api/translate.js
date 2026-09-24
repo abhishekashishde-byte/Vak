@@ -1,4 +1,5 @@
 import { domainPrompt, publicDomain, resolveDomain } from '../server/domain.js'
+import { validateDocumentUsage } from '../server/usageQuota.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -198,7 +199,13 @@ export default async function handler(req, res) {
   const isMeetingQa = rawInstructions.includes('ANA_MEETING_QA')
   const isMeetingOutput = rawInstructions.includes('ANA_MEETING_OUTPUT')
   const isMeetingIntelligence = isMeetingNotes || isMeetingEnrichment || isMeetingQa || isMeetingOutput
-  const isVisualOrDocumentTranslation = rawInstructions.includes('visible text from a real-world image') || rawInstructions.includes('positioned PDF text blocks') || rawInstructions.includes('translation guide for a PDF') || rawInstructions.includes('layout-rescue pass on a translated PDF')
+  const isDocumentTranslation = rawInstructions.includes('positioned PDF text blocks')
+    || rawInstructions.includes('translation guide for a PDF')
+    || rawInstructions.includes('layout-rescue pass on a translated PDF')
+    || rawInstructions.includes('formatting-preserving text segments from a Microsoft Word document')
+    || rawInstructions.includes('translation guide for a Word document')
+  const isVisualTranslation = rawInstructions.includes('visible text from a real-world image')
+  const isVisualOrDocumentTranslation = isVisualTranslation || isDocumentTranslation
   const isStructuredLayoutRequest = rawInstructions.includes('LAYOUT IS BINDING.')
   const preserveLayout = isAnaTranslation && !isStructuredLayoutRequest && /[\r\n]/.test(text)
 
@@ -220,6 +227,11 @@ export default async function handler(req, res) {
   }
   if (preserveLayout) {
     finalInstructions += `\n\nLAYOUT PRESERVATION — mandatory:\nThe input contains ${LINE_BREAK_TOKEN} markers representing line breaks typed by the user. Copy EVERY marker exactly, in the same order, between the corresponding translated passages. Never remove, add, translate, combine, or move these markers. Preserve blank lines by preserving consecutive markers.`
+  }
+
+  if (isDocumentTranslation) {
+    const quota = await validateDocumentUsage(req, req.body?.quotaUsageId)
+    if (!quota.ok) return res.status(quota.status).json({ error: quota.error })
   }
 
   const controller = new AbortController()
