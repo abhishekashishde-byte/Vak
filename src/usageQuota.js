@@ -95,6 +95,34 @@ export async function finishDocumentUsage(usageId, success) {
   return data
 }
 
+
+export async function reserveFixedTimedUsage(kind, seconds, label = '') {
+  if (!supabase) throw new Error('Ana account services are unavailable.')
+  const { data, error } = await supabase.rpc('ana_reserve_fixed_timed_usage', {
+    p_kind: kind,
+    p_seconds: Math.max(1, Math.ceil(Number(seconds) || 1)),
+    p_label: String(label || '').slice(0, 240),
+  })
+  if (error) throw rpcError(error, 'Could not reserve tester usage.')
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row?.session_id) throw new Error('Ana could not reserve tester usage.')
+  emitUsage(null)
+  return {
+    sessionId: row.session_id,
+    remainingSeconds: Number(row.remaining_seconds || 0),
+    limitSeconds: Number(row.limit_seconds || 0),
+    isAdmin: Boolean(row.is_admin),
+  }
+}
+
+export async function refundFixedTimedUsage(sessionId) {
+  if (!supabase || !sessionId) return false
+  const { data, error } = await supabase.rpc('ana_refund_fixed_timed_usage', { p_session_id: sessionId })
+  if (error) return false
+  emitUsage(null)
+  return Boolean(data)
+}
+
 export async function authenticatedHeaders(extra = {}) {
   if (!supabase) throw new Error('Ana account services are unavailable.')
   const { data } = await supabase.auth.getSession()
