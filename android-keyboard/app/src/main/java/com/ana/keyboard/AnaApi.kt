@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object AnaApi {
-    enum class Action { TRANSLATE, FIX, TONE, SHORTER, WRITE, FORMAL, FRIENDLY, DU, SIE }
+    enum class Action { TRANSLATE, FIX, TONE, SHORTER, WRITE, REPLY, FORMAL, FRIENDLY, DU, SIE }
 
     data class CloudResult(val text: String, val shieldedCount: Int)
 
@@ -84,6 +84,7 @@ object AnaApi {
             Action.TONE -> "You are Ana Keyboard. Rewrite the user's text in the same language so it sounds warm, natural and appropriately polite without becoming wordy. Preserve every factual detail and request. Return ONLY the replacement text."
             Action.SHORTER -> "You are Ana Keyboard. Rewrite the user's text in the same language to be shorter and clearer while preserving all important facts, requests, names, dates and numbers. Return ONLY the replacement text."
             Action.WRITE -> "You are Ana Keyboard's Writing Tool. The user's text is an instruction describing what they want to write. Draft the finished message in $target. Make it natural, clear and appropriate for everyday communication. Preserve every fact the user supplied and do not invent names, dates, promises, prices, commitments or personal details. Return ONLY the finished message, with no labels, explanations or quotation marks."
+            Action.REPLY -> "You are Ana Keyboard's Reply tool. The supplied text contains a received message and may also include a user instruction about how to answer. Write ONLY the final ready-to-send reply in $target. Respond naturally to the received message and follow any explicit reply instruction. Never invent facts, names, dates, promises, availability, prices, commitments or personal details the user did not provide. Do not quote or repeat the source message unless needed for clarity. Return ONLY the reply, with no labels, explanations or quotation marks."
             Action.FORMAL -> "Rewrite the user's text in the SAME language in a polished professional/formal tone. Preserve every fact, request, name, number and intention. Do not add information. Return ONLY the replacement text."
             Action.FRIENDLY -> "Rewrite the user's text in the SAME language so it sounds friendly, natural and human, without becoming overly casual or changing facts. Return ONLY the replacement text."
             Action.DU -> "Rewrite German text using natural informal 'du' forms consistently. If the text is not German, translate it into natural German using 'du'. Preserve every fact and do not invent information. Return ONLY the replacement text."
@@ -92,6 +93,27 @@ object AnaApi {
 
         return request(baseUrl, text, withGlossary(instructions, glossary), privacyShield)
     }
+    fun reply(
+        baseUrl: String,
+        message: String,
+        instruction: String,
+        target: String,
+        privacyShield: Boolean = true,
+        glossary: Collection<String> = emptyList()
+    ): CloudResult {
+        require(message.isNotBlank()) { "Copy or select the message you want to reply to first." }
+        val payload = buildString {
+            append("RECEIVED MESSAGE:\n")
+            append(message.trim().take(8000))
+            if (instruction.isNotBlank()) {
+                append("\n\nUSER REPLY INSTRUCTION:\n")
+                append(instruction.trim().take(1200))
+            }
+        }
+        val instructions = "You are Ana Keyboard's Reply tool. Write the final ready-to-send reply in $target to the RECEIVED MESSAGE. If USER REPLY INSTRUCTION is present, follow it precisely. Match the context and level of formality naturally. Never invent facts, names, dates, promises, availability, prices, commitments or personal details not supplied by the user. Do not explain what you are doing. Do not quote the source message unless necessary. Return ONLY the reply text."
+        return request(baseUrl, payload, withGlossary(instructions, glossary), privacyShield)
+    }
+
     fun cleanDictation(
         baseUrl: String,
         text: String,
