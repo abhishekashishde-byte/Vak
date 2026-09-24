@@ -204,6 +204,27 @@
     .kbd-row{display:grid;grid-template-columns:180px 1fr;gap:18px;border-top:1px solid var(--line);padding:14px 0}
     .kbd-row strong{font-size:12px}.kbd-row span{font-size:12px;color:#929bad;line-height:1.5}
 
+    /* COMPATIBILITY */
+    .compat{padding:118px 0;border-top:1px solid var(--line);background:#08161d}
+    .compat-shell{
+      max-width:1040px;margin:58px auto 0;border:1px solid var(--lineAccent);border-radius:30px;
+      padding:42px;background:
+        radial-gradient(circle at 20% 10%,rgba(155,140,255,.10),transparent 26%),
+        radial-gradient(circle at 84% 86%,rgba(111,225,210,.09),transparent 28%),
+        #10242d
+    }
+    .compat-grid{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
+    .compat-copy h3{font-size:clamp(34px,4vw,54px);line-height:1;letter-spacing:-.05em;margin:12px 0 16px}
+    .compat-copy p{font-size:14px;line-height:1.75;color:var(--muted);margin:0}
+    .compat-flow{display:grid;gap:10px}
+    .compat-node{
+      border:1px solid var(--line);border-radius:18px;padding:17px 18px;background:#0d2028
+    }
+    .compat-node strong{display:block;font-size:13px;margin-bottom:5px}
+    .compat-node span{display:block;font-size:11px;line-height:1.5;color:#95aab0}
+    .compat-arrow{text-align:center;color:var(--accent);font-size:18px;line-height:1}
+    .compat-note{margin-top:18px;color:#738d94;font-size:10px;line-height:1.55}
+
     /* EASY */
     .easy{padding:116px 0;border-top:1px solid var(--line);background:#091820;text-align:center}
     .steps{max-width:900px;margin:64px auto 0;display:grid;grid-template-columns:repeat(3,1fr)}
@@ -263,7 +284,7 @@
       .moment-stack{display:block}
       .moment-copy{left:20px;right:20px;bottom:20px}
       .moment-copy strong{font-size:25px}
-      .privacy,.situations,.highlights,.keyboard,.easy{padding:78px 0}
+      .privacy,.situations,.highlights,.keyboard,.compat,.easy{padding:78px 0}
       .privacy-head,.editorial-head{width:100%;max-width:100%;padding:0;margin-left:auto;margin-right:auto}
       .section-title{font-size:43px;line-height:1.02;max-width:100%}
       .section-lead{font-size:14px;max-width:100%}
@@ -284,6 +305,9 @@
       .keyboard-layout{display:block;width:100%}
       .keyboard-video{width:100%;max-width:390px;margin:0 auto 38px}
       .keyboard-copy{width:100%;min-width:0}
+      .compat-shell{width:100%;max-width:100%;padding:24px 20px;border-radius:22px}
+      .compat-grid{grid-template-columns:1fr;gap:28px}
+      .compat-copy h3{font-size:39px}
       .steps{grid-template-columns:1fr;gap:32px;margin-top:44px}
       .step{border-right:0;padding:0 12px}
       .final{display:block;width:100%}
@@ -304,6 +328,7 @@
         <a href="#situations">Real life</a>
         <a href="#highlights">Capabilities</a>
         <a href="#keyboard">Keyboard</a>
+        <a href="#compatibility">Compatibility</a>
         <a href="#easy">Learning curve</a>
       </nav>
       <a class="cta" href="/">Try Ana →</a>
@@ -539,6 +564,35 @@
       </div>
     </section>
 
+    <section class="compat" id="compatibility">
+      <div class="wrap">
+        <div class="editorial-head">
+          <div class="kicker">FITS INTO THE TOOLS YOU ALREADY USE</div>
+          <h2 class="section-title">Ana does not need to become<br><span class="accent">another isolated app.</span></h2>
+          <div class="rule"></div>
+          <p class="section-lead">Use Ana directly, use Ana Keyboard inside other Android apps, or bring selected Ana capabilities into your own product or internal workflow.</p>
+        </div>
+
+        <div class="compat-shell">
+          <div class="compat-grid">
+            <div class="compat-copy">
+              <div class="kicker">BUILT TO FIT</div>
+              <h3>Use Ana your way.</h3>
+              <p>For an individual, Ana can work as a keyboard and communication assistant across the apps already being used. For a product or business workflow, Ana’s translation, writing, transcription and language capabilities can also be connected to the experience you already have instead of forcing users into a separate interface.</p>
+              <p class="compat-note">Integration scope depends on the product, workflow and privacy requirements. Ana does not need access to unrelated app content to provide a focused capability.</p>
+            </div>
+            <div class="compat-flow" aria-label="Ways Ana can fit into existing tools">
+              <div class="compat-node"><strong>Across your apps</strong><span>Use Ana Keyboard where you already type, reply and translate.</span></div>
+              <div class="compat-arrow">↓</div>
+              <div class="compat-node"><strong>As its own workspace</strong><span>Use Ana for documents, pictures, meetings and live language help.</span></div>
+              <div class="compat-arrow">↓</div>
+              <div class="compat-node"><strong>Inside your own tool</strong><span>Bring selected Ana capabilities into an existing product or internal workflow.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="easy" id="easy">
       <div class="wrap">
         <div class="kicker">A SHORT LEARNING CURVE</div>
@@ -576,7 +630,6 @@
         <a href="#situations">Real life</a>
         <a href="#highlights">Capabilities</a>
         <a href="/learn/">Learn</a>
-        <a href="/developers/">Developers</a>
       </div>
       <span>© 2026 Ana</span>
     </div>
