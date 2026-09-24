@@ -68,43 +68,63 @@
     .hero-points span{border:1px solid rgba(255,255,255,.12);background:rgba(5,16,22,.38);backdrop-filter:blur(8px);border-radius:999px;padding:7px 10px;font-size:9px;color:#c4d0d2}
 
     /* CORE CAPABILITIES */
-    .quick{padding:96px 0 104px;background:var(--paper);color:var(--darkText)}
+    .quick{padding:96px 0 104px;background:var(--paper);color:var(--darkText);overflow:hidden}
     .quick .section-head p{color:var(--mutedDark)}
-    .cap-grid{
-      display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
-      max-width:1080px;margin:0 auto
+    .cap-index{
+      display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+      max-width:980px;margin:-14px auto 42px
     }
-    .cap-card{
-      min-height:250px;border:1px solid var(--darkLine);border-radius:22px;
-      background:#fff;padding:26px;display:flex;flex-direction:column;
-      box-shadow:0 10px 26px rgba(18,43,53,.05)
+    .cap-index span{
+      border:1px solid var(--darkLine);background:#fff;border-radius:999px;
+      padding:8px 11px;font-size:10px;font-weight:750;color:#42575d
     }
-    .cap-card.featured{
-      background:linear-gradient(145deg,#10242d,#173641);
-      color:#fff;border-color:rgba(105,222,208,.24)
+    .cap-carousel{
+      display:flex;gap:18px;overflow-x:auto;overflow-y:hidden;
+      scroll-snap-type:x mandatory;scroll-padding-inline:calc((100vw - min(420px,82vw))/2);
+      overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch;
+      padding:12px max(22px,calc((100vw - var(--max))/2 + 22px)) 38px;
+      scrollbar-width:none
     }
-    .cap-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .cap-label{
-      font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:850;color:#756be0
+    .cap-carousel::-webkit-scrollbar{display:none}
+    .cap-slide{
+      position:relative;flex:0 0 min(420px,82vw);aspect-ratio:4/5;
+      scroll-snap-align:center;scroll-snap-stop:always;border-radius:28px;overflow:hidden;
+      background:#17303a;isolation:isolate;
+      box-shadow:0 14px 0 -7px #dbe4e2,0 27px 0 -14px #cbd8d5,0 34px 56px rgba(20,45,54,.13);
+      transform:translateZ(0)
     }
-    .featured .cap-label{color:#9ce6dd}
-    .cap-badge{
-      font-size:8px;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
-      padding:5px 7px;background:#eef2f1;color:#62767a;font-weight:800
+    .cap-slide img{
+      position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+      filter:saturate(.8) brightness(.70)
     }
-    .featured .cap-badge{background:rgba(255,255,255,.08);color:#b9cbd0}
-    .cap-card h3{
-      font-size:27px;line-height:1.04;letter-spacing:-.04em;margin:28px 0 10px
+    .cap-slide:after{
+      content:"";position:absolute;inset:0;z-index:1;
+      background:linear-gradient(180deg,rgba(5,17,23,.03) 18%,rgba(5,17,23,.16) 45%,rgba(5,17,23,.93) 100%)
     }
-    .cap-card p{
-      font-size:12px;line-height:1.65;color:#64777b;margin:0
+    .cap-copy{
+      position:absolute;z-index:2;left:26px;right:26px;bottom:26px;color:#fff
     }
-    .featured p{color:#b8c9cd}
-    .cap-card strong{font-weight:850}
-    .cap-foot{
-      margin-top:auto;padding-top:22px;font-size:10px;line-height:1.5;color:#7b8b8f
+    .cap-copy small{
+      display:block;font-size:9px;letter-spacing:.15em;text-transform:uppercase;
+      font-weight:900;color:#9ce6dd;margin-bottom:9px
     }
-    .featured .cap-foot{color:#91aab0}
+    .cap-copy h3{
+      font-size:31px;line-height:1.02;letter-spacing:-.045em;margin:0 0 10px
+    }
+    .cap-copy p{
+      font-size:12px;line-height:1.55;color:#d3dfe1;margin:0
+    }
+    .cap-copy .cap-meta{
+      display:block;margin-top:13px;font-size:9px;line-height:1.5;color:#a9bdc1
+    }
+    .cap-early{
+      display:inline-flex;margin-bottom:9px;border:1px solid rgba(149,136,246,.38);
+      background:rgba(12,25,33,.46);border-radius:999px;padding:5px 7px;
+      color:#cbc4ff;font-size:8px;font-weight:850;letter-spacing:.09em;text-transform:uppercase
+    }
+    .swipe-note{
+      text-align:center;color:#718489;font-size:10px;margin-top:3px
+    }
 
     /* SPLIT SECTIONS */
     .splits{background:var(--paper);color:var(--darkText)}
@@ -208,9 +228,13 @@
       .section-head{margin-bottom:36px}
       .section-head h2{font-size:42px}
       .section-head p{font-size:14px}
-      .cap-grid{grid-template-columns:1fr}
-      .cap-card{min-height:0;padding:24px 22px}
-      .cap-card h3{font-size:26px;margin-top:24px}
+      .cap-index{justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;margin:-8px -18px 34px;padding:0 18px 8px;scrollbar-width:none}
+      .cap-index::-webkit-scrollbar{display:none}
+      .cap-index span{flex:0 0 auto}
+      .cap-carousel{gap:14px;padding:10px 9vw 34px}
+      .cap-slide{flex-basis:82vw;border-radius:24px}
+      .cap-copy{left:22px;right:22px;bottom:22px}
+      .cap-copy h3{font-size:28px}
       .split{display:block;min-height:0}
       .split-media{width:100%;min-height:0;aspect-ratio:4/3}
       .split-media.video{aspect-ratio:auto;padding:28px 18px}
@@ -277,75 +301,117 @@
       <div class="wrap">
         <div class="section-head">
           <div class="kicker">WHAT ANA DOES</div>
-          <h2>One assistant. Several jobs.</h2>
-          <p>No guessing, no hidden feature list. These are the main things Ana can do for you.</p>
+          <h2>These are Ana’s main capabilities.</h2>
+          <p>Each one solves a different communication problem. Swipe through the cards for the details.</p>
         </div>
 
-        <div class="cap-grid">
-          <article class="cap-card featured">
-            <div class="cap-top"><span class="cap-label">WRITE FOR YOU</span></div>
-            <h3>Turn an idea into something ready to send.</h3>
-            <p>Give Ana a rough thought, a few words or the point you want to make. Ana writes the message for you.</p>
-            <div class="cap-foot">Messages · emails · replies · everyday writing</div>
-          </article>
-
-          <article class="cap-card featured">
-            <div class="cap-top"><span class="cap-label">REPLY FOR YOU</span></div>
-            <h3>Reply to messages without opening a separate AI app.</h3>
-            <p>Select or copy the message, tap Reply in Ana Keyboard, review the answer and use it in the app you are already in.</p>
-            <div class="cap-foot">Works from Ana Keyboard inside other Android apps</div>
-          </article>
-
-          <article class="cap-card">
-            <div class="cap-top"><span class="cap-label">CORRECT YOUR WRITING</span></div>
-            <h3>Fix the whole sentence or paragraph.</h3>
-            <p>Ana checks grammar, spelling, wording and clarity while keeping the meaning you intended.</p>
-            <div class="cap-foot">Review changes before accepting them</div>
-          </article>
-
-          <article class="cap-card">
-            <div class="cap-top"><span class="cap-label">TRANSLATE TEXT</span></div>
-            <h3>Translate what you write, paste or dictate.</h3>
-            <p>Ana focuses on meaning and natural phrasing rather than mechanical word-for-word translation.</p>
-            <div class="cap-foot">Typed · pasted · dictated · mixed-language text</div>
-          </article>
-
-          <article class="cap-card">
-            <div class="cap-top"><span class="cap-label">TRANSLATE DOCUMENTS</span></div>
-            <h3>Translate PDF and Word without throwing away the layout.</h3>
-            <p>Ana preserves document structure such as headings, tables, images, headers and formatting wherever possible.</p>
-            <div class="cap-foot">PDF · scanned PDF · Word · Original / Translated / Compare</div>
-          </article>
-
-          <article class="cap-card">
-            <div class="cap-top"><span class="cap-label">TRANSLATE PICTURES & SIGNS</span></div>
-            <h3>Point your camera at the text you need to understand.</h3>
-            <p>Use Ana for signs, menus, notices, labels and pictures, with translated text placed back into the visual context.</p>
-            <div class="cap-foot">Camera · pictures · signs · menus · labels</div>
-          </article>
-
-          <article class="cap-card featured">
-            <div class="cap-top"><span class="cap-label">INTERPRET MEETINGS</span></div>
-            <h3>Follow a meeting even when the language changes.</h3>
-            <p>Ana can listen, transcribe and translate longer conversations so you can stay focused on what is being discussed.</p>
-            <div class="cap-foot">Live transcript · translated meeting text</div>
-          </article>
-
-          <article class="cap-card">
-            <div class="cap-top"><span class="cap-label">TALK FOR YOU</span><span class="cap-badge">Early access</span></div>
-            <h3>Let Ana handle routine back-and-forth.</h3>
-            <p>Tell Ana what you need. It can help carry the conversation while important choices and commitments stay with you.</p>
-            <div class="cap-foot">Useful for routine service and appointment conversations</div>
-          </article>
-
-          <article class="cap-card featured">
-            <div class="cap-top"><span class="cap-label">PROTECT YOUR DATA</span></div>
-            <h3>Privacy is built into how Ana works.</h3>
-            <p>Normal typing can stay local. Sensitive fields are treated differently, and Privacy Shield, Incognito and per-app controls limit when cloud AI is used.</p>
-            <div class="cap-foot">Local-first typing · sensitive-field protection · user control</div>
-          </article>
+        <div class="cap-index" aria-label="Ana capability summary">
+          <span>Write for you</span>
+          <span>Reply from your keyboard</span>
+          <span>Correct your writing</span>
+          <span>Translate text</span>
+          <span>Translate PDF & Word</span>
+          <span>Translate pictures & signs</span>
+          <span>Interpret meetings</span>
+          <span>Talk for you</span>
+          <span>Protect your data</span>
         </div>
       </div>
+
+      <div class="cap-carousel" aria-label="Swipe through Ana capabilities">
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/261949/pexels-photo-261949.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person writing on a laptop">
+          <div class="cap-copy">
+            <small>WRITE FOR YOU</small>
+            <h3>Tell Ana what you want to say. Ana writes it.</h3>
+            <p>Start with a rough thought, a few words or just the point you want to make.</p>
+            <span class="cap-meta">Messages · emails · everyday writing</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person replying to a message on a smartphone">
+          <div class="cap-copy">
+            <small>REPLY FOR YOU</small>
+            <h3>Reply without opening a separate AI app.</h3>
+            <p>Select or copy the incoming message, tap Reply in Ana Keyboard, review the answer and use it where you are.</p>
+            <span class="cap-meta">Works from Ana Keyboard inside other Android apps</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/4050291/pexels-photo-4050291.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person editing text on a laptop">
+          <div class="cap-copy">
+            <small>CORRECT YOUR WRITING</small>
+            <h3>Fix the sentence or the whole paragraph.</h3>
+            <p>Ana checks spelling, grammar, wording and clarity while keeping what you meant.</p>
+            <span class="cap-meta">Review the full change before accepting it</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a phone while traveling">
+          <div class="cap-copy">
+            <small>TRANSLATE TEXT</small>
+            <h3>Translate what you write, paste or dictate.</h3>
+            <p>Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.</p>
+            <span class="cap-meta">Typed · pasted · dictated · mixed-language text</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, document and pen on a desk">
+          <div class="cap-copy">
+            <small>TRANSLATE DOCUMENTS</small>
+            <h3>Translate PDF and Word. Keep the structure.</h3>
+            <p>Headings, tables, images, headers and formatting stay part of the translated document wherever possible.</p>
+            <span class="cap-meta">PDF · scanned PDF · Word · Compare</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a smartphone camera to photograph signs">
+          <div class="cap-copy">
+            <small>TRANSLATE PICTURES & SIGNS</small>
+            <h3>Point your camera at what you need to understand.</h3>
+            <p>Translate signs, menus, notices, labels and other text inside pictures.</p>
+            <span class="cap-meta">Camera · pictures · signs · menus · labels</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People in a work meeting">
+          <div class="cap-copy">
+            <small>INTERPRET MEETINGS</small>
+            <h3>Follow the meeting even when the language changes.</h3>
+            <p>Ana can listen, transcribe and translate longer conversations while the meeting continues.</p>
+            <span class="cap-meta">Live transcript · translated meeting text</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Two people speaking during an appointment">
+          <div class="cap-copy">
+            <span class="cap-early">Early access</span>
+            <small>TALK FOR YOU</small>
+            <h3>Tell Ana what you need. Ana can help carry the conversation.</h3>
+            <p>Useful for routine back-and-forth while important choices and commitments stay with you.</p>
+            <span class="cap-meta">Appointments · service conversations · everyday dialogue</span>
+          </div>
+        </article>
+
+        <article class="cap-slide">
+          <img src="https://images.pexels.com/photos/4260314/pexels-photo-4260314.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Parent and child working together at home">
+          <div class="cap-copy">
+            <small>PROTECT YOUR DATA</small>
+            <h3>Privacy is part of how Ana works.</h3>
+            <p>Normal typing can stay local. Sensitive fields, Privacy Shield, Incognito and per-app controls limit when cloud AI is used.</p>
+            <span class="cap-meta">Local-first typing · sensitive-field protection · user control</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="swipe-note">Swipe horizontally to explore all Ana capabilities</div>
     </section>
 
     <section class="splits">
