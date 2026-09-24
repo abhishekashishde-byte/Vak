@@ -5,7 +5,6 @@ import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
 import { getNetworkState, tryOnDeviceTranslation } from './networkResilience.js'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
-import AnaMark from './AnaMark.jsx'
 
 const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const GLOSSARY_KEY = 'ana-glossary-v1'
@@ -671,7 +670,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
 
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><AnaMark className="ana-brand-mark"/></div>
+      <div className="brand ana-product-brand"><img className="ana-brand-icon" src="/ana-app-icon.svg" alt="" aria-hidden="true"/><span className="ana-brand-name">Ana</span></div>
       <div className="header-actions"><button className="ghost" onClick={() => setGlossaryOpen(true)}>Glossary <span className="badge">{glossary.length}</span></button><button className="ghost icon-only" title="Sign out" onClick={() => supabase?.auth.signOut()}><LogOut size={16}/></button></div>
     </header>
 
