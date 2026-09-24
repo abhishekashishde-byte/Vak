@@ -100,7 +100,7 @@ export default function UsageStatus() {
             <tbody>
               {adminRows.map(row => <tr key={row.user_id}>
                 <td><strong>{row.name || row.email}</strong><span>{row.email}</span>{row.location && <small>{row.location}</small>}</td>
-                <td><strong>{row.has_logged_in ? dateText(row.last_sign_in_at) : 'Never'}</strong><span>Joined {dateText(row.created_at)}</span></td>
+                <td><strong>{row.has_logged_in ? dateText(row.last_sign_in_at) : 'Never'}</strong><span>Last limited use: {dateText(row.last_usage_at)}</span><small>Joined {dateText(row.created_at)}</small></td>
                 <td>
                   <span>MOM {duration(row.week_meeting_notes_seconds)}</span>
                   <span>Live {duration(row.week_live_seconds)}</span>
