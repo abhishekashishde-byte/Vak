@@ -1,4 +1,5 @@
 import { profileLabel, publicDomain, resolveDomain } from '../server/domain.js'
+import { validateDocumentUsage } from '../server/usageQuota.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -122,6 +123,10 @@ export default async function handler(req, res) {
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
   const { imageData, pageNumber, purpose } = req.body || {}
+  if (purpose !== 'camera') {
+    const quota = await validateDocumentUsage(req, req.body?.quotaUsageId)
+    if (!quota.ok) return res.status(quota.status).json({ error: quota.error })
+  }
   if (typeof imageData !== 'string' || !imageData.startsWith('data:image/')) {
     return res.status(400).json({ error: 'Missing image' })
   }
