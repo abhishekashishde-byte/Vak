@@ -19,3 +19,14 @@
 /* v0.19 scoped glossary */
 .glossary-drawer{width:min(560px,92vw)}.glossary-context-card{display:grid;gap:6px;padding:12px;border:1px solid rgba(43,39,33,.1);background:rgba(255,253,248,.7);border-radius:12px;margin-bottom:10px}.glossary-context-card label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#81796f}.glossary-context-card input,.scoped-add-rule input,.scoped-add-rule select{border:1px solid rgba(43,39,33,.13);background:#fff;color:#2f2b26;border-radius:9px;padding:8px 9px;font:inherit;min-width:0}.glossary-context-card small{font-size:9px;line-height:1.4;color:#8b8378}.glossary-scope-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}.glossary-scope-tabs button{border:1px solid rgba(43,39,33,.12);background:#fffdfa;color:#625c54;border-radius:999px;padding:7px 9px;font-size:10px;cursor:pointer}.glossary-scope-tabs button.active{background:#171717;color:white;border-color:#171717}.scoped-add-rule{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(120px,1fr) minmax(130px,1.1fr) minmax(110px,1fr) auto minmax(110px,1fr) 40px;gap:6px;align-items:center}.scoped-rule>div:first-child{min-width:0}.rule-badges{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px}.rule-badges small{background:rgba(43,39,33,.07);border-radius:999px;padding:2px 6px;font-size:8px;color:#756e65;text-transform:capitalize}
 @media(max-width:760px){.scoped-add-rule{grid-template-columns:1fr 1fr}.scoped-add-rule>span{display:none}.scoped-add-rule>button{grid-column:1/-1}.glossary-scope-tabs{grid-template-columns:1fr}}
+
+/* Compact product header lockup: use the square Ana mark + wordmark so the
+   full vertical logo never overflows the short mobile header. */
+.ana-product-brand{gap:9px;min-width:0}
+.brand .ana-brand-icon{width:38px;height:38px;object-fit:contain;flex:0 0 38px}
+.ana-brand-name{font-size:20px;font-weight:760;line-height:1;letter-spacing:-.025em;color:#161616}
+@media(max-width:760px){
+  .ana-product-brand{gap:8px}
+  .brand .ana-brand-icon{width:34px;height:34px;flex-basis:34px}
+  .ana-brand-name{font-size:18px}
+}
