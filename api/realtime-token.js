@@ -1,4 +1,4 @@
-import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from './_domain.js'
+import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
 
 const TRANSCRIPTION_LANGUAGES = new Set(['en', 'de', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it'])
 

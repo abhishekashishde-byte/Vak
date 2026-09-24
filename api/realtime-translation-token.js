@@ -1,4 +1,4 @@
-import { publicDomain, resolveDomain } from './_domain.js'
+import { publicDomain, resolveDomain } from '../server/domain.js'
 
 const ALLOWED_LANGUAGES = new Set([
   'de', 'en', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it',

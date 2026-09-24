@@ -1,4 +1,4 @@
-import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from './_domain.js'
+import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
 
 function extensionFor(mime = '') {
   if (mime.includes('mp4') || mime.includes('m4a')) return 'm4a'

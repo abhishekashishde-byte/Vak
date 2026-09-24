@@ -1,4 +1,4 @@
-import { profileLabel, publicDomain, resolveDomain } from './_domain.js'
+import { profileLabel, publicDomain, resolveDomain } from '../server/domain.js'
 
 function collectText(data) {
   return (data.output || [])

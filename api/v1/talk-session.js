@@ -1,4 +1,4 @@
-import { applyPlatformCors, publicRequestId, requirePlatformKey } from '../_platform.js'
+import { applyPlatformCors, publicRequestId, requirePlatformKey } from '../../server/platform.js'
 
 const clean = (value, max) => String(value || '').trim().slice(0, max)
 

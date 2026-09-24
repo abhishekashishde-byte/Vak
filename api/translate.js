@@ -1,4 +1,4 @@
-import { domainPrompt, publicDomain, resolveDomain } from './_domain.js'
+import { domainPrompt, publicDomain, resolveDomain } from '../server/domain.js'
 
 function collectText(data) {
   return (data.output || [])

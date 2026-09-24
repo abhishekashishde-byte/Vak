@@ -3,14 +3,34 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/google-callback", "destination": "/api/auth-notify?action=google-callback" }
+    {
+      "source": "/api/google-callback",
+      "destination": "/api/auth-notify?action=google-callback"
+    },
+    {
+      "source": "/api/v1/translate",
+      "destination": "/api/v1/platform?op=translate"
+    },
+    {
+      "source": "/api/v1/transcribe",
+      "destination": "/api/v1/platform?op=transcribe"
+    }
   ],
   "functions": {
-    "api/translate.js": { "maxDuration": 30 },
-    "api/transcribe.js": { "maxDuration": 300 },
-    "api/meeting-segment.js": { "maxDuration": 30 },
-    "api/v1/translate.js": { "maxDuration": 30 },
-    "api/v1/transcribe.js": { "maxDuration": 30 },
-    "api/v1/talk-session.js": { "maxDuration": 20 }
+    "api/translate.js": {
+      "maxDuration": 30
+    },
+    "api/transcribe.js": {
+      "maxDuration": 300
+    },
+    "api/meeting-segment.js": {
+      "maxDuration": 30
+    },
+    "api/v1/talk-session.js": {
+      "maxDuration": 20
+    },
+    "api/v1/platform.js": {
+      "maxDuration": 30
+    }
   }
 }
