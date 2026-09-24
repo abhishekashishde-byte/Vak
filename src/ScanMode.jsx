@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Download, FileText, LoaderCircle, Upload, 
 import { buildTranslatedPdf, downloadBytes, enrichScannedPages, extractPdfLayout, layoutToPlainText } from './lib/pdfLayout.js'
 import { assessDocumentLayout, combineDocumentQuality } from './lib/documentQuality.js'
 import { buildTranslatedDocx, docxLayoutToPlainText, extractDocxLayout } from './lib/docxLayout.js'
+import { authenticatedHeaders, finishDocumentUsage, startDocumentUsage } from './usageQuota.js'
 
 const TARGETS = ['German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'English', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -19,22 +20,24 @@ function parseJson(text = '') {
   return null
 }
 
-async function callAna(text, instructions) {
+async function callAna(text, instructions, quotaUsageId = '') {
+  const headers = quotaUsageId ? await authenticatedHeaders({ 'Content-Type': 'application/json' }) : { 'Content-Type': 'application/json' }
   const response = await fetch('/api/translate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, instructions }),
+    headers,
+    body: JSON.stringify({ text, instructions, ...(quotaUsageId ? { quotaUsageId } : {}) }),
   })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Ana could not process this document.')
   return String(data.content || '').trim()
 }
 
-async function readScannedPage({ imageData, pageNumber }) {
+async function readScannedPage({ imageData, pageNumber }, quotaUsageId) {
+  const headers = await authenticatedHeaders({ 'Content-Type': 'application/json' })
   const response = await fetch('/api/document-ocr', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageData, pageNumber }),
+    headers,
+    body: JSON.stringify({ imageData, pageNumber, quotaUsageId }),
   })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Ana could not read page ' + pageNumber + '.')
@@ -66,22 +69,22 @@ function chunkBlocks(blocks, maxChars = 9500, maxBlocks = 22) {
   return chunks
 }
 
-async function buildDocumentGuide(layout, target, kind) {
+async function buildDocumentGuide(layout, target, kind, quotaUsageId) {
   const source = (kind === 'docx' ? docxLayoutToPlainText(layout) : layoutToPlainText(layout)).slice(0, 14000)
   if (!source.trim()) return ''
   try {
     let instructions = 'You are preparing a compact internal translation guide for a ' + (kind === 'docx' ? 'Word document' : 'PDF') + ' that will be translated into ' + target + '. Identify the document domain, register and recurring terminology that should stay consistent across separate chunks. Preserve product names, acronyms, names, numbers and official terminology. Return no more than 450 characters of plain text. Do not translate the document itself.'
     if (target === 'Hinglish') instructions += ' Hinglish means natural conversational Hindi written entirely in Roman/Latin letters. Never use Devanagari.'
-    return await callAna(source, instructions)
+    return await callAna(source, instructions, quotaUsageId)
   } catch {
     return ''
   }
 }
 
-async function translateLayout(layout, target, onProgress, kind) {
+async function translateLayout(layout, target, onProgress, kind, quotaUsageId) {
   const chunks = chunkBlocks(layout.blocks)
   const translated = []
-  const guide = chunks.length > 1 ? await buildDocumentGuide(layout, target, kind) : ''
+  const guide = chunks.length > 1 ? await buildDocumentGuide(layout, target, kind, quotaUsageId) : ''
 
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index]
@@ -105,7 +108,7 @@ async function translateLayout(layout, target, onProgress, kind) {
     if (guide) instructions += '\nDOCUMENT TRANSLATION GUIDE: ' + guide
     if (target === 'Hinglish') instructions += ' Hinglish means natural spoken Hindi written entirely in Roman/Latin letters. Never use Devanagari. Keep names, brands, numbers and unavoidable English terms naturally.'
 
-    const raw = await callAna(JSON.stringify(payload), instructions)
+    const raw = await callAna(JSON.stringify(payload), instructions, quotaUsageId)
     const parsed = parseJson(raw)
     if (!Array.isArray(parsed)) throw new Error('Ana could not keep the document structure intact. Please try again.')
 
@@ -120,7 +123,7 @@ async function translateLayout(layout, target, onProgress, kind) {
   return translated
 }
 
-async function rescueDenseTranslations(layout, translated, target, rescueIds) {
+async function rescueDenseTranslations(layout, translated, target, rescueIds, quotaUsageId) {
   if (!rescueIds?.length) return translated
   const wanted = new Set(rescueIds)
   const translations = new Map(translated.map(item => [item.id, item.text]))
@@ -137,7 +140,7 @@ async function rescueDenseTranslations(layout, translated, target, rescueIds) {
   if (target === 'Hinglish') instructions += ' Hinglish must remain Roman/Latin-script Hindi only.'
 
   try {
-    const parsed = parseJson(await callAna(JSON.stringify(payload), instructions))
+    const parsed = parseJson(await callAna(JSON.stringify(payload), instructions, quotaUsageId))
     if (!Array.isArray(parsed)) return translated
     const replacements = new Map(parsed.filter(item => item?.id).map(item => [String(item.id), String(item.text || '').trim()]))
     return translated.map(item => replacements.get(item.id) ? { ...item, text: replacements.get(item.id) } : item)
@@ -207,13 +210,19 @@ export default function ScanMode() {
 
   const processPdf = async (selected, language) => {
     let layout = await extractPdfLayout(selected)
+    const pageCount = Math.max(1, Number(layout.pages?.length || 1))
+    if (pageCount > 10) throw new Error('Tester document translation is limited to 10 pages per document.')
+    const reservation = await startDocumentUsage(pageCount, selected.name)
+    const quotaUsageId = reservation.usageId
     const scanSignals = []
+    let completed = false
 
+    try {
     if (layout.ocrPages?.length) {
       setStatus('reading')
       setProgress(10)
       layout = await enrichScannedPages(selected, layout, async args => {
-        const result = await readScannedPage(args)
+        const result = await readScannedPage(args, quotaUsageId)
         scanSignals.push({
           pageNumber: args.pageNumber,
           lowConfidenceCount: Number(result.lowConfidenceCount || 0),
@@ -234,7 +243,7 @@ export default function ScanMode() {
     let blocks = await translateLayout(layout, language, (current, total) => {
       const ratio = total ? current / total : 0
       setProgress(Math.round(30 + ratio * 48))
-    }, 'pdf')
+    }, 'pdf', quotaUsageId)
 
     setStatus('checking')
     setProgress(80)
@@ -243,7 +252,7 @@ export default function ScanMode() {
     if (layoutReport.rescueIds?.length) {
       setStatus('optimizing')
       setProgress(84)
-      blocks = await rescueDenseTranslations(layout, blocks, language, layoutReport.rescueIds)
+      blocks = await rescueDenseTranslations(layout, blocks, language, layoutReport.rescueIds, quotaUsageId)
       layoutReport = assessDocumentLayout(layout, blocks)
     }
 
@@ -258,20 +267,33 @@ export default function ScanMode() {
     setResultBytes(bytes)
     setResultName(base + '-' + language.toLowerCase() + '-ana.pdf')
     setResultMime('application/pdf')
+    completed = true
+    } finally {
+      await finishDocumentUsage(quotaUsageId, completed).catch(() => {})
+    }
   }
 
   const processDocx = async (selected, language) => {
     const layout = await extractDocxLayout(selected)
     if (!layout.blocks.length) throw new Error('Ana could not find translatable text in this Word document.')
 
-    setSourcePreview(previewText(docxLayoutToPlainText(layout)))
+    const sourceText = docxLayoutToPlainText(layout)
+    const wordCount = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0
+    const pageCount = Math.max(1, Math.ceil(wordCount / 450))
+    if (pageCount > 10) throw new Error('Tester document translation is limited to about 10 Word pages per document.')
+    const reservation = await startDocumentUsage(pageCount, selected.name)
+    const quotaUsageId = reservation.usageId
+    let completed = false
+
+    try {
+    setSourcePreview(previewText(sourceText))
     setStatus('translating')
     setProgress(28)
 
     const blocks = await translateLayout(layout, language, (current, total) => {
       const ratio = total ? current / total : 0
       setProgress(Math.round(28 + ratio * 56))
-    }, 'docx')
+    }, 'docx', quotaUsageId)
 
     setStatus('building')
     setProgress(90)
@@ -284,6 +306,10 @@ export default function ScanMode() {
     setResultBytes(bytes)
     setResultName(base + '-' + language.toLowerCase() + '-ana.docx')
     setResultMime(DOCX_MIME)
+    completed = true
+    } finally {
+      await finishDocumentUsage(quotaUsageId, completed).catch(() => {})
+    }
   }
 
   const processFile = async (selected, language = target) => {
@@ -360,8 +386,8 @@ export default function ScanMode() {
   return <section className="scan-page scan-direct">
     <header className="scan-hero scan-direct-hero">
       <div className="eyebrow">Ana Documents</div>
-      <h1>Translate the document. Keep the document.</h1>
-      <p>PDF or Word. Ana preserves structure, formatting, tables, images, headers and the document’s visual hierarchy while translating the text.</p>
+      <h1>Translate PDF or Word without changing how it looks.</h1>
+      <p>Ana translates the text while keeping the familiar document structure, tables, images, headers and formatting wherever possible.</p>
     </header>
 
     <div className="scan-language-row">
@@ -374,7 +400,7 @@ export default function ScanMode() {
     {status === 'idle' && <button className="scan-direct-drop" onClick={() => inputRef.current?.click()}>
       <span className="scan-direct-icon"><Upload size={25}/></span>
       <strong>Choose PDF or Word</strong>
-      <span>PDF, scanned PDF or .docx · up to 20 MB</span>
+      <span>PDF, scanned PDF or .docx · 3 translations/week · max 10 pages each</span>
     </button>}
 
     {busy && <article className="scan-job-card">
@@ -385,8 +411,8 @@ export default function ScanMode() {
       <LoaderCircle className="spin scan-job-spinner" size={22}/>
       <div className="scan-progress-track"><span style={{ width: progress + '%' }}/></div>
       <p>{kind === 'docx'
-        ? 'Ana is translating inside the Word structure so editable formatting is retained.'
-        : 'Ana is preserving the page structure while making room for the translated text.'}</p>
+        ? 'Ana is translating inside the Word document so it stays editable and familiar.'
+        : 'Ana is translating the PDF while keeping the page looking familiar.'}</p>
     </article>}
 
     {status === 'done' && <article className="scan-result-card">
