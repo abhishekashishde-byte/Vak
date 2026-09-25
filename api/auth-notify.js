@@ -366,7 +366,7 @@ async function handleAuthNotification(req, res) {
   const event = req.body?.event
   if (!['login', 'signup'].includes(event)) return res.status(400).json({ error: 'Invalid event' })
 
-  const resendKey = process.env.RESEND_API_KEY
+  const resendKey = process.env.RESEND_API_KEY_1
   const adminEmail = process.env.ANA_ADMIN_EMAIL
   const from = process.env.ANA_NOTIFY_FROM || 'Ana Notifications <notifications@tri-vana.de>'
 
