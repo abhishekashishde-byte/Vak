@@ -4,6 +4,37 @@ import AuthPage from './AuthPage.jsx'
 import { authConfigured, supabase } from './lib/supabase'
 import { hydrateAndStartAccountPersistence, stopAccountPersistence } from './accountDataPersistence.js'
 
+const AUTH_EVENT_KEY = 'ana-pending-admin-auth-event'
+
+async function notifyAdmin(event, session) {
+  const token = session?.access_token
+  if (!token) return
+
+  try {
+    await fetch('/api/auth-notify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ event }),
+      keepalive: true,
+    })
+  } catch {
+    // Authentication must never fail because an admin notification could not be delivered.
+  }
+}
+
+function consumePendingAuthEvent() {
+  try {
+    const event = sessionStorage.getItem(AUTH_EVENT_KEY)
+    sessionStorage.removeItem(AUTH_EVENT_KEY)
+    return event === 'signup' ? 'signup' : 'login'
+  } catch {
+    return 'login'
+  }
+}
+
 export default function AuthGate() {
   const [session, setSession] = useState(null)
   const [ready, setReady] = useState(!authConfigured)
@@ -71,6 +102,11 @@ export default function AuthGate() {
         stopAccountPersistence()
         if (!initialising) setReady(true)
         return
+      }
+
+      if (event === 'SIGNED_IN') {
+        const adminEvent = consumePendingAuthEvent()
+        setTimeout(() => notifyAdmin(adminEvent, nextSession), 0)
       }
 
       // Auth also emits token-refresh and metadata events. Start/sustain persistence,
