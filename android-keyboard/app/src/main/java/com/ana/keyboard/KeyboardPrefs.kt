@@ -50,6 +50,7 @@ object KeyboardPrefs {
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
     private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
     private const val KEY_NEXT_WORD_PREFIX = "next_word_model_"
+    private const val KEY_SAVED_EMAILS = "saved_emails_v1"
     private const val KEY_APP_AI_BLOCKLIST = "app_ai_blocklist"
     private const val KEY_APP_AI_ALLOWLIST = "app_ai_allowlist"
     private const val KEY_ONE_HANDED_MODE = "one_handed_mode"
@@ -65,6 +66,7 @@ object KeyboardPrefs {
 
     data class TranslationTarget(val name: String, val badge: String)
     data class ClipboardItem(val text: String, val pinned: Boolean = false, val createdAt: Long = System.currentTimeMillis())
+    data class LearnedEmail(val address: String, val useCount: Int = 1, val lastUsedAt: Long = System.currentTimeMillis())
     data class SharedGlossaryEntry(
         val target: String,
         val source: String,
@@ -126,7 +128,8 @@ object KeyboardPrefs {
             KEY_PERSONAL_DICTIONARY_PREFIX,
             KEY_LEARNED_CORRECTIONS_PREFIX,
             KEY_SHORTCUTS_PREFIX,
-            KEY_TOUCH_CALIBRATION_PREFIX
+            KEY_TOUCH_CALIBRATION_PREFIX,
+            KEY_SAVED_EMAILS
         )
         source.all.forEach { (key, value) ->
             if (prefixes.none { key.startsWith(it) }) return@forEach
@@ -536,6 +539,72 @@ object KeyboardPrefs {
         textShortcuts(context, badge).filterKeys { it != key }.forEach { (existing, value) -> json.put(existing, value) }
         learningPrefs(context).edit().putString(KEY_SHORTCUTS_PREFIX + badge, json.toString()).apply()
         if (sync && key.isNotBlank()) KeyboardLearningSync.recordShortcut(context, badge, key, null, true)
+    }
+
+    fun learnedEmails(context: Context): List<LearnedEmail> {
+        if (incognitoEnabled(context)) return emptyList()
+        val raw = learningPrefs(context).getString(KEY_SAVED_EMAILS, "[]") ?: "[]"
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val address = EmailSuggestionPolicy.normalizeEmail(item.optString("address")) ?: continue
+                    val count = item.optInt("count", 1).coerceIn(1, 999)
+                    val lastUsedAt = item.optLong("lastUsedAt", 0L).coerceAtLeast(0L)
+                    add(LearnedEmail(address, count, lastUsedAt))
+                }
+            }.distinctBy { it.address.lowercase() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun rememberEmail(context: Context, email: String) {
+        if (incognitoEnabled(context)) return
+        val clean = EmailSuggestionPolicy.normalizeEmail(email) ?: return
+        val now = System.currentTimeMillis()
+        val existing = learnedEmails(context)
+        val current = existing.firstOrNull { it.address.equals(clean, ignoreCase = true) }
+        val next = existing
+            .filterNot { it.address.equals(clean, ignoreCase = true) }
+            .toMutableList()
+        next += LearnedEmail(
+            address = clean,
+            useCount = ((current?.useCount ?: 0) + 1).coerceAtMost(999),
+            lastUsedAt = now
+        )
+
+        val ranked = next.sortedWith(
+            compareByDescending<LearnedEmail> { it.lastUsedAt }
+                .thenByDescending { it.useCount }
+        ).take(24)
+
+        val array = JSONArray()
+        ranked.forEach { item ->
+            array.put(JSONObject().apply {
+                put("address", item.address)
+                put("count", item.useCount)
+                put("lastUsedAt", item.lastUsedAt)
+            })
+        }
+        learningPrefs(context).edit().putString(KEY_SAVED_EMAILS, array.toString()).apply()
+    }
+
+    fun emailSuggestions(context: Context, prefix: String, max: Int = 3): List<String> {
+        if (incognitoEnabled(context)) return emptyList()
+        val cleanPrefix = prefix.trim().lowercase().take(160)
+        return learnedEmails(context)
+            .asSequence()
+            .filter { cleanPrefix.isEmpty() || it.address.lowercase().startsWith(cleanPrefix) }
+            .sortedWith(
+                compareByDescending<LearnedEmail> { it.useCount }
+                    .thenByDescending { it.lastUsedAt }
+                    .thenBy { it.address.lowercase() }
+            )
+            .take(max.coerceIn(1, 6))
+            .map { it.address }
+            .toList()
     }
 
     fun nextWordSuggestions(
