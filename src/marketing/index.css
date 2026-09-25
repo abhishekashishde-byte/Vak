@@ -12,7 +12,7 @@ html,
 body {
   overflow: hidden;
   background: #000;
-  font-family: 'Instrument Serif', serif;
+  font-family: 'Manrope', system-ui, sans-serif;
 }
 
 body {
@@ -243,5 +243,21 @@ a {
     width: 20vw;
     right: 20vw;
     top: 24vh;
+  }
+}
+
+
+h1,
+h2,
+h3,
+.brand {
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+}
+
+@media (max-width: 767px) {
+  h1 {
+    letter-spacing: -0.05em;
   }
 }
