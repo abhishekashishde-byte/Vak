@@ -928,9 +928,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         return EmailSuggestionPolicy.prefixAtCursor(before, isEmailField())
     }
 
-    private fun emailSuggestionEntries(prefix: String = currentEmailPrefix() ?: return emptyList()): List<SuggestionEntry> =
-        KeyboardPrefs.emailSuggestions(this, prefix, 3)
+    private fun emailSuggestionEntries(prefix: String? = currentEmailPrefix()): List<SuggestionEntry> {
+        val cleanPrefix = prefix ?: return emptyList()
+        return KeyboardPrefs.emailSuggestions(this, cleanPrefix, 3)
             .map { SuggestionEntry(it, it, SuggestionKind.EMAIL) }
+    }
 
     private fun rememberEmailAtCursor(connection: InputConnection) {
         if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
