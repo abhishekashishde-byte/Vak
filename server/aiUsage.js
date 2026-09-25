@@ -75,18 +75,22 @@ export function transcriptionUsageCost(model, usage = {}) {
   return { cost: 0, seconds: 0 }
 }
 
-async function currentUser(auth) {
-  if (!auth) return null
-  const { url, key } = supabaseConfig()
-  if (!url || !key) return null
+function jwtSubject(auth) {
   try {
-    const response = await fetch(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: auth } })
-    if (!response.ok) return null
-    const data = await response.json()
-    return data?.id ? data : null
+    const token = String(auth || '').replace(/^Bearer\s+/i, '')
+    const payload = token.split('.')[1]
+    if (!payload) return ''
+    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+    return String(JSON.parse(json)?.sub || '')
   } catch {
-    return null
+    return ''
   }
+}
+
+function timeoutSignal(ms = 1200) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  return { signal: controller.signal, clear: () => clearTimeout(timer) }
 }
 
 export async function logAiUsage(req, {
@@ -103,8 +107,8 @@ export async function logAiUsage(req, {
   if (!url || !key) return false
 
   try {
-    const user = await currentUser(auth)
-    if (!user?.id) return false
+    const userId = jwtSubject(auth)
+    if (!userId) return false
 
     const inputDetails = usage.input_token_details || usage.input_tokens_details || {}
     const outputDetails = usage.output_token_details || usage.output_tokens_details || {}
@@ -115,29 +119,35 @@ export async function logAiUsage(req, {
     const audioOutputTokens = number(outputDetails.audio_tokens)
     const calculated = estimatedCostUsd == null ? responseUsageCost(model, usage) : number(estimatedCostUsd)
 
-    const response = await fetch(`${url}/rest/v1/ana_ai_usage_events`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: key,
-        Authorization: auth,
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        user_id: user.id,
-        feature: String(feature || 'other').slice(0, 80),
-        model: String(model || '').slice(0, 120),
-        input_tokens: Math.round(inputTokens),
-        cached_input_tokens: Math.round(cachedInputTokens),
-        output_tokens: Math.round(outputTokens),
-        audio_input_tokens: Math.round(audioInputTokens),
-        audio_output_tokens: Math.round(audioOutputTokens),
-        audio_seconds: number(audioSeconds),
-        estimated_cost_usd: Number(calculated.toFixed(8)),
-        metadata: metadata && typeof metadata === 'object' ? metadata : {},
-      }),
-    })
-    return response.ok
+    const timeout = timeoutSignal(1200)
+    try {
+      const response = await fetch(`${url}/rest/v1/ana_ai_usage_events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+          Authorization: auth,
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          feature: String(feature || 'other').slice(0, 80),
+          model: String(model || '').slice(0, 120),
+          input_tokens: Math.round(inputTokens),
+          cached_input_tokens: Math.round(cachedInputTokens),
+          output_tokens: Math.round(outputTokens),
+          audio_input_tokens: Math.round(audioInputTokens),
+          audio_output_tokens: Math.round(audioOutputTokens),
+          audio_seconds: number(audioSeconds),
+          estimated_cost_usd: Number(calculated.toFixed(8)),
+          metadata: metadata && typeof metadata === 'object' ? metadata : {},
+        }),
+        signal: timeout.signal,
+      })
+      return response.ok
+    } finally {
+      timeout.clear()
+    }
   } catch {
     return false
   }
