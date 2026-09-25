@@ -219,10 +219,26 @@ function TranslationText({ text, onWord }) {
     return <button key={`${index}-${start}`} className="word" onClick={() => onWord(part, start, end)}>{part}</button>
   })}</div>
 }
+async function readAnaApiResponse(res, fallback = 'Ana could not complete this request.') {
+  const raw = await res.text()
+  let data = null
+  try { data = raw ? JSON.parse(raw) : {} } catch {}
+  if (!res.ok) {
+    const message = data?.error
+      || (res.status === 504 ? 'Ana took too long to respond. Please try again.'
+        : res.status === 503 ? 'Ana is temporarily taking too long. Please try again.'
+          : fallback)
+    const error = new Error(message)
+    error.status = res.status
+    throw error
+  }
+  if (!data || typeof data !== 'object') throw new Error(fallback)
+  return data
+}
+
 async function callLuna(text, instructions) {
   const res = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, instructions }) })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Translation failed')
+  const data = await readAnaApiResponse(res, 'Translation failed')
   return String(data.content || '').trim()
 }
 async function callLunaPreservingLineBreaks(text, instructions) {
@@ -270,8 +286,7 @@ async function detectSourceLanguage(text) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: String(text).slice(0, 4500), instructions, skipPersonalLanguageMemory: true }),
   })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Language detection failed')
+  const data = await readAnaApiResponse(res, 'Language detection failed')
   const parsed = parseJson(data.content) || {}
   const language = TARGETS.includes(parsed.language) ? parsed.language : ''
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0))
