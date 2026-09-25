@@ -450,6 +450,7 @@ class MainActivity : Activity() {
 
         root.addView(section("Clipboard"))
         root.addView(infoCard("Recent clips", "Ana stores up to 10 recent text clips locally when you open its clipboard panel."))
+        root.addView(infoCard("Photos & screenshots", "Open Clipboard → Photos to choose a recent photo or screenshot with Android's system picker. If an image is already on the clipboard, Ana can offer Paste image when the current app supports rich image input."))
         root.addView(actionCard("Clear Ana clipboard history") {
             KeyboardPrefs.clearClipboardHistory(this)
             Toast.makeText(this, "Clipboard history cleared", Toast.LENGTH_SHORT).show()
