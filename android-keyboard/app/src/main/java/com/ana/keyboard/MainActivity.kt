@@ -338,9 +338,15 @@ class MainActivity : Activity() {
             })
         }
 
-        root.addView(section("Custom background"))
+        root.addView(section("Background"))
+        root.addView(summary("Optional. Pick one of Ana's built-in backgrounds, use a photo from your gallery, or leave it as None."))
+        KeyboardBackgrounds.presets.forEach { preset ->
+            root.addView(backgroundPresetCard(preset))
+        }
+
+        root.addView(section("Your photo"))
         val current = KeyboardPrefs.backgroundUri(this)
-        root.addView(actionCard(if (current.isBlank()) "Choose background image" else "Change background image") {
+        root.addView(actionCard(if (current.isBlank()) "Choose photo from gallery" else "Change gallery photo") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "image/*"
@@ -350,12 +356,27 @@ class MainActivity : Activity() {
         })
         if (current.isNotBlank()) {
             root.addView(backgroundTintCard())
-            root.addView(actionCard("Remove background image") {
+            root.addView(actionCard("Remove gallery photo") {
                 KeyboardPrefs.setBackgroundUri(this, "")
                 renderTheme()
             })
         }
-        root.addView(infoCard("Photo privacy", "The selected background stays on this device."))
+        root.addView(infoCard("Photo privacy", "Gallery backgrounds stay on this device. Ana does not upload them."))
+
+        root.addView(section("Key press animation"))
+        root.addView(summary("Optional. This changes only the visual press effect and never delays character input."))
+        listOf(
+            Triple("Off", "off", "No animated key effect"),
+            Triple("Subtle", "subtle", "A quick soft press with minimal movement"),
+            Triple("Pop", "pop", "A slightly larger press with a short accent halo")
+        ).forEach { (name, id, detail) ->
+            root.addView(choiceRow(name, detail, KeyboardPrefs.keyPressAnimation(this) == id) {
+                KeyboardPrefs.setKeyPressAnimation(this, id)
+                activePreview?.refreshFromSettings()
+                renderTheme()
+            })
+        }
+
         root.addView(actionCard("Reset visual customizations") {
             KeyboardPrefs.resetVisualCustomizations(this)
             activePreview?.refreshFromSettings()
@@ -363,7 +384,6 @@ class MainActivity : Activity() {
             renderTheme()
         })
     }
-
     private fun renderTyping() {
         currentScreen = "typing"
         val root = page("Typing")
@@ -722,6 +742,7 @@ class MainActivity : Activity() {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: SecurityException) {
             }
+            KeyboardPrefs.setBackgroundPreset(this, "none")
             KeyboardPrefs.setBackgroundUri(this, uri.toString())
             renderTheme()
         }
@@ -856,6 +877,37 @@ class MainActivity : Activity() {
         return wrap
     }
 
+    private fun backgroundPresetCard(preset: KeyboardBackgrounds.Preset): View {
+        val selected = KeyboardPrefs.backgroundUri(this).isBlank() &&
+            KeyboardPrefs.backgroundPreset(this) == preset.id
+        val wrap = cardContainer().apply {
+            setOnClickListener {
+                KeyboardPrefs.setBackgroundUri(this@MainActivity, "")
+                KeyboardPrefs.setBackgroundPreset(this@MainActivity, preset.id)
+                activePreview?.refreshFromSettings()
+                renderTheme()
+            }
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(BackgroundPresetPreviewView(this, preset.id), LinearLayout.LayoutParams(dp(78), dp(54)).apply {
+            marginEnd = dp(12)
+        })
+        val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        copy.addView(titleText(preset.name))
+        copy.addView(subText(preset.detail))
+        row.addView(copy, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(TextView(this).apply {
+            text = if (selected) "✓" else ""
+            textSize = 23f
+            setTextColor(accent)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        wrap.addView(row)
+        return wrap
+    }
     private fun switchRow(title: String, subtitle: String, checked: Boolean, onChanged: (Boolean) -> Unit): View {
         val wrap = cardContainer()
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -965,9 +1017,13 @@ class MainActivity : Activity() {
             "gold" -> "Ana Gold"
             else -> "Default dark"
         }
-        return if (KeyboardPrefs.backgroundUri(this).isBlank()) base else "$base • custom photo • ${KeyboardPrefs.backgroundTintPercent(this)}% tint"
+        val background = when {
+            KeyboardPrefs.backgroundUri(this).isNotBlank() -> "gallery photo"
+            KeyboardPrefs.backgroundPreset(this) != "none" -> KeyboardBackgrounds.nameFor(KeyboardPrefs.backgroundPreset(this))
+            else -> "no background"
+        }
+        return "$base • $background • ${KeyboardPrefs.keyPressAnimation(this)} press"
     }
-
     private class SimpleTextWatcher(private val onChanged: (String) -> Unit) : android.text.TextWatcher {
         override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
         override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = onChanged(s?.toString().orEmpty())
