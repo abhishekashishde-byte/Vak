@@ -5,18 +5,38 @@ const videos = [
   {
     label: 'Translate',
     url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4',
+    badge: 'Natural translation · meaning before words',
+    headingTop: 'Say it your way.',
+    headingBottom: 'Ana carries it across.',
+    subtext: 'Type, paste or speak. Ana translates the meaning, tone and intent — so the result sounds natural instead of mechanical.',
+    placeholder: 'Your email for early access',
   },
   {
     label: 'Meetings',
     url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4',
+    badge: 'Live meetings · transcript · translation · notes',
+    headingTop: 'Stay in the meeting.',
+    headingBottom: 'Even when language changes.',
+    subtext: 'Follow the conversation live, read the transcript in your language, and leave with the important points and actions already captured.',
+    placeholder: 'Get meeting access',
   },
   {
     label: 'Documents',
     url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4',
+    badge: 'PDF · Word · scanned documents',
+    headingTop: 'Translate the words.',
+    headingBottom: 'Keep the document.',
+    subtext: 'Ana translates PDF and Word files while preserving headings, tables, images and the structure that makes the document usable.',
+    placeholder: 'Get document access',
   },
   {
     label: 'Talk for Me',
     url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4',
+    badge: 'Talk for Me · early access',
+    headingTop: 'Tell Ana what you need.',
+    headingBottom: 'Ana helps say it.',
+    subtext: 'For routine conversations, Ana can help carry the back-and-forth while important decisions, commitments and choices stay with you.',
+    placeholder: 'Join Talk for Me early access',
   },
 ]
 
@@ -60,6 +80,7 @@ function App() {
   }
 
   const heroColor = darkMode ? '#182C41' : '#ffffff'
+  const activeContent = videos[activeVideo]
 
   return (
     <section className="relative h-screen w-full overflow-hidden bg-black">
@@ -149,44 +170,47 @@ function App() {
           className="flex min-h-0 flex-1 flex-col items-center justify-center text-center transition-colors duration-700"
           style={{ color: heroColor }}
         >
-          <div className="liquid-glass rounded-full px-4 py-2 text-[10px] sm:text-xs"
-            style={{ fontFamily: 'system-ui, sans-serif' }}
-          >
-            Early access · multilingual communication that stays out of your way
-          </div>
-
-          <h1 className="mt-5 max-w-4xl text-4xl leading-[1.02] tracking-[-0.025em] sm:mt-6 sm:text-5xl md:text-7xl lg:text-[5.5rem] lg:leading-[1.0]">
-            Language shouldn’t get
-            <br />
-            in the way.
-          </h1>
-
-          <p
-            className="mt-4 max-w-xl text-sm leading-relaxed opacity-80 sm:mt-5 sm:text-base"
-            style={{ fontFamily: 'system-ui, sans-serif' }}
-          >
-            Translate what you mean, reply in context, follow meetings, understand documents and communicate across languages — without changing how you already work.
-          </p>
-
-          <form
-            onSubmit={handleAccess}
-            className="liquid-glass mt-5 flex w-full max-w-[320px] items-center rounded-full p-1.5 sm:mt-6 sm:max-w-sm"
-          >
-            <input
-              type="email"
-              placeholder="Your Best Email"
-              aria-label="Your email"
-              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:opacity-55"
-              style={{ fontFamily: 'system-ui, sans-serif', color: heroColor }}
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded-full bg-white px-4 py-2.5 text-xs font-medium text-slate-950 sm:text-sm"
+          <div key={activeVideo} className="content-enter flex flex-col items-center">
+            <div
+              className="liquid-glass rounded-full px-4 py-2 text-[10px] sm:text-xs"
               style={{ fontFamily: 'system-ui, sans-serif' }}
             >
-              Get Early Access
-            </button>
-          </form>
+              {activeContent.badge}
+            </div>
+
+            <h1 className="mt-5 max-w-4xl text-4xl leading-[1.02] tracking-[-0.025em] sm:mt-6 sm:text-5xl md:text-7xl lg:text-[5.5rem] lg:leading-[1.0]">
+              {activeContent.headingTop}
+              <br />
+              {activeContent.headingBottom}
+            </h1>
+
+            <p
+              className="mt-4 max-w-xl text-sm leading-relaxed opacity-80 sm:mt-5 sm:text-base"
+              style={{ fontFamily: 'system-ui, sans-serif' }}
+            >
+              {activeContent.subtext}
+            </p>
+
+            <form
+              onSubmit={handleAccess}
+              className="liquid-glass mt-5 flex w-full max-w-[320px] items-center rounded-full p-1.5 sm:mt-6 sm:max-w-sm"
+            >
+              <input
+                type="email"
+                placeholder={activeContent.placeholder}
+                aria-label="Your email"
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:opacity-55"
+                style={{ fontFamily: 'system-ui, sans-serif', color: heroColor }}
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-full bg-white px-4 py-2.5 text-xs font-medium text-slate-950 sm:text-sm"
+                style={{ fontFamily: 'system-ui, sans-serif' }}
+              >
+                Get Early Access
+              </button>
+            </form>
+          </div>
 
           <div
             className="mt-5 flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] sm:mt-6 sm:gap-x-6 sm:text-sm"
