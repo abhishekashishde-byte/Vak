@@ -305,3 +305,29 @@ h3,
     padding-inline: 13px;
   }
 }
+
+
+.ana-marketing-brand {
+  display: inline-flex;
+  align-items: center;
+  width: 82px;
+  height: 52px;
+}
+
+.ana-marketing-brand img {
+  width: 82px;
+  height: auto;
+  filter: brightness(0) invert(1);
+  object-fit: contain;
+}
+
+@media (max-width: 767px) {
+  .ana-marketing-brand {
+    width: 72px;
+    height: 46px;
+  }
+
+  .ana-marketing-brand img {
+    width: 72px;
+  }
+}
