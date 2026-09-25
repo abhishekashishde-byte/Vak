@@ -338,18 +338,21 @@
     .train-cap-story p{margin:0;font-size:13px;line-height:1.64;color:rgba(255,255,255,.82)}
     .train-cap-meta{margin-top:12px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.50)}
     .train-cap-details{
-      margin-top:24px;width:min(860px,78vw);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:10px 12px
+      margin-top:26px;width:min(900px,80vw);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+      column-gap:52px;row-gap:18px
     }
     .train-cap-detail{
-      min-height:78px;padding:14px 16px;border:1px solid rgba(255,255,255,.13);border-radius:15px;
-      background:rgba(0,0,0,.18);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)
+      position:relative;padding-left:18px;min-height:54px
+    }
+    .train-cap-detail:before{
+      content:"";position:absolute;left:0;top:5px;width:7px;height:7px;border-radius:50%;
+      background:rgba(255,255,255,.82);box-shadow:0 0 0 4px rgba(255,255,255,.08)
     }
     .train-cap-detail strong{
-      display:block;margin-bottom:5px;font-size:11px;line-height:1.3;color:#fff;font-weight:800
+      display:block;margin-bottom:4px;font-size:11px;line-height:1.3;color:#fff;font-weight:800
     }
     .train-cap-detail span{
-      display:block;font-size:10px;line-height:1.48;color:rgba(255,255,255,.66)
+      display:block;max-width:360px;font-size:10px;line-height:1.52;color:rgba(255,255,255,.67)
     }
     .train-cap-picker-wrap{margin-top:auto}
     .train-cap-prompt{
@@ -387,6 +390,11 @@
       .train-cap-story p{font-size:12px}
       .train-cap-picker{margin-right:-18px;padding-right:18px}
       .train-cap-picker button{min-height:38px;padding:0 13px}
+    }
+    @media(min-width:761px){
+      .train-cap-heading{max-width:960px}
+      .train-cap-heading>p{max-width:640px;font-size:14px;line-height:1.68}
+      .train-cap-meta{margin-top:13px}
     }
 </style>
 </head>
