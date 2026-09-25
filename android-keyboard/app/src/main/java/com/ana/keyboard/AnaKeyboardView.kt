@@ -18,6 +18,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.animation.DecelerateInterpolator
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -77,7 +78,11 @@ class AnaKeyboardView @JvmOverloads constructor(
     private var calibrationDirty = 0
     private var keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
     private var backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
+    private var backgroundPreset = KeyboardPrefs.backgroundPreset(context)
     private var keyOpacityPercent = KeyboardPrefs.keyOpacityPercent(context)
+    private var keyPressAnimation = KeyboardPrefs.keyPressAnimation(context)
+    private var pressVisual = 0f
+    private var pressAnimator: ValueAnimator? = null
     private var spaceCursorMoved = false
     private var spaceCursorAnchorX = 0f
 
@@ -206,7 +211,9 @@ class AnaKeyboardView @JvmOverloads constructor(
         touchCalibration = KeyboardPrefs.touchCalibration(context, calibrationBadge).toMutableMap()
         keyPopupEnabled = KeyboardPrefs.keyPopupEnabled(context)
         backgroundTintPercent = KeyboardPrefs.backgroundTintPercent(context)
+        backgroundPreset = KeyboardPrefs.backgroundPreset(context)
         keyOpacityPercent = KeyboardPrefs.keyOpacityPercent(context)
+        keyPressAnimation = KeyboardPrefs.keyPressAnimation(context)
         clearPressState()
         invalidate()
     }
@@ -428,6 +435,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         super.onDraw(canvas)
         val colors = palette()
         canvas.drawColor(colors.background)
+        KeyboardBackgrounds.draw(canvas, width, height, backgroundPreset, keyPaint)
         drawBackgroundImage(canvas)
         if (placed.isEmpty()) placed = layoutKeys()
 
@@ -436,10 +444,21 @@ class AnaKeyboardView @JvmOverloads constructor(
             val special = item.key.code.length > 1 && item.key.code != "SPACE"
             keyPaint.style = Paint.Style.FILL
             keyPaint.color = keyColor(colors.normalKey, special, pressed, colors)
-            val rect = if (pressed) {
-                RectF(item.rect.left - dp(1f), item.rect.top - dp(1f), item.rect.right + dp(1f), item.rect.bottom + dp(1f))
-            } else item.rect
+            val rect = if (pressed) animatedPressedRect(item.rect) else item.rect
             val radius = dp(KeyboardPrefs.keyRadiusDp(context).toFloat())
+            if (pressed && keyPressAnimation == "pop" && pressVisual > 0f) {
+                keyPaint.style = Paint.Style.STROKE
+                keyPaint.strokeWidth = dp(1.4f + 1.2f * pressVisual)
+                keyPaint.color = Color.argb((38 + 62 * pressVisual).toInt().coerceIn(0, 110), Color.red(colors.accent), Color.green(colors.accent), Color.blue(colors.accent))
+                canvas.drawRoundRect(
+                    RectF(rect.left - dp(2f), rect.top - dp(2f), rect.right + dp(2f), rect.bottom + dp(2f)),
+                    radius + dp(2f),
+                    radius + dp(2f),
+                    keyPaint
+                )
+                keyPaint.style = Paint.Style.FILL
+                keyPaint.color = keyColor(colors.normalKey, special, pressed, colors)
+            }
             canvas.drawRoundRect(rect, radius, radius, keyPaint)
             if (KeyboardPrefs.keyBordersEnabled(context)) {
                 keyPaint.style = Paint.Style.STROKE
@@ -469,6 +488,39 @@ class AnaKeyboardView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         if (w != oldw || h != oldh) placed = emptyList()
         super.onSizeChanged(w, h, oldw, oldh)
+    }
+
+    private fun animatedPressedRect(source: RectF): RectF {
+        if (keyPressAnimation == "off" || pressVisual <= 0f) {
+            return RectF(source.left - dp(1f), source.top - dp(1f), source.right + dp(1f), source.bottom + dp(1f))
+        }
+        val scale = when (keyPressAnimation) {
+            "pop" -> 1f + 0.055f * pressVisual
+            else -> 1f - 0.035f * pressVisual
+        }
+        val dx = source.width() * (1f - scale) / 2f
+        val dy = source.height() * (1f - scale) / 2f
+        val down = if (keyPressAnimation == "subtle") dp(0.8f) * pressVisual else 0f
+        return RectF(source.left + dx, source.top + dy + down, source.right - dx, source.bottom - dy + down)
+    }
+
+    private fun startPressVisual() {
+        pressAnimator?.cancel()
+        if (keyPressAnimation == "off") {
+            pressVisual = 0f
+            invalidate()
+            return
+        }
+        pressVisual = 0f
+        pressAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = if (keyPressAnimation == "pop") 95L else 70L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                pressVisual = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
     }
 
     private fun drawSpecialIcon(canvas: Canvas, item: PlacedKey, rect: RectF, colors: Palette): Boolean {
@@ -795,6 +847,8 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun clearPressState() {
         repeatHandler.removeCallbacks(repeatBackspace)
+        pressAnimator?.cancel()
+        pressVisual = 0f
         longPressHandler.removeCallbacks(showAlternates)
         active = null
         alternatePopup = null
@@ -834,6 +888,7 @@ class AnaKeyboardView @JvmOverloads constructor(
             downY = y
             downAt = SystemClock.uptimeMillis()
             active = item
+            startPressVisual()
             alternatePopup = null
             backspaceRepeated = false
             gliding = false
@@ -1049,6 +1104,7 @@ class AnaKeyboardView @JvmOverloads constructor(
         longPressHandler.removeCallbacksAndMessages(null)
         calibrationSaveHandler.removeCallbacksAndMessages(null)
         trailAnimator?.cancel()
+        pressAnimator?.cancel()
         persistTouchCalibration()
         super.onDetachedFromWindow()
     }
