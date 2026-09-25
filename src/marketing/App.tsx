@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 
 const backgroundVideos = [
@@ -6,6 +6,10 @@ const backgroundVideos = [
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4',
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4',
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4',
+  'https://videos.pexels.com/video-files/34732324/14723215_1080_1920_60fps.mp4',
+  'https://videos.pexels.com/video-files/36546412/15496739_1080_1920_30fps.mp4',
+  'https://videos.pexels.com/video-files/36620147/15526034_1440_2218_30fps.mp4',
+  'https://videos.pexels.com/video-files/34883446/14779089_1080_1920_50fps.mp4',
 ]
 
 const scenes = [
@@ -47,7 +51,7 @@ const scenes = [
   },
   {
     label: 'Camera',
-    videoIndex: 0,
+    videoIndex: 4,
     badge: 'Camera · signs · menus · labels',
     headingTop: 'Point at it.',
     headingBottom: 'Understand it.',
@@ -56,7 +60,7 @@ const scenes = [
   },
   {
     label: 'Keyboard',
-    videoIndex: 1,
+    videoIndex: 5,
     badge: 'Write · correct · reply · translate',
     headingTop: 'Ana where you already type.',
     headingBottom: 'No app switching.',
@@ -65,7 +69,7 @@ const scenes = [
   },
   {
     label: 'Reply',
-    videoIndex: 3,
+    videoIndex: 6,
     badge: 'Reply from context · review before sending',
     headingTop: 'Know what they said.',
     headingBottom: 'Know what to say back.',
@@ -74,7 +78,7 @@ const scenes = [
   },
   {
     label: 'Privacy',
-    videoIndex: 2,
+    videoIndex: 7,
     badge: 'Local-first typing · deliberate AI use',
     headingTop: 'Helpful when you ask.',
     headingBottom: 'Quiet when you don’t.',
@@ -102,11 +106,29 @@ function App() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const cooldownRef = useRef<number | null>(null)
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
+  const sceneButtonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const activeContent = scenes[activeScene]
   const activeVideoIndex = activeContent.videoIndex
   const darkMode = activeVideoIndex === 2
   const heroColor = darkMode ? '#182C41' : '#ffffff'
+
+  useEffect(() => {
+    videoRefs.current.forEach((video, index) => {
+      if (!video) return
+      if (index === activeVideoIndex) {
+        video.play().catch(() => {})
+      } else {
+        video.pause()
+      }
+    })
+
+    const button = sceneButtonRefs.current[activeScene]
+    if (button && window.innerWidth < 640) {
+      button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    }
+  }, [activeScene, activeVideoIndex])
 
   const switchScene = (index: number) => {
     if (index === activeScene || isTransitioning) return
@@ -132,15 +154,16 @@ function App() {
         {backgroundVideos.map((url, index) => (
           <video
             key={url}
+            ref={(node) => { videoRefs.current[index] = node }}
             className={
               'absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ' +
               (activeVideoIndex === index ? 'opacity-100' : 'opacity-0')
             }
-            autoPlay
+            autoPlay={index === activeVideoIndex}
             muted
             loop
             playsInline
-            preload={index === 0 ? 'auto' : 'metadata'}
+            preload={index === activeVideoIndex ? 'auto' : 'metadata'}
             aria-hidden={activeVideoIndex !== index}
           >
             <source src={url} type="video/mp4" />
@@ -259,26 +282,36 @@ function App() {
             </form>
           </div>
 
-          <div
-            className="scene-switcher mt-5 flex w-full max-w-full flex-nowrap items-center gap-x-5 overflow-x-auto px-1 pb-1 text-[11px] sm:mt-6 sm:justify-center sm:gap-x-6 sm:text-sm"
-            style={{ fontFamily: 'system-ui, sans-serif' }}
-          >
-            {scenes.map((scene, index) => (
-              <button
-                key={scene.label}
-                type="button"
-                onClick={() => switchScene(index)}
-                className={
-                  'shrink-0 border-b pb-1.5 transition-all duration-300 ' +
-                  (activeScene === index
-                    ? 'border-current opacity-100'
-                    : 'border-transparent opacity-50 hover:opacity-80')
-                }
-                disabled={isTransitioning && index !== activeScene}
-              >
-                {scene.label}
-              </button>
-            ))}
+          <div className="mt-5 w-full sm:mt-6">
+            <div
+              className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/75"
+              style={{ fontFamily: 'system-ui, sans-serif' }}
+            >
+              Tap a feature
+            </div>
+            <div
+              className="scene-switcher flex w-full max-w-full flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 text-[11px] sm:justify-center sm:gap-2.5 sm:text-sm"
+              style={{ fontFamily: 'system-ui, sans-serif' }}
+            >
+              {scenes.map((scene, index) => (
+                <button
+                  key={scene.label}
+                  ref={(node) => { sceneButtonRefs.current[index] = node }}
+                  type="button"
+                  onClick={() => switchScene(index)}
+                  className={
+                    'feature-option shrink-0 rounded-full border px-3 py-2 transition-all duration-300 sm:px-4 ' +
+                    (activeScene === index
+                      ? 'feature-option-active'
+                      : 'feature-option-idle')
+                  }
+                  disabled={isTransitioning && index !== activeScene}
+                  aria-pressed={activeScene === index}
+                >
+                  {scene.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
