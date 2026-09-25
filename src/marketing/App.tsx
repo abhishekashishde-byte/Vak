@@ -1,10 +1,17 @@
 import { useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 
-const videos = [
+const backgroundVideos = [
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4',
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4',
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4',
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4',
+]
+
+const scenes = [
   {
     label: 'Translate',
-    url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4',
+    videoIndex: 0,
     badge: 'Natural translation · meaning before words',
     headingTop: 'Say it your way.',
     headingBottom: 'Ana carries it across.',
@@ -13,7 +20,7 @@ const videos = [
   },
   {
     label: 'Meetings',
-    url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4',
+    videoIndex: 1,
     badge: 'Live meetings · transcript · translation · notes',
     headingTop: 'Stay in the meeting.',
     headingBottom: 'Even when language changes.',
@@ -22,7 +29,7 @@ const videos = [
   },
   {
     label: 'Documents',
-    url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4',
+    videoIndex: 2,
     badge: 'PDF · Word · scanned documents',
     headingTop: 'Translate the words.',
     headingBottom: 'Keep the document.',
@@ -31,12 +38,30 @@ const videos = [
   },
   {
     label: 'Talk for Me',
-    url: 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4',
+    videoIndex: 3,
     badge: 'Talk for Me · early access',
     headingTop: 'Tell Ana what you need.',
     headingBottom: 'Ana helps say it.',
     subtext: 'For routine conversations, Ana can help carry the back-and-forth while important decisions, commitments and choices stay with you.',
     placeholder: 'Join Talk for Me early access',
+  },
+  {
+    label: 'Camera',
+    videoIndex: 0,
+    badge: 'Camera · signs · menus · labels',
+    headingTop: 'Point at it.',
+    headingBottom: 'Understand it.',
+    subtext: 'Use Ana on signs, menus, notices, labels and pictures. The translation stays connected to what you were looking at instead of becoming a detached block of text.',
+    placeholder: 'Get camera translation access',
+  },
+  {
+    label: 'Keyboard',
+    videoIndex: 1,
+    badge: 'Write · correct · reply · translate',
+    headingTop: 'Ana where you already type.',
+    headingBottom: 'No app switching.',
+    subtext: 'Use Ana Keyboard to write from intent, correct a paragraph, translate what you type and reply from selected context without leaving the app you are already in.',
+    placeholder: 'Get Ana Keyboard access',
   },
 ]
 
@@ -55,16 +80,20 @@ const stats = [
 ]
 
 function App() {
-  const [activeVideo, setActiveVideo] = useState(0)
+  const [activeScene, setActiveScene] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const cooldownRef = useRef<number | null>(null)
 
-  const darkMode = activeVideo === 2
+  const activeContent = scenes[activeScene]
+  const activeVideoIndex = activeContent.videoIndex
+  const darkMode = activeVideoIndex === 2
+  const heroColor = darkMode ? '#182C41' : '#ffffff'
 
-  const switchVideo = (index: number) => {
-    if (index === activeVideo || isTransitioning) return
-    setActiveVideo(index)
+  const switchScene = (index: number) => {
+    if (index === activeScene || isTransitioning) return
+
+    setActiveScene(index)
     setIsTransitioning(true)
 
     if (cooldownRef.current) window.clearTimeout(cooldownRef.current)
@@ -79,37 +108,36 @@ function App() {
     window.location.href = '/?auth=login'
   }
 
-  const heroColor = darkMode ? '#182C41' : '#ffffff'
-  const activeContent = videos[activeVideo]
-
   return (
     <section className="relative h-screen w-full overflow-hidden bg-black">
       <div className="absolute inset-0 z-0">
-        {videos.map((video, index) => (
+        {backgroundVideos.map((url, index) => (
           <video
-            key={video.url}
+            key={url}
             className={
               'absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ' +
-              (activeVideo === index ? 'opacity-100' : 'opacity-0')
+              (activeVideoIndex === index ? 'opacity-100' : 'opacity-0')
             }
             autoPlay
             muted
             loop
             playsInline
             preload={index === 0 ? 'auto' : 'metadata'}
-            aria-hidden={activeVideo !== index}
+            aria-hidden={activeVideoIndex !== index}
           >
-            <source src={video.url} type="video/mp4" />
+            <source src={url} type="video/mp4" />
           </video>
         ))}
       </div>
 
-      <img
-        className="train-bob absolute inset-0 z-[1] h-full w-full object-cover pointer-events-none select-none"
-        src="https://soft-zoom-63098134.figma.site/_assets/v11/0b4a435b2df2747593c43d7a1c9b4578f7d8d90c.png"
-        alt=""
-        aria-hidden="true"
-      />
+      <div className="train-overlay absolute inset-0 z-[1] pointer-events-none select-none">
+        <img
+          className="train-bob h-full w-full object-cover"
+          src="https://soft-zoom-63098134.figma.site/_assets/v11/0b4a435b2df2747593c43d7a1c9b4578f7d8d90c.png"
+          alt=""
+          aria-hidden="true"
+        />
+      </div>
 
       <div className="absolute inset-0 z-[1] bg-black/10 pointer-events-none" />
 
@@ -170,7 +198,7 @@ function App() {
           className="flex min-h-0 flex-1 flex-col items-center justify-center text-center transition-colors duration-700"
           style={{ color: heroColor }}
         >
-          <div key={activeVideo} className="content-enter flex flex-col items-center">
+          <div key={activeScene} className="content-enter flex flex-col items-center">
             <div
               className="liquid-glass rounded-full px-4 py-2 text-[10px] sm:text-xs"
               style={{ fontFamily: 'system-ui, sans-serif' }}
@@ -213,23 +241,23 @@ function App() {
           </div>
 
           <div
-            className="mt-5 flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] sm:mt-6 sm:gap-x-6 sm:text-sm"
+            className="scene-switcher mt-5 flex w-full max-w-full flex-nowrap items-center gap-x-5 overflow-x-auto px-1 pb-1 text-[11px] sm:mt-6 sm:justify-center sm:gap-x-6 sm:text-sm"
             style={{ fontFamily: 'system-ui, sans-serif' }}
           >
-            {videos.map((video, index) => (
+            {scenes.map((scene, index) => (
               <button
-                key={video.label}
+                key={scene.label}
                 type="button"
-                onClick={() => switchVideo(index)}
+                onClick={() => switchScene(index)}
                 className={
-                  'border-b pb-1.5 transition-all duration-300 ' +
-                  (activeVideo === index
+                  'shrink-0 border-b pb-1.5 transition-all duration-300 ' +
+                  (activeScene === index
                     ? 'border-current opacity-100'
                     : 'border-transparent opacity-50 hover:opacity-80')
                 }
-                disabled={isTransitioning && index !== activeVideo}
+                disabled={isTransitioning && index !== activeScene}
               >
-                {video.label}
+                {scene.label}
               </button>
             ))}
           </div>
