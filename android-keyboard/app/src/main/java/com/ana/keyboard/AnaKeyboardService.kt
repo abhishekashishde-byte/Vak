@@ -135,7 +135,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         completeVoiceRecognition("", fromTimeout = true)
     }
 
-    private enum class SuggestionKind { WORD, NEXT_WORD, EMOJI, CLIPBOARD }
+    private enum class SuggestionKind { WORD, NEXT_WORD, EMAIL, EMOJI, CLIPBOARD }
     private data class SuggestionEntry(val label: String, val value: String, val kind: SuggestionKind)
 
     private data class AutoCorrectionRecord(val original: String, val corrected: String)
@@ -197,6 +197,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             clearSuggestions()
             return@Runnable
         }
+
+        val emailPrefix = currentEmailPrefix()
+        if (emailPrefix != null) {
+            val entries = emailSuggestionEntries(emailPrefix)
+            if (entries.isEmpty()) clearSuggestions() else showEntries(entries)
+            return@Runnable
+        }
+
         val word = currentWord()
         suggestionEngine.setLanguage(cachedInputBadge)
         if (!word.isNullOrBlank()) {
@@ -559,6 +567,11 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
     }
 
+    override fun onFinishInput() {
+        currentInputConnection?.let { rememberEmailAtCursor(it) }
+        super.onFinishInput()
+    }
+
     private fun applyKeyboardSizing() {
         if (::contentHost.isInitialized) {
             contentHost.layoutParams = (contentHost.layoutParams ?: LinearLayout.LayoutParams(
@@ -884,6 +897,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 var typed = code
                 if (code.length == 1 && code[0].isLetter() && keyboard.isShifted()) typed = code.uppercase()
                 val punctuation = typed in setOf(",", ".", "?", "!", ":", ";")
+                val emailPrefixBeforeKey = currentEmailPrefix()
+                val emailDot = typed == "." && (isEmailField() || emailPrefixBeforeKey?.contains('@') == true)
                 val composingCharacter = typed.length == 1 &&
                     (typed[0].isLetter() || (typed == "'" && !composingBuffer.isEmpty))
 
@@ -891,16 +906,37 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     appendComposingCharacter(connection, typed)
                 } else {
                     finishLocalComposition(connection)
-                    if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
+                    if (punctuation && typed != "." && emailPrefixBeforeKey?.contains('@') == true) {
+                        rememberEmailAtCursor(connection)
+                    }
+                    if (emailDot) connection.commitText(typed, 1)
+                    else if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
                     else connection.commitText(typed, 1)
                 }
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
 
                 // Suggestions, regex scans and sentence intelligence only run
                 // after a real typing idle period. The physical key path ends here.
-                scheduleTypingIdleUpdate(typed.any { it.isLetter() }, punctuation)
+                scheduleTypingIdleUpdate(typed.any { it.isLetter() }, punctuation && !emailDot)
             }
         }
+    }
+
+    private fun currentEmailPrefix(): String? {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return null
+        val before = currentInputConnection?.getTextBeforeCursor(320, 0)?.toString().orEmpty()
+        return EmailSuggestionPolicy.prefixAtCursor(before, isEmailField())
+    }
+
+    private fun emailSuggestionEntries(prefix: String = currentEmailPrefix() ?: return emptyList()): List<SuggestionEntry> =
+        KeyboardPrefs.emailSuggestions(this, prefix, 3)
+            .map { SuggestionEntry(it, it, SuggestionKind.EMAIL) }
+
+    private fun rememberEmailAtCursor(connection: InputConnection) {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+        val before = connection.getTextBeforeCursor(320, 0)?.toString().orEmpty()
+        val email = EmailSuggestionPolicy.emailAtCursor(before) ?: return
+        KeyboardPrefs.rememberEmail(this, email)
     }
 
     private fun currentWord(): String? {
@@ -911,6 +947,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun showTypedWordCandidate() {
         if (!KeyboardPrefs.wordSuggestionsEnabled(this) || isSensitiveField() || suggestionButtons.isEmpty()) return
+
+        val emailPrefix = currentEmailPrefix()
+        if (emailPrefix != null) {
+            val entries = emailSuggestionEntries(emailPrefix)
+            if (entries.isEmpty()) clearSuggestions() else showEntries(entries)
+            return
+        }
+
         val word = currentWord()
         if (word.isNullOrBlank()) {
             clearSuggestions()
@@ -967,7 +1011,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private fun scheduleSmartSentenceCorrection() {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
-        if (explicitAiActionInFlight || !cachedSmartSentenceEnabled || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
+        if (explicitAiActionInFlight || !cachedSmartSentenceEnabled || isSensitiveField() || isEmailField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
         mainHandler.postDelayed(smartSentenceRunnable, 950)
     }
 
@@ -1231,6 +1275,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun handleSuggestionResult(word: String, suggestions: List<String>, looksLikeTypo: Boolean) {
+        if (currentEmailPrefix() != null) return
         val delimited = pendingDelimitedWord
         if (delimited != null && delimited.equals(word, ignoreCase = true) && looksLikeTypo) {
             val correction = suggestions.firstOrNull()
@@ -1262,6 +1307,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun handleNextWordResult(previous: String, suggestions: List<String>) {
+        if (currentEmailPrefix() != null) return
         if (isSensitiveField() || !cachedWordSuggestionsEnabled || currentWord() != null) return
         val currentPrevious = lastCompletedWord()
         if (!previous.equals(currentPrevious, ignoreCase = true)) return
@@ -1285,6 +1331,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             button.contentDescription = entry?.let {
                 when (it.kind) {
                     SuggestionKind.CLIPBOARD -> "Paste " + it.value.take(40)
+                    SuggestionKind.EMAIL -> "Email suggestion " + it.value
                     SuggestionKind.EMOJI -> "Insert emoji " + it.value
                     SuggestionKind.NEXT_WORD -> "Next word " + it.value
                     SuggestionKind.WORD -> "Word suggestion " + it.value
@@ -1310,6 +1357,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 clearSuggestions()
                 refreshShiftFromEditor()
                 if (cachedAutoSpaceSuggestion) requestSuggestionsSoon()
+            }
+            SuggestionKind.EMAIL -> {
+                val prefix = currentEmailPrefix().orEmpty()
+                finishLocalComposition(connection)
+                if (prefix.isNotEmpty()) connection.deleteSurroundingText(prefix.length, 0)
+                connection.commitText(entry.value, 1)
+                KeyboardPrefs.rememberEmail(this, entry.value)
+                clearSuggestions()
+                refreshShiftFromEditor()
             }
             SuggestionKind.EMOJI -> {
                 finishLocalComposition(connection)
@@ -1414,7 +1470,9 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun handleSpace() {
         val connection = currentInputConnection ?: return
+        val emailContext = currentEmailPrefix() != null
         val bufferedWord = finishLocalComposition(connection)
+        if (emailContext) rememberEmailAtCursor(connection)
         if (expandTextShortcut(connection)) {
             connection.commitText(" ", 1)
             lastSpaceTap = SystemClock.elapsedRealtime()
@@ -1425,7 +1483,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showStatus("LOCAL • shortcut expanded")
             return
         }
-        val wordBeforeSpace = bufferedWord?.takeIf { it.isNotBlank() } ?: currentWord()
+        val wordBeforeSpace = if (emailContext) null else bufferedWord?.takeIf { it.isNotBlank() } ?: currentWord()
         var corrected = false
 
         if (!wordBeforeSpace.isNullOrBlank()) {
@@ -1605,6 +1663,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val connection = currentInputConnection ?: return
         val info = currentInputEditorInfo
         finishLocalComposition(connection)
+        rememberEmailAtCursor(connection)
 
         val action = editorAction(info)
         if (action != null) {
@@ -1629,6 +1688,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun refreshShiftFromEditor() {
         if (!::keyboard.isInitialized || keyboard.isSymbols() || capsLock) return
+        if (isEmailField()) {
+            keyboard.setShifted(false)
+            return
+        }
         if (!KeyboardPrefs.autoCapitalisationEnabled(this)) {
             keyboard.setShifted(false)
             return
@@ -1700,6 +1763,24 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             .joinToString(" ").lowercase()
         return Regex("""\b(otp|one[ -]?time(?: password| code)?|verification[ -]?code|sms[ -]?code|auth(?:entication)?[ -]?code|security[ -]?code|passcode)\b""")
             .containsMatchIn(hint)
+    }
+
+    private fun isEmailField(): Boolean {
+        val info = currentInputEditorInfo ?: return false
+        val inputType = info.inputType
+        val klass = inputType and InputType.TYPE_MASK_CLASS
+        if (klass == InputType.TYPE_CLASS_TEXT) {
+            val variation = inputType and InputType.TYPE_MASK_VARIATION
+            if (
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+            ) return true
+        }
+
+        val hint = listOfNotNull(info.hintText?.toString(), info.label?.toString(), info.fieldName)
+            .joinToString(" ")
+            .lowercase()
+        return Regex("""\b(e-?mail|email[ -]?address|mail[ -]?address)\b""").containsMatchIn(hint)
     }
 
     private fun isSensitiveField(): Boolean {
