@@ -130,13 +130,14 @@ function App() {
         ))}
       </div>
 
-      <div className="train-overlay absolute inset-0 z-[1] pointer-events-none select-none">
-        <img
-          className="train-bob h-full w-full object-cover"
-          src="https://soft-zoom-63098134.figma.site/_assets/v11/0b4a435b2df2747593c43d7a1c9b4578f7d8d90c.png"
-          alt=""
-          aria-hidden="true"
-        />
+      <div className="train-window absolute inset-0 z-[1] pointer-events-none select-none" aria-hidden="true">
+        <div className="train-ceiling" />
+        <div className="train-side train-side-left" />
+        <div className="train-side train-side-right" />
+        <div className="train-window-rim" />
+        <div className="train-sill" />
+        <div className="train-reflection train-reflection-one" />
+        <div className="train-reflection train-reflection-two" />
       </div>
 
       <div className="absolute inset-0 z-[1] bg-black/10 pointer-events-none" />
