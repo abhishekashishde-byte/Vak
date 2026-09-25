@@ -38,6 +38,10 @@
             android:name=".GifPickerActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".PhotoPasteActivity"
+            android:exported="false" />
+
         <provider
             android:name=".GifContentProvider"
             android:authorities="com.ana.keyboard.gifs"
