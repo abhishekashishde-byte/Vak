@@ -1,629 +1,567 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Ana — Language shouldn’t get in the way.</title>
-  <meta name="description" content="Ana is a multilingual communication assistant for writing, translation, documents, meetings, live conversations and everyday communication.">
-  <meta name="theme-color" content="#000000">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/svg+xml" href="/ana-app-icon.svg">
-  <style>
-    :root{
-      --bg:#000;
-      --ink:#f4f2ef;
-      --dim:#8c8783;
-      --line:rgba(244,242,239,.22);
-      --pad:clamp(14px,2.6vw,34px);
-      --serif:"Playfair Display","Times New Roman",serif;
-      --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
-      --ease:cubic-bezier(.22,.61,.36,1);
-      --persp:1150px;
-      --cw:150px;
-      --safe-top:env(safe-area-inset-top);
-      --safe-right:env(safe-area-inset-right);
-      --safe-bottom:env(safe-area-inset-bottom);
-      --safe-left:env(safe-area-inset-left);
-    }
-    *{box-sizing:border-box}
-    html{background:#000;scrollbar-gutter:stable}
-    html,body{margin:0;padding:0}
-    body{
-      background:#000;color:var(--ink);font-family:var(--sans);font-weight:300;
-      min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased;
-      overscroll-behavior-y:none;
-    }
-    img{display:block;max-width:100%}
-    button,a{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent}
-    button{border:0;background:none;cursor:pointer}
-    a{text-decoration:none}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ana — Language shouldn’t get in the way.</title>
+<meta name="description" content="Ana helps you translate, write, reply, understand documents, follow meetings and communicate across languages.">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#f4f2ef;--dim:#8d8985;--line:rgba(244,242,239,.24);
+  --pad:clamp(14px,2.7vw,34px);--ease:cubic-bezier(.22,.61,.36,1);
+  --serif:"Playfair Display","Times New Roman",serif;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --safe-top:env(safe-area-inset-top);--safe-right:env(safe-area-inset-right);
+  --safe-bottom:env(safe-area-inset-bottom);--safe-left:env(safe-area-inset-left);
+  --cw:150px;--persp:1000px;
+}
+*{box-sizing:border-box}
+html{background:#000;scrollbar-gutter:stable}
+html,body{margin:0;padding:0}
+body{
+  background:#000;color:var(--ink);font-family:var(--sans);font-weight:300;
+  min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+img{display:block;max-width:100%}
+a,button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent}
+a{text-decoration:none}
+button{border:0;background:none;cursor:pointer}
+#scrollTrack{height:1050vh;pointer-events:none}
+#scene{position:fixed;inset:0;background:#000;overflow:hidden;z-index:1}
+.vignette{
+  position:absolute;inset:0;z-index:20;pointer-events:none;
+  background:radial-gradient(ellipse 92% 90% at 50% 48%,transparent 46%,rgba(0,0,0,.25) 78%,rgba(0,0,0,.78) 100%);
+}
+.header{
+  position:absolute;top:0;left:0;right:0;z-index:30;
+  padding:calc(var(--pad)*.85 + var(--safe-top)) calc(var(--pad) + var(--safe-right)) 0 calc(var(--pad) + var(--safe-left));
+  display:flex;align-items:flex-start;justify-content:space-between;
+}
+.brand{font-family:var(--serif);font-size:clamp(24px,2.7vw,34px);line-height:1}
+.try{
+  min-height:44px;display:inline-flex;align-items:center;
+  padding:0 17px;border:1px solid rgba(244,242,239,.28);border-radius:999px;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(244,242,239,.76);
+}
 
-    #scrollTrack{height:1450vh;pointer-events:none}
-    #scene{position:fixed;inset:0;overflow:hidden;background:#000;z-index:10}
-    .grain{
-      position:absolute;inset:0;pointer-events:none;z-index:8;opacity:.2;
-      background-image:
-        radial-gradient(circle at 20% 20%,rgba(255,255,255,.028) 0 1px,transparent 1.5px),
-        radial-gradient(circle at 72% 60%,rgba(255,255,255,.022) 0 1px,transparent 1.5px);
-      background-size:13px 13px,17px 17px;
-      mix-blend-mode:screen;
-    }
-    .vig{
-      position:absolute;inset:0;pointer-events:none;z-index:7;
-      background:radial-gradient(ellipse 92% 90% at 50% 50%,transparent 46%,rgba(0,0,0,.28) 79%,rgba(0,0,0,.8) 100%);
-    }
+/* EYE */
+#eyeScreen{position:absolute;inset:0;z-index:10;display:grid;place-items:center;will-change:opacity}
+#eyeZoom{
+  width:min(82vw,900px);will-change:transform,opacity;transform-origin:50% 50%;
+}
+#eyeSvg{display:block;width:100%;height:auto;overflow:visible;filter:drop-shadow(0 30px 90px rgba(0,0,0,.85))}
+#eyeSvg .iris-rays{transform-origin:600px 260px;animation:irisTurn 18s linear infinite}
+@keyframes irisTurn{to{transform:rotate(360deg)}}
+.eye-copy{
+  position:absolute;left:50%;bottom:calc(11vh + var(--safe-bottom));transform:translateX(-50%);
+  width:min(90vw,780px);text-align:center;z-index:12;
+}
+.eye-copy h1{
+  margin:0;font-family:var(--serif);font-size:clamp(34px,5.4vw,70px);font-weight:400;
+  line-height:.98;letter-spacing:-.03em;
+}
+.eye-copy p{
+  margin:13px 0 0;font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:rgba(244,242,239,.42)
+}
+.eye-copy p::before{content:"";display:inline-block;width:34px;height:1px;background:rgba(244,242,239,.28);vertical-align:middle;margin-right:10px}
 
-    /* FIRST SCREEN — THE EYE */
-    #eyeScreen{
-      position:absolute;inset:0;z-index:5;display:grid;place-items:center;
-      opacity:1;will-change:opacity,transform;
-    }
-    .eye-copy{
-      position:absolute;left:calc(var(--pad) + var(--safe-left));top:calc(var(--pad) + var(--safe-top));
-      z-index:4;
-    }
-    .eye-brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:clamp(22px,2.4vw,31px)}
-    .eye-brand img{width:28px;height:28px;filter:grayscale(1) brightness(3)}
-    .eye-kicker{
-      position:absolute;left:50%;bottom:calc(var(--pad) + var(--safe-bottom));transform:translateX(-50%);
-      z-index:4;text-align:center;white-space:nowrap;font-size:9px;letter-spacing:.22em;text-transform:uppercase;
-      color:rgba(244,242,239,.45)
-    }
-    .eye-kicker::before{
-      content:"";display:block;width:1px;height:42px;background:rgba(244,242,239,.25);margin:0 auto 12px;
-      animation:pulseLine 1.8s ease-in-out infinite
-    }
-    @keyframes pulseLine{50%{height:26px;opacity:.35}}
-    #eyeWrap{
-      width:min(70vw,900px);aspect-ratio:2.35/1;position:relative;
-      transform-origin:50% 50%;will-change:transform,opacity;
-      filter:drop-shadow(0 30px 120px rgba(0,0,0,.9))
-    }
-    .eye-shell{
-      position:absolute;inset:0;overflow:hidden;
-      clip-path:path("M 0 50 C 22 2 75 0 100 50 C 77 100 24 100 0 50 Z");
-    }
-    @supports not (clip-path:path("M 0 0 L 1 1")){
-      .eye-shell{border-radius:50% 6% 50% 6% / 52% 50% 52% 50%}
-    }
-    .sclera{
-      position:absolute;inset:3%;border-radius:50%;
-      background:
-        radial-gradient(circle at 49% 48%,rgba(255,255,255,.98) 0 35%,rgba(215,216,214,.98) 49%,rgba(80,80,78,.8) 76%,rgba(5,5,5,1) 100%);
-      box-shadow:inset 0 0 60px rgba(0,0,0,.75);
-    }
-    .iris{
-      position:absolute;left:50%;top:50%;width:34%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);
-      background:
-        repeating-radial-gradient(circle,transparent 0 7%,rgba(255,255,255,.025) 8% 9%),
-        repeating-conic-gradient(from 0deg,rgba(126,109,255,.45) 0deg 2deg,rgba(72,190,178,.26) 2deg 4deg,rgba(0,0,0,.1) 4deg 6deg),
-        radial-gradient(circle,#0b0b0c 0 23%,#24233b 24% 36%,#3c5d61 48%,#151826 70%,#050505 100%);
-      box-shadow:0 0 60px rgba(118,103,255,.28),inset 0 0 25px rgba(0,0,0,.9);
-    }
-    .pupil{
-      position:absolute;left:50%;top:50%;width:37%;aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);
-      background:#000;box-shadow:0 0 30px rgba(0,0,0,.9);
-      display:grid;place-items:center;
-    }
-    .pupil img{width:55%;filter:invert(1);opacity:.92}
-    .eye-shine{
-      position:absolute;width:12%;aspect-ratio:1;border-radius:50%;left:40%;top:35%;
-      background:rgba(255,255,255,.82);filter:blur(.3px);box-shadow:0 0 18px rgba(255,255,255,.55)
-    }
-    .lid{
-      position:absolute;left:-4%;right:-4%;height:50%;background:#000;z-index:3;pointer-events:none;
-      transition:transform .3s ease;
-    }
-    .lid.top{top:-1%;border-radius:0 0 50% 50%;transform:translateY(-95%)}
-    .lid.bottom{bottom:-1%;border-radius:50% 50% 0 0;transform:translateY(95%)}
-    .eye-tag{
-      position:absolute;left:50%;top:calc(50% + min(22vw,270px));transform:translateX(-50%);
-      width:min(88vw,680px);text-align:center;font-family:var(--serif);font-size:clamp(26px,4vw,52px);line-height:1.02;
-      letter-spacing:-.02em;color:#fff;
-    }
-    .eye-tag small{
-      display:block;margin-top:13px;font-family:var(--sans);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-      color:rgba(244,242,239,.42)
-    }
+/* GLOBE */
+#globeScreen{
+  position:absolute;inset:0;z-index:5;opacity:0;pointer-events:none;
+  perspective:var(--persp);perspective-origin:50% 43%;
+  transition:opacity .22s linear;
+}
+#globeScreen.visible{pointer-events:auto}
+#world{
+  position:absolute;left:50%;top:42%;width:0;height:0;
+  transform-style:preserve-3d;
+  transition:transform .82s var(--ease);
+}
+#globeScreen.dragging #world{transition:none}
+#orb{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+.photo-card{
+  position:absolute;left:0;top:0;width:var(--cw);height:calc(var(--cw)/1.5);
+  margin-left:calc(var(--cw)/-2);margin-top:calc(var(--cw)/-3);
+  cursor:pointer;transform-style:preserve-3d;will-change:opacity;
+}
+.photo-card figure{
+  position:absolute;inset:0;margin:0;overflow:hidden;border-radius:4px;background:#090909;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  transition:transform .36s var(--ease),box-shadow .36s ease;
+}
+.photo-card img{width:100%;height:100%;object-fit:cover;filter:saturate(.78) brightness(.8)}
+.photo-card figure::after{
+  content:"";position:absolute;inset:0;background:rgba(0,0,0,var(--d,.2));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);pointer-events:none;
+}
+.photo-card.active figure{transform:scale(1.08);box-shadow:0 0 34px rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.18)}
+.photo-card:hover figure{transform:scale(1.06)}
+.globe-center{
+  position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
+  width:min(76vw,680px);text-align:center;z-index:4;pointer-events:none;
+}
+.globe-center h2{margin:0;font-family:var(--serif);font-size:clamp(30px,4.5vw,60px);font-weight:400;line-height:1}
+.globe-center span{
+  display:block;margin-top:10px;font-size:8px;letter-spacing:.2em;text-transform:uppercase;color:rgba(244,242,239,.35)
+}
 
-    /* INSIDE THE EYE — PHOTO GLOBE */
-    #globeScreen{position:absolute;inset:0;z-index:3;opacity:0;pointer-events:none;transition:opacity .2s linear}
-    #world{
-      position:absolute;left:50%;top:46%;width:0;height:0;transform-style:preserve-3d;
-      perspective:var(--persp);will-change:transform;
-    }
-    #orb{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
-    .photo-card{
-      position:absolute;left:0;top:0;width:var(--cw);height:calc(var(--cw)/1.5);
-      margin-left:calc(var(--cw)/-2);margin-top:calc(var(--cw)/-3);
-      cursor:pointer;transform-style:preserve-3d;will-change:transform,opacity;
-      transition:filter .3s ease;
-    }
-    .photo-card figure{
-      position:absolute;inset:0;margin:0;overflow:hidden;border-radius:3px;background:#090909;
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);transition:transform .45s var(--ease);
-    }
-    .photo-card:hover figure,.photo-card.active figure{transform:scale(1.06)}
-    .photo-card img{width:100%;height:100%;object-fit:cover;filter:saturate(.78) brightness(.82)}
-    .photo-card figure::after{
-      content:"";position:absolute;inset:0;background:rgba(0,0,0,var(--d,0));
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);pointer-events:none
-    }
-    .photo-card.active{filter:drop-shadow(0 0 26px rgba(255,255,255,.18))}
-    .globe-title{
-      position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
-      z-index:4;width:min(70vw,700px);text-align:center;pointer-events:none;
-      font-family:var(--serif);font-size:clamp(24px,3.8vw,52px);line-height:1.03;font-weight:400;
-      text-shadow:0 2px 34px rgba(0,0,0,.8);
-    }
-    .globe-title span{display:block;font-family:var(--sans);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:rgba(244,242,239,.45);margin-top:10px}
+/* ONE INTRO AT A TIME */
+#story{
+  position:absolute;left:0;right:0;bottom:0;z-index:12;
+  padding:0 calc(var(--pad) + var(--safe-right)) calc(var(--pad) + var(--safe-bottom)) calc(var(--pad) + var(--safe-left));
+  display:flex;justify-content:center;pointer-events:none;
+}
+.story{
+  width:min(980px,100%);min-height:142px;border-top:1px solid rgba(244,242,239,.26);
+  display:grid;grid-template-columns:96px minmax(0,.92fr) minmax(0,1.25fr);gap:clamp(18px,3vw,44px);
+  padding-top:16px;opacity:0;transform:translateY(14px);transition:opacity .35s ease,transform .35s ease;
+}
+#globeScreen.visible .story{opacity:1;transform:none}
+.count{font-family:var(--serif);font-size:15px;color:rgba(244,242,239,.52)}
+.progress{height:1px;background:rgba(244,242,239,.12);margin-top:12px;overflow:hidden}
+.progress i{display:block;height:100%;background:#fff;transform-origin:left;transition:transform .25s linear}
+.kicker{font-size:8px;letter-spacing:.17em;text-transform:uppercase;color:rgba(244,242,239,.42);margin-bottom:8px}
+.story h3{margin:0;font-family:var(--serif);font-size:clamp(23px,2.8vw,36px);font-weight:400;line-height:1.02;letter-spacing:-.02em}
+.story-copy{font-size:12px;line-height:1.62;color:rgba(244,242,239,.74)}
+.story-copy small{display:block;margin-top:10px;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:rgba(244,242,239,.3)}
 
-    /* BOTTOM STORY — ONE INTRO AT A TIME */
-    #story{
-      position:absolute;left:0;right:0;bottom:0;z-index:6;pointer-events:none;
-      padding:0 calc(var(--pad) + var(--safe-right)) calc(var(--pad) + var(--safe-bottom)) calc(var(--pad) + var(--safe-left));
-      display:flex;justify-content:center;
-    }
-    .story-card{
-      width:min(930px,100%);min-height:124px;border-top:1px solid rgba(244,242,239,.3);
-      padding:15px 0 0;display:grid;grid-template-columns:110px minmax(0,.9fr) minmax(0,1.2fr);gap:clamp(18px,3vw,42px);
-      opacity:0;transform:translateY(18px);transition:opacity .4s ease,transform .4s ease;
-    }
-    #globeScreen.visible .story-card{opacity:1;transform:none}
-    .story-count{font-family:var(--serif);font-size:15px;color:rgba(244,242,239,.54)}
-    .story-title{font-family:var(--serif);font-size:clamp(22px,2.5vw,34px);line-height:1.02;font-weight:400;margin:0 0 7px}
-    .story-kicker{font-size:8px;text-transform:uppercase;letter-spacing:.18em;color:rgba(244,242,239,.42)}
-    .story-copy{font-size:12px;line-height:1.62;color:rgba(244,242,239,.76)}
-    .story-hint{display:block;margin-top:9px;font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:rgba(244,242,239,.34)}
-    .progress{height:1px;background:rgba(255,255,255,.11);margin-top:10px;overflow:hidden}
-    .progress i{display:block;height:100%;background:#fff;transform-origin:left;transition:transform .25s linear}
+/* LIGHTBOX */
+#lightbox{
+  position:fixed;inset:0;z-index:80;display:grid;place-items:center;
+  opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+body.lightbox #lightbox{opacity:1;pointer-events:auto}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.plate{position:relative;z-index:2;width:min(78vw,920px);transition:transform .52s var(--ease),opacity .32s ease}
+.shot{position:relative;width:100%;aspect-ratio:3/2;border-radius:4px;overflow:hidden;background:#080808;box-shadow:0 30px 90px rgba(0,0,0,.82)}
+.shot img{width:100%;height:100%;object-fit:cover}
+.close{
+  position:absolute;right:12px;top:12px;z-index:3;min-width:44px;min-height:44px;
+  border:1px solid rgba(255,255,255,.72);border-radius:6px;background:rgba(0,0,0,.35);
+  padding:8px 13px;font-size:11px
+}
+.lbmeta{display:grid;grid-template-columns:.82fr 1.18fr;gap:30px;padding-top:14px}
+.lbmeta h2{margin:0 0 6px;font-family:var(--serif);font-size:clamp(24px,2.6vw,35px);font-weight:400;line-height:1.03}
+.lbmeta small{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:rgba(244,242,239,.42)}
+.lbmeta p{margin:0;font-size:12.5px;line-height:1.62;color:rgba(244,242,239,.8)}
 
-    .header{
-      position:absolute;left:0;right:0;top:0;z-index:7;padding:
-        calc(var(--pad)*.8 + var(--safe-top))
-        calc(var(--pad) + var(--safe-right))
-        0 calc(var(--pad) + var(--safe-left));
-      display:flex;justify-content:space-between;align-items:flex-start;
-      opacity:0;transition:opacity .5s ease;pointer-events:none;
-    }
-    #globeScreen.visible .header{opacity:1;pointer-events:auto}
-    .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:clamp(20px,2vw,27px)}
-    .brand img{width:26px;height:26px;filter:grayscale(1) brightness(3)}
-    .try{
-      border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:10px 15px;
-      font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:rgba(0,0,0,.18);
-      backdrop-filter:blur(8px)
-    }
+#dot{
+  position:fixed;left:0;top:0;z-index:100;width:19px;height:19px;margin:-9.5px 0 0 -9.5px;border-radius:50%;
+  background:rgba(220,218,214,.9);mix-blend-mode:difference;border:1px solid transparent;pointer-events:none;
+  transition:width .28s ease,height .28s ease,margin .28s ease,background .28s ease,border-color .28s ease;
+}
+#dot.wide{width:52px;height:52px;margin:-26px 0 0 -26px;background:rgba(244,242,239,.13);border-color:rgba(244,242,239,.72)}
+@media(hover:none),(pointer:coarse){#dot{display:none}}
 
-    /* LIGHTBOX */
-    #lightbox{
-      position:fixed;inset:0;z-index:50;display:grid;place-items:center;
-      opacity:0;pointer-events:none;transition:opacity .35s ease;
-    }
-    body.lightbox #lightbox{opacity:1;pointer-events:auto}
-    .scrim{position:absolute;inset:0;background:rgba(0,0,0,.3)}
-    .plate{
-      position:relative;z-index:2;width:min(76vw,900px);max-height:78vh;
-      transition:transform .55s var(--ease),opacity .35s ease;
-    }
-    .shot{
-      position:relative;width:100%;aspect-ratio:3/2;border-radius:3px;overflow:hidden;background:#080808;
-      box-shadow:0 30px 90px rgba(0,0,0,.8)
-    }
-    .shot img{width:100%;height:100%;object-fit:cover}
-    .close{
-      position:absolute;right:12px;top:12px;z-index:3;border:1px solid rgba(255,255,255,.7);border-radius:6px;
-      min-width:44px;min-height:44px;padding:9px 13px;background:rgba(0,0,0,.35);font-size:11px
-    }
-    .lbmeta{display:grid;grid-template-columns:.8fr 1.2fr;gap:30px;padding-top:14px}
-    .lbmeta h2{font-family:var(--serif);font-size:clamp(24px,2.5vw,34px);font-weight:400;line-height:1.05;margin:0 0 7px}
-    .lbmeta small{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:rgba(244,242,239,.46)}
-    .lbmeta p{margin:0;font-size:12.5px;line-height:1.62;color:rgba(244,242,239,.82)}
-
-    #dot{
-      position:fixed;left:0;top:0;z-index:100;width:19px;height:19px;margin:-9.5px 0 0 -9.5px;border-radius:50%;
-      background:rgba(220,218,214,.9);mix-blend-mode:difference;border:1px solid transparent;pointer-events:none;
-      transition:width .3s ease,height .3s ease,margin .3s ease,background .3s ease,border-color .3s ease;
-    }
-    #dot.wide{width:52px;height:52px;margin:-26px 0 0 -26px;background:rgba(244,242,239,.13);border-color:rgba(244,242,239,.72)}
-    @media(hover:none),(pointer:coarse){#dot{display:none}}
-
-    @media(max-width:900px){
-      #eyeWrap{width:min(82vw,780px)}
-      .story-card{grid-template-columns:72px 1fr 1.15fr}
-      .plate{width:min(92vw,840px)}
-    }
-    @media(max-width:640px){
-      :root{--pad:clamp(12px,4vw,18px)}
-      #eyeWrap{width:92vw}
-      .eye-tag{top:calc(50% + 29vw);font-size:clamp(24px,8vw,38px)}
-      .eye-kicker{display:none}
-      #world{top:40%}
-      .globe-title{top:40%;width:84vw;font-size:clamp(22px,7vw,34px)}
-      .story-card{grid-template-columns:48px 1fr;gap:12px;min-height:164px}
-      .story-copy{grid-column:2}
-      .story-title{font-size:24px}
-      .story-hint{display:none}
-      .header{padding-top:calc(12px + var(--safe-top))}
-      .plate{width:calc(100vw - 24px)}
-      .lbmeta{grid-template-columns:1fr;gap:9px}
-    }
-    @media(max-width:380px){
-      .story-card{grid-template-columns:40px 1fr}
-      .story-title{font-size:21px}
-      .story-copy{font-size:11.5px}
-    }
-    @media(max-height:540px) and (orientation:landscape){
-      .eye-tag{display:none}
-      .story-card{min-height:92px}
-      .story-copy{font-size:10.5px}
-      #world,.globe-title{top:42%}
-    }
-    @media(prefers-reduced-motion:reduce){
-      *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.14s!important}
-    }
-  </style>
+@media(max-width:760px){
+  #eyeZoom{width:96vw}
+  .eye-copy{bottom:calc(12vh + var(--safe-bottom))}
+  .eye-copy h1{font-size:clamp(38px,10vw,56px)}
+  .globe-center{top:38%;width:86vw}
+  #world{top:38%}
+  .story{grid-template-columns:48px 1fr;gap:11px;min-height:180px}
+  .story-copy{grid-column:2}
+  .story h3{font-size:25px}
+  .story-copy{font-size:11.5px}
+  .story-copy small{display:none}
+  .plate{width:calc(100vw - 24px)}
+  .lbmeta{grid-template-columns:1fr;gap:9px}
+}
+@media(max-width:390px){
+  .header{padding-top:calc(18px + var(--safe-top))}
+  .brand{font-size:27px}
+  .try{padding:0 14px}
+  .story h3{font-size:22px}
+}
+@media(max-height:560px) and (orientation:landscape){
+  .eye-copy{display:none}
+  #world,.globe-center{top:38%}
+  .story{min-height:98px}
+  .story-copy{font-size:10.5px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.12s!important}
+}
+</style>
 </head>
 <body>
-  <div id="scrollTrack" aria-hidden="true"></div>
+<div id="scrollTrack"></div>
 
-  <main id="scene">
-    <section id="eyeScreen" aria-label="Ana introduction">
-      <div class="eye-copy">
-        <div class="eye-brand"><img src="/ana-app-icon.svg" alt=""><span>Ana</span></div>
-      </div>
+<main id="scene">
+  <header class="header">
+    <a class="brand" href="#" id="home">Ana</a>
+    <a class="try" href="/?auth=login">Try Ana</a>
+  </header>
 
-      <div id="eyeWrap">
-        <div class="eye-shell">
-          <div class="sclera"></div>
-          <div class="iris">
-            <div class="pupil"><img src="/ana-app-icon.svg" alt=""></div>
-            <div class="eye-shine"></div>
-          </div>
-          <div class="lid top"></div>
-          <div class="lid bottom"></div>
+  <section id="eyeScreen" aria-label="Enter Ana">
+    <div id="eyeZoom">
+      <svg id="eyeSvg" viewBox="0 0 1200 520" role="img" aria-label="Ana eye">
+        <defs>
+          <radialGradient id="sclera" cx="50%" cy="48%" r="58%">
+            <stop offset="0%" stop-color="#f5f5f2"/>
+            <stop offset="50%" stop-color="#d7d7d3"/>
+            <stop offset="78%" stop-color="#5b5b58"/>
+            <stop offset="100%" stop-color="#050505"/>
+          </radialGradient>
+          <radialGradient id="iris" cx="48%" cy="44%" r="60%">
+            <stop offset="0%" stop-color="#9fd8d0"/>
+            <stop offset="18%" stop-color="#577f7c"/>
+            <stop offset="48%" stop-color="#39354e"/>
+            <stop offset="75%" stop-color="#171720"/>
+            <stop offset="100%" stop-color="#050506"/>
+          </radialGradient>
+          <clipPath id="eyeClip">
+            <path d="M55 260 Q300 18 600 18 Q900 18 1145 260 Q900 502 600 502 Q300 502 55 260Z"/>
+          </clipPath>
+        </defs>
+        <g clip-path="url(#eyeClip)">
+          <rect x="0" y="0" width="1200" height="520" fill="url(#sclera)"/>
+          <circle cx="600" cy="260" r="166" fill="url(#iris)"/>
+          <g class="iris-rays" opacity=".42">
+            <path d="M600 97L600 189M600 331L600 423M437 260L529 260M671 260L763 260M485 145L550 210M650 310L715 375M485 375L550 310M650 210L715 145" stroke="#d9f7f1" stroke-width="4"/>
+            <path d="M459 178L535 224M665 296L741 342M459 342L535 296M665 224L741 178" stroke="#7d72db" stroke-width="5"/>
+          </g>
+          <circle cx="600" cy="260" r="69" fill="#000"/>
+          <circle cx="550" cy="205" r="23" fill="rgba(255,255,255,.88)"/>
+          <circle cx="575" cy="230" r="8" fill="rgba(255,255,255,.4)"/>
+        </g>
+        <path d="M55 260 Q300 18 600 18 Q900 18 1145 260 Q900 502 600 502 Q300 502 55 260Z" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="5"/>
+        <path d="M55 260 Q300 18 600 18 Q900 18 1145 260" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="10"/>
+        <path d="M55 260 Q300 502 600 502 Q900 502 1145 260" fill="none" stroke="rgba(255,255,255,.11)" stroke-width="8"/>
+      </svg>
+    </div>
+    <div class="eye-copy">
+      <h1>Language shouldn’t get in the way.</h1>
+      <p>Scroll to enter Ana</p>
+    </div>
+  </section>
+
+  <section id="globeScreen" aria-label="Explore Ana">
+    <div id="world"><div id="orb"></div></div>
+    <div class="globe-center"><h2>Explore Ana</h2><span>Scroll the story · drag the globe · tap a photo</span></div>
+    <div id="story">
+      <article class="story">
+        <div>
+          <div class="count"><span id="storyNo">01</span> / <span id="storyTotal">16</span></div>
+          <div class="progress"><i id="storyProgress"></i></div>
         </div>
-      </div>
+        <div>
+          <div class="kicker" id="storyKicker"></div>
+          <h3 id="storyTitle"></h3>
+        </div>
+        <div class="story-copy">
+          <span id="storyText"></span>
+          <small>Tap the highlighted photograph to open it</small>
+        </div>
+      </article>
+    </div>
+  </section>
 
-      <div class="eye-tag">Language shouldn’t get in the way.<small>Scroll to enter Ana</small></div>
-      <div class="eye-kicker">Scroll inside</div>
-    </section>
+  <div class="vignette"></div>
+</main>
 
-    <section id="globeScreen" aria-label="Explore Ana">
-      <div class="header">
-        <a href="#" class="brand" id="homeLink"><img src="/ana-app-icon.svg" alt=""><span>Ana</span></a>
-        <a class="try" href="/?auth=login">Try Ana</a>
-      </div>
-
-      <div id="world"><div id="orb"></div></div>
-      <div class="globe-title">Explore Ana<span>Scroll through the story · drag the globe · tap a photograph</span></div>
-
-      <div id="story">
-        <article class="story-card">
-          <div>
-            <div class="story-count"><span id="storyNo">01</span> / <span id="storyTotal">16</span></div>
-            <div class="progress"><i id="storyProgress"></i></div>
-          </div>
-          <div>
-            <div class="story-kicker" id="storyKicker">ANA</div>
-            <h2 class="story-title" id="storyTitle">Language shouldn’t get in the way.</h2>
-          </div>
-          <div class="story-copy">
-            <span id="storyText">Ana helps you communicate without forcing you to change how you already work.</span>
-            <span class="story-hint">Tap the highlighted photograph to open it</span>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <div class="grain"></div>
-    <div class="vig"></div>
-  </main>
-
-  <div id="lightbox" aria-hidden="true">
-    <div class="scrim" data-close></div>
-    <div class="plate">
-      <div class="shot">
-        <img id="lbImg" alt="">
-        <button class="close" data-close>Close</button>
-      </div>
-      <div class="lbmeta">
-        <div><h2 id="lbTitle"></h2><small id="lbKicker"></small></div>
-        <p id="lbText"></p>
-      </div>
+<div id="lightbox" aria-hidden="true">
+  <div class="scrim" data-close></div>
+  <div class="plate">
+    <div class="shot">
+      <img id="lbImg" alt="">
+      <button class="close" data-close>Close</button>
+    </div>
+    <div class="lbmeta">
+      <div><h2 id="lbTitle"></h2><small id="lbKicker"></small></div>
+      <p id="lbText"></p>
     </div>
   </div>
+</div>
 
-  <div id="dot" aria-hidden="true"></div>
+<div id="dot"></div>
 
-  <script>
-  (function(){
-    "use strict";
+<script>
+(function(){
+"use strict";
 
-    var ITEMS=[
-      {
-        title:"Language shouldn’t get in the way.",kicker:"ANA",
-        text:"Ana helps you write, translate, reply and understand the world around you — without changing how you already communicate.",
-        img:"https://images.pexels.com/photos/19682344/pexels-photo-19682344.jpeg?auto=compress&cs=tinysrgb&w=1800"
-      },
-      {
-        title:"Translate what you mean.",kicker:"TRANSLATE TEXT",
-        text:"Type, paste or dictate. Ana focuses on natural meaning in the target language rather than mechanical word-for-word replacement.",
-        img:"https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Tell Ana the thought. Ana writes it.",kicker:"WRITE FOR ME",
-        text:"Start with a rough thought, a few words or just the point you want to make. Ana turns it into a ready-to-send message, email or note.",
-        img:"https://images.pexels.com/photos/261949/pexels-photo-261949.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Reply without leaving the conversation.",kicker:"REPLY",
-        text:"Use selected or copied context, review Ana’s suggested answer and paste it back where the conversation is already happening.",
-        img:"https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Correct the sentence. Or the whole paragraph.",kicker:"CORRECT",
-        text:"Ana fixes spelling, grammar, wording and clarity while keeping the meaning, terminology and tone you intended.",
-        img:"https://images.pexels.com/photos/4050291/pexels-photo-4050291.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Translate documents without destroying them.",kicker:"PDF · WORD",
-        text:"Translate PDF and Word while preserving headings, tables, images, headers and the visual structure wherever possible.",
-        img:"https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Point. Translate. Understand.",kicker:"CAMERA",
-        text:"Use Ana for signs, menus, notices, labels and other text inside pictures. The translation stays connected to what you were looking at.",
-        img:"https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Stay in the meeting.",kicker:"MEETING LISTEN",
-        text:"Ana can follow longer conversations with live transcription and translation so a language change does not make you lose the discussion.",
-        img:"https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Let Ana help carry the conversation.",kicker:"TALK FOR ME · EARLY ACCESS",
-        text:"Useful for routine back-and-forth while important choices, commitments and decisions stay with you.",
-        img:"https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Useful when you ask. Quiet when you don’t.",kicker:"PRIVACY",
-        text:"Normal typing can stay local. Sensitive fields and explicit controls decide when cloud AI is used.",
-        img:"https://images.pexels.com/photos/4260314/pexels-photo-4260314.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Bring Ana into your own workflow.",kicker:"ANA API",
-        text:"Selected Ana language capabilities can also sit inside an existing product, internal tool or business process.",
-        img:"https://images.pexels.com/photos/5483077/pexels-photo-5483077.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Your document. Still your document.",kicker:"DOCUMENT TRANSLATION",
-        text:"Ana keeps structure and visual hierarchy connected to the translated content instead of turning the document into a plain text dump.",
-        img:"https://images.pexels.com/photos/8970674/pexels-photo-8970674.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Translate what is in front of you.",kicker:"PICTURE TRANSLATION",
-        text:"Compare original and translated views, inspect small text and keep translated content connected to where it appeared.",
-        img:"https://images.pexels.com/photos/9798546/pexels-photo-9798546.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Know what the message says. Know what to say back.",kicker:"REPLY · WRITE · TRANSLATE",
-        text:"Ana turns understanding and response into one flow instead of making you jump between separate tools.",
-        img:"https://images.pexels.com/photos/7342998/pexels-photo-7342998.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Language changes. The meeting keeps moving.",kicker:"LIVE & MEETINGS",
-        text:"Live translation, transcript and meeting notes are designed to keep you with the conversation rather than behind it.",
-        img:"https://images.pexels.com/photos/7433900/pexels-photo-7433900.jpeg?auto=compress&cs=tinysrgb&w=1600"
-      },
-      {
-        title:"Communicate without changing how you work.",kicker:"ANA",
-        text:"Type, speak, copy, photograph, upload, listen and reply. Ana is the language layer around the way you already communicate.",
-        img:"https://images.pexels.com/photos/3885587/pexels-photo-3885587.jpeg?auto=compress&cs=tinysrgb&w=1800"
-      }
-    ];
+var ITEMS=[
+["ANA","Language shouldn’t get in the way.","Ana helps you write, translate, reply and understand the world around you — without changing how you already communicate.","19682344/pexels-photo-19682344.jpeg"],
+["TRANSLATE TEXT","Translate what you mean.","Type, paste or dictate. Ana focuses on natural meaning in the target language rather than mechanical word-for-word replacement.","3769138/pexels-photo-3769138.jpeg"],
+["WRITE FOR ME","Tell Ana the thought. Ana writes it.","Start with a rough thought, a few words or just the point you want to make. Ana turns it into a ready-to-send message, email or note.","261949/pexels-photo-261949.jpeg"],
+["REPLY","Reply without leaving the conversation.","Use selected or copied context, review Ana’s suggested answer and paste it back where the conversation is already happening.","19474421/pexels-photo-19474421.jpeg"],
+["CORRECT","Correct the sentence. Or the whole paragraph.","Ana fixes spelling, grammar, wording and clarity while keeping the meaning, terminology and tone you intended.","4050291/pexels-photo-4050291.jpeg"],
+["PDF · WORD","Translate documents without destroying them.","Translate PDF and Word while preserving headings, tables, images, headers and the visual structure wherever possible.","92631/pexels-photo-92631.jpeg"],
+["CAMERA","Point. Translate. Understand.","Use Ana for signs, menus, notices, labels and other text inside pictures. The translation stays connected to what you were looking at.","18240395/pexels-photo-18240395.jpeg"],
+["MEETING LISTEN","Stay in the meeting.","Ana can follow longer conversations with live transcription and translation so a language change does not make you lose the discussion.","8133989/pexels-photo-8133989.jpeg"],
+["TALK FOR ME · EARLY ACCESS","Let Ana help carry the conversation.","Useful for routine back-and-forth while important choices, commitments and decisions stay with you.","7108327/pexels-photo-7108327.jpeg"],
+["PRIVACY","Useful when you ask. Quiet when you don’t.","Normal typing can stay local. Sensitive fields and explicit controls decide when cloud AI is used.","4260314/pexels-photo-4260314.jpeg"],
+["ANA API","Bring Ana into your own workflow.","Selected Ana language capabilities can also sit inside an existing product, internal tool or business process.","5483077/pexels-photo-5483077.jpeg"],
+["DOCUMENT TRANSLATION","Your document. Still your document.","Ana keeps structure and visual hierarchy connected to the translated content instead of turning the document into a plain text dump.","8970674/pexels-photo-8970674.jpeg"],
+["PICTURE TRANSLATION","Translate what is in front of you.","Compare original and translated views, inspect small text and keep translated content connected to where it appeared.","9798546/pexels-photo-9798546.jpeg"],
+["REPLY · WRITE · TRANSLATE","Know what the message says. Know what to say back.","Ana turns understanding and response into one flow instead of making you jump between separate tools.","7342998/pexels-photo-7342998.jpeg"],
+["LIVE & MEETINGS","Language changes. The meeting keeps moving.","Live translation, transcript and meeting notes are designed to keep you with the conversation rather than behind it.","7433900/pexels-photo-7433900.jpeg"],
+["ANA","Communicate without changing how you work.","Type, speak, copy, photograph, upload, listen and reply. Ana is the language layer around the way you already communicate.","3885587/pexels-photo-3885587.jpeg"]
+].map(function(x){
+  return {kicker:x[0],title:x[1],text:x[2],img:"https://images.pexels.com/photos/"+x[3]+"?auto=compress&cs=tinysrgb&w=900"};
+});
 
-    var eyeScreen=document.getElementById("eyeScreen");
-    var eyeWrap=document.getElementById("eyeWrap");
-    var globeScreen=document.getElementById("globeScreen");
-    var world=document.getElementById("world");
-    var orb=document.getElementById("orb");
-    var storyNo=document.getElementById("storyNo");
-    var storyTotal=document.getElementById("storyTotal");
-    var storyProgress=document.getElementById("storyProgress");
-    var storyKicker=document.getElementById("storyKicker");
-    var storyTitle=document.getElementById("storyTitle");
-    var storyText=document.getElementById("storyText");
-    var lightbox=document.getElementById("lightbox");
-    var plate=lightbox.querySelector(".plate");
-    var lbImg=document.getElementById("lbImg");
-    var lbTitle=document.getElementById("lbTitle");
-    var lbKicker=document.getElementById("lbKicker");
-    var lbText=document.getElementById("lbText");
-    var dot=document.getElementById("dot");
+var eyeScreen=document.getElementById("eyeScreen");
+var eyeZoom=document.getElementById("eyeZoom");
+var globe=document.getElementById("globeScreen");
+var world=document.getElementById("world");
+var orb=document.getElementById("orb");
+var storyNo=document.getElementById("storyNo");
+var storyTotal=document.getElementById("storyTotal");
+var storyProgress=document.getElementById("storyProgress");
+var storyKicker=document.getElementById("storyKicker");
+var storyTitle=document.getElementById("storyTitle");
+var storyText=document.getElementById("storyText");
+var lightbox=document.getElementById("lightbox");
+var plate=lightbox.querySelector(".plate");
+var lbImg=document.getElementById("lbImg");
+var lbTitle=document.getElementById("lbTitle");
+var lbKicker=document.getElementById("lbKicker");
+var lbText=document.getElementById("lbText");
+var dot=document.getElementById("dot");
 
-    storyTotal.textContent=String(ITEMS.length).padStart(2,"0");
+storyTotal.textContent=String(ITEMS.length).padStart(2,"0");
 
-    var cards=[],units=[],N=ITEMS.length,GA=Math.PI*(3-Math.sqrt(5));
-    var R=260,perspective=1150,dragX=0,dragY=-4,velX=0,velY=0,dragging=null;
-    var autoYaw=0,autoPitch=0,active=0,lastActive=-1,opened=-1,sourceCard=null;
-    var lastW=innerWidth,lastH=innerHeight;
+var N=ITEMS.length,GA=Math.PI*(3-Math.sqrt(5)),cards=[],units=[];
+var R=250,persp=1000,active=-1;
+var baseYaw=0,basePitch=-4,dragYaw=0,dragPitch=0,velYaw=0,velPitch=0;
+var dragging=null,rafPending=false,inertiaId=0,opened=-1,sourceCard=null,lastW=innerWidth,lastH=innerHeight;
 
-    function buildSphere(){
-      ITEMS.forEach(function(item,i){
-        var c=document.createElement("div");c.className="photo-card";c.dataset.idx=i;
-        c.innerHTML='<figure><img src="'+item.img+'" alt="'+item.title.replace(/"/g,"&quot;")+'"></figure>';
-        orb.appendChild(c);cards.push(c);
+function build(){
+  ITEMS.forEach(function(item,i){
+    var c=document.createElement("div");
+    c.className="photo-card";
+    c.dataset.idx=String(i);
+    c.innerHTML='<figure><img loading="'+(i<4?'eager':'lazy')+'" decoding="async" src="'+item.img+'" alt="'+item.title.replace(/"/g,"&quot;")+'"></figure>';
+    orb.appendChild(c);
+    cards.push(c);
 
-        var y=1-(i/(N-1))*2;
-        var rad=Math.sqrt(Math.max(0,1-y*y));
-        var theta=i*GA,x=Math.cos(theta)*rad,z=Math.sin(theta)*rad;
-        var lat=Math.asin(y)*180/Math.PI;
-        var lon=Math.atan2(x,z)*180/Math.PI;
-        units.push({x:x,y:y,z:z,lat:lat,lon:lon});
-      });
-    }
+    var y=1-(i/(N-1))*2;
+    var rad=Math.sqrt(Math.max(0,1-y*y));
+    var theta=i*GA,x=Math.cos(theta)*rad,z=Math.sin(theta)*rad;
+    units.push({x:x,y:y,z:z,lat:Math.asin(y)*180/Math.PI,lon:Math.atan2(x,z)*180/Math.PI});
+  });
+}
 
-    function layout(force){
-      var w=innerWidth,h=innerHeight;
-      if(!force&&Math.abs(w-lastW)<20&&Math.abs(h-lastH)<20)return;
-      lastW=w;lastH=h;
-      var hr=w<=380?.35:w<=640?.39:.44,wr=w<=380?.43:w<=640?.48:.56,floor=w<=380?105:w<=640?118:155;
-      R=Math.max(floor,Math.min(470,h*hr,w*wr));
-      var scale=w<=380?.43:w<=640?.45:.47;
-      document.documentElement.style.setProperty("--cw",Math.round(Math.max(72,R*scale))+"px");
-      perspective=w<=380?620:w<=640?760:w<=900?920:1150;
-      document.documentElement.style.setProperty("--persp",perspective+"px");
+function layout(force){
+  var w=innerWidth,h=innerHeight;
+  if(!force&&Math.abs(w-lastW)<20&&Math.abs(h-lastH)<20)return;
+  lastW=w;lastH=h;
+  var hr=w<=390?.34:w<=640?.38:.44,wr=w<=390?.43:w<=640?.48:.56,floor=w<=390?104:w<=640?118:150;
+  R=Math.max(floor,Math.min(450,h*hr,w*wr));
+  var scale=w<=390?.42:w<=640?.44:.47;
+  document.documentElement.style.setProperty("--cw",Math.round(Math.max(70,R*scale))+"px");
+  persp=w<=390?620:w<=640?760:w<=900?900:1000;
+  document.documentElement.style.setProperty("--persp",persp+"px");
 
-      units.forEach(function(u,i){
-        cards[i].style.transform=
-          "translate3d("+(u.x*R).toFixed(2)+"px,"+(-u.y*R).toFixed(2)+"px,"+(u.z*R).toFixed(2)+"px) rotateY("+u.lon.toFixed(3)+"deg) rotateX("+u.lat.toFixed(3)+"deg)";
-      });
-    }
+  units.forEach(function(u,i){
+    cards[i].style.transform="translate3d("+(u.x*R).toFixed(1)+"px,"+(-u.y*R).toFixed(1)+"px,"+(u.z*R).toFixed(1)+"px) rotateY("+u.lon.toFixed(2)+"deg) rotateX("+u.lat.toFixed(2)+"deg)";
+  });
+  scheduleRender();
+}
 
-    function currentScroll(){
-      var y=scrollY,h=innerHeight;
-      var eyeEnd=h*1.25;
-      var storyStart=h*1.15;
-      var step=h*.78;
-      var storyP=(y-storyStart)/step;
-      return {y:y,h:h,eyeEnd:eyeEnd,storyStart:storyStart,step:step,storyP:storyP};
-    }
+function scrollState(){
+  var h=innerHeight,y=scrollY;
+  var eyeEnd=h*1.18;
+  var storyStart=h*1.02;
+  var step=h*.54;
+  return {y:y,h:h,eyeEnd:eyeEnd,storyStart:storyStart,step:step};
+}
 
-    function setActive(i){
-      i=Math.max(0,Math.min(N-1,i));
-      if(i===lastActive)return;
-      active=i;lastActive=i;
-      cards.forEach(function(c,j){c.classList.toggle("active",j===i)});
-      var item=ITEMS[i];
-      storyNo.textContent=String(i+1).padStart(2,"0");
-      storyKicker.textContent=item.kicker;
-      storyTitle.textContent=item.title;
-      storyText.textContent=item.text;
-      storyProgress.style.transform="scaleX("+((i+1)/N)+")";
+function setActive(i){
+  i=Math.max(0,Math.min(N-1,i));
+  if(i===active)return;
+  active=i;
+  cards.forEach(function(c,j){c.classList.toggle("active",j===i)});
+  var item=ITEMS[i];
+  storyNo.textContent=String(i+1).padStart(2,"0");
+  storyKicker.textContent=item.kicker;
+  storyTitle.textContent=item.title;
+  storyText.textContent=item.text;
+  storyProgress.style.transform="scaleX("+((i+1)/N)+")";
 
-      var u=units[i];
-      autoYaw=-u.lon;
-      autoPitch=Math.max(-26,Math.min(26,u.lat*.72));
-    }
+  var u=units[i];
+  baseYaw=-u.lon;
+  basePitch=Math.max(-24,Math.min(24,u.lat*.68));
+}
 
-    function depth(u,pitch,yaw){
-      var x=u.x,y=-u.y,z=u.z,rx=pitch*Math.PI/180,ry=yaw*Math.PI/180,cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry);
-      var y1=y*cx-z*sx,z1=y*sx+z*cx;
-      return -x*sy+z1*cy;
-    }
+function depth(u,pitch,yaw){
+  var x=u.x,y=-u.y,z=u.z,rx=pitch*Math.PI/180,ry=yaw*Math.PI/180;
+  var cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry);
+  var y1=y*cx-z*sx,z1=y*sx+z*cx;
+  return -x*sy+z1*cy;
+}
 
-    function frame(){
-      var sc=currentScroll();
-      var eyeP=Math.max(0,Math.min(1,sc.y/sc.eyeEnd));
-      var zoom=1+Math.pow(eyeP,1.7)*20;
-      eyeWrap.style.transform="scale("+zoom+")";
-      eyeScreen.style.opacity=String(Math.max(0,1-eyeP*1.18));
+function render(){
+  rafPending=false;
+  var s=scrollState();
+  var ep=Math.max(0,Math.min(1,s.y/s.eyeEnd));
+  var zoom=1+Math.pow(ep,1.72)*12;
+  eyeZoom.style.transform="scale("+zoom.toFixed(3)+")";
+  eyeScreen.style.opacity=String(Math.max(0,1-ep*1.28));
 
-      var globeOpacity=Math.max(0,Math.min(1,(eyeP-.58)/.28));
-      globeScreen.style.opacity=String(globeOpacity);
-      globeScreen.classList.toggle("visible",globeOpacity>.5);
-      globeScreen.style.pointerEvents=globeOpacity>.62?"auto":"none";
+  var go=Math.max(0,Math.min(1,(ep-.58)/.24));
+  globe.style.opacity=String(go);
+  globe.classList.toggle("visible",go>.35);
 
-      var idx=sc.storyP<0?0:Math.floor(sc.storyP);
-      setActive(idx);
+  var storyIndex=s.y<s.storyStart?0:Math.floor((s.y-s.storyStart)/s.step);
+  setActive(storyIndex);
 
-      if(!dragging&&!document.body.classList.contains("lightbox")){
-        dragX+=velX;dragY+=velY;velX*=.94;velY*=.94;
-        if(Math.abs(velX)<.002)velX=0;if(Math.abs(velY)<.002)velY=0;
-      }
-      var yaw=autoYaw+dragX;
-      var pitch=Math.max(-32,Math.min(32,autoPitch+dragY));
-      world.style.transform="rotateY("+yaw.toFixed(3)+"deg) rotateX("+pitch.toFixed(3)+"deg)";
+  var yaw=baseYaw+dragYaw;
+  var pitch=Math.max(-32,Math.min(32,basePitch+dragPitch));
+  world.style.transform="rotateY("+yaw.toFixed(2)+"deg) rotateX("+pitch.toFixed(2)+"deg)";
 
-      cards.forEach(function(card,i){
-        var zf=depth(units[i],pitch,yaw);
-        var base=.14+.86*Math.pow((zf+1)/2,.85);
-        var dim=1-base;
-        var opacity=.26+.74*((zf+1)/2);
-        if(i===active){dim=Math.max(0,dim-.2);opacity=1}
-        if(document.body.classList.contains("lightbox")&&i===opened)opacity=0;
-        card.style.opacity=opacity.toFixed(3);
-        card.style.setProperty("--d",dim.toFixed(3));
-      });
+  cards.forEach(function(card,i){
+    var zf=depth(units[i],pitch,yaw);
+    var depth01=(zf+1)/2;
+    var dim=1-(.18+.82*Math.pow(depth01,.82));
+    var opacity=.2+.8*depth01;
+    if(i===active){dim=Math.max(0,dim-.22);opacity=1}
+    if(document.body.classList.contains("lightbox")&&i===opened)opacity=0;
+    card.style.opacity=opacity.toFixed(3);
+    card.style.setProperty("--d",Math.max(0,Math.min(1,dim)).toFixed(3));
+  });
+}
 
-      requestAnimationFrame(frame);
-    }
+function scheduleRender(){
+  if(rafPending)return;
+  rafPending=true;
+  requestAnimationFrame(render);
+}
 
-    function openItem(i,source){
-      if(document.body.classList.contains("lightbox"))return;
-      opened=i;sourceCard=source;
-      var item=ITEMS[i];
-      lbImg.src=item.img;lbImg.alt=item.title;lbTitle.textContent=item.title;lbKicker.textContent=item.kicker;lbText.textContent=item.text;
-      var sr=source.getBoundingClientRect();
-      document.body.classList.add("lightbox");lightbox.setAttribute("aria-hidden","false");
-      requestAnimationFrame(function(){
-        var pr=plate.getBoundingClientRect(),dx=(sr.left+sr.width/2)-(pr.left+pr.width/2),dy=(sr.top+sr.height/2)-(pr.top+pr.height/2),sc=Math.max(.04,sr.width/Math.max(1,pr.width));
-        plate.style.transition="none";plate.style.transform="translate("+dx+"px,"+dy+"px) scale("+sc+")";plate.style.opacity="0";plate.offsetHeight;
-        requestAnimationFrame(function(){plate.style.transition="";plate.style.transform="";plate.style.opacity=""});
-      });
-    }
-    function closeItem(){
-      if(!document.body.classList.contains("lightbox"))return;
-      var sr=sourceCard?sourceCard.getBoundingClientRect():null,pr=plate.getBoundingClientRect();
-      document.body.classList.remove("lightbox");lightbox.setAttribute("aria-hidden","true");
-      if(sr){
-        var dx=(sr.left+sr.width/2)-(pr.left+pr.width/2),dy=(sr.top+sr.height/2)-(pr.top+pr.height/2),sc=Math.max(.04,sr.width/Math.max(1,pr.width));
-        plate.style.transition="transform .55s var(--ease),opacity .35s ease";plate.style.transform="translate("+dx+"px,"+dy+"px) scale("+sc+")";plate.style.opacity="0";
-      }
-      setTimeout(function(){plate.style.transition="none";plate.style.transform="";plate.style.opacity="";plate.offsetHeight;plate.style.transition="";opened=-1},570);
-    }
+function stopInertia(){
+  if(inertiaId){cancelAnimationFrame(inertiaId);inertiaId=0}
+}
 
-    globeScreen.addEventListener("pointerdown",function(e){
-      if(e.target.closest(".header")||document.body.classList.contains("lightbox"))return;
-      var card=e.target.closest(".photo-card");
-      dragging={id:e.pointerId,x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:0,card:card,isTouch:e.pointerType==="touch",captured:false};
-      if(!dragging.isTouch){try{globeScreen.setPointerCapture(e.pointerId);dragging.captured=true}catch(_){}}
+function startInertia(){
+  stopInertia();
+  function tick(){
+    dragYaw+=velYaw;dragPitch+=velPitch;
+    velYaw*=.91;velPitch*=.91;
+    scheduleRender();
+    if(Math.abs(velYaw)>.015||Math.abs(velPitch)>.015) inertiaId=requestAnimationFrame(tick);
+    else inertiaId=0;
+  }
+  inertiaId=requestAnimationFrame(tick);
+}
+
+function openItem(i,source){
+  if(document.body.classList.contains("lightbox"))return;
+  opened=i;sourceCard=source;
+  var item=ITEMS[i];
+  lbImg.src=item.img.replace("w=900","w=1600");
+  lbImg.alt=item.title;
+  lbTitle.textContent=item.title;
+  lbKicker.textContent=item.kicker;
+  lbText.textContent=item.text;
+
+  var sr=source.getBoundingClientRect();
+  document.body.classList.add("lightbox");
+  lightbox.setAttribute("aria-hidden","false");
+  scheduleRender();
+
+  requestAnimationFrame(function(){
+    var pr=plate.getBoundingClientRect();
+    var dx=(sr.left+sr.width/2)-(pr.left+pr.width/2);
+    var dy=(sr.top+sr.height/2)-(pr.top+pr.height/2);
+    var sc=Math.max(.04,sr.width/Math.max(1,pr.width));
+    plate.style.transition="none";
+    plate.style.transform="translate("+dx+"px,"+dy+"px) scale("+sc+")";
+    plate.style.opacity="0";
+    plate.offsetHeight;
+    requestAnimationFrame(function(){
+      plate.style.transition="";
+      plate.style.transform="";
+      plate.style.opacity="";
     });
-    globeScreen.addEventListener("pointermove",function(e){
-      if(!dragging||dragging.id!==e.pointerId)return;
-      var tx=e.clientX-dragging.x,ty=e.clientY-dragging.y,d=Math.hypot(tx,ty);dragging.moved=Math.max(dragging.moved,d);
-      if(dragging.isTouch&&!dragging.captured){
-        if(d<10)return;
-        if(Math.abs(ty)>Math.abs(tx)*1.15){dragging=null;return}
-        try{globeScreen.setPointerCapture(e.pointerId);dragging.captured=true}catch(_){}
-      }
-      var dx=e.clientX-dragging.lx,dy=e.clientY-dragging.ly;dragging.lx=e.clientX;dragging.ly=e.clientY;
-      dragX+=dx*.13;dragY+=dy*.13;velX=dx*.13;velY=dy*.13;
-      if(dragging.isTouch&&dragging.captured)e.preventDefault();
-    },{passive:false});
-    globeScreen.addEventListener("pointerup",function(e){
-      if(!dragging||dragging.id!==e.pointerId)return;
-      var d=dragging;dragging=null;var slop=matchMedia("(pointer:coarse)").matches?14:6;
-      if(d.card&&d.moved<=slop)openItem(Number(d.card.dataset.idx),d.card);
-    });
-    globeScreen.addEventListener("pointercancel",function(){dragging=null});
+  });
+}
 
-    lightbox.addEventListener("click",function(e){if(e.target.closest("[data-close]"))closeItem()});
-    document.addEventListener("keydown",function(e){if(e.key==="Escape")closeItem()});
-    document.getElementById("homeLink").addEventListener("click",function(e){e.preventDefault();scrollTo({top:0,behavior:"smooth"})});
+function closeItem(){
+  if(!document.body.classList.contains("lightbox"))return;
+  var sr=sourceCard?sourceCard.getBoundingClientRect():null;
+  var pr=plate.getBoundingClientRect();
+  document.body.classList.remove("lightbox");
+  lightbox.setAttribute("aria-hidden","true");
 
-    window.addEventListener("resize",function(){layout(false)});
-    window.addEventListener("orientationchange",function(){setTimeout(function(){layout(true)},220)});
-    if(window.visualViewport){
-      visualViewport.addEventListener("resize",function(){layout(true)});
-    }
+  if(sr){
+    var dx=(sr.left+sr.width/2)-(pr.left+pr.width/2);
+    var dy=(sr.top+sr.height/2)-(pr.top+pr.height/2);
+    var sc=Math.max(.04,sr.width/Math.max(1,pr.width));
+    plate.style.transition="transform .52s var(--ease),opacity .32s ease";
+    plate.style.transform="translate("+dx+"px,"+dy+"px) scale("+sc+")";
+    plate.style.opacity="0";
+  }
+  setTimeout(function(){
+    plate.style.transition="none";plate.style.transform="";plate.style.opacity="";
+    plate.offsetHeight;plate.style.transition="";opened=-1;scheduleRender();
+  },540);
+}
 
-    var fine=matchMedia("(hover:hover) and (pointer:fine)").matches,mx=innerWidth/2,my=innerHeight/2,dx=mx,dy=my;
-    if(fine){
-      window.addEventListener("pointermove",function(e){
-        mx=e.clientX;my=e.clientY;dot.classList.toggle("wide",!!(e.target.closest&&e.target.closest(".photo-card,a,button")));
-      },{passive:true});
-      (function cursor(){dx+=(mx-dx)*.2;dy+=(my-dy)*.2;dot.style.transform="translate3d("+dx+"px,"+dy+"px,0)";requestAnimationFrame(cursor)})();
-    }
+globe.addEventListener("pointerdown",function(e){
+  if(e.target.closest(".header")||document.body.classList.contains("lightbox"))return;
+  stopInertia();
+  var card=e.target.closest(".photo-card");
+  dragging={id:e.pointerId,x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:0,card:card,touch:e.pointerType==="touch",captured:false};
+  globe.classList.add("dragging");
+  if(!dragging.touch){try{globe.setPointerCapture(e.pointerId);dragging.captured=true}catch(_){}}
+});
 
-    buildSphere();
-    layout(true);
-    setActive(0);
-    frame();
+globe.addEventListener("pointermove",function(e){
+  if(!dragging||dragging.id!==e.pointerId)return;
+  var tx=e.clientX-dragging.x,ty=e.clientY-dragging.y,d=Math.hypot(tx,ty);
+  dragging.moved=Math.max(dragging.moved,d);
+  if(dragging.touch&&!dragging.captured){
+    if(d<10)return;
+    if(Math.abs(ty)>Math.abs(tx)*1.15){dragging=null;globe.classList.remove("dragging");return}
+    try{globe.setPointerCapture(e.pointerId);dragging.captured=true}catch(_){}
+  }
+  var dx=e.clientX-dragging.lx,dy=e.clientY-dragging.ly;
+  dragging.lx=e.clientX;dragging.ly=e.clientY;
+  dragYaw+=dx*.12;dragPitch+=dy*.12;
+  velYaw=dx*.12;velPitch=dy*.12;
+  scheduleRender();
+  if(dragging.touch&&dragging.captured)e.preventDefault();
+},{passive:false});
+
+globe.addEventListener("pointerup",function(e){
+  if(!dragging||dragging.id!==e.pointerId)return;
+  var d=dragging;dragging=null;globe.classList.remove("dragging");
+  var slop=matchMedia("(pointer:coarse)").matches?14:6;
+  if(d.card&&d.moved<=slop)openItem(Number(d.card.dataset.idx),d.card);
+  else startInertia();
+});
+globe.addEventListener("pointercancel",function(){dragging=null;globe.classList.remove("dragging")});
+
+window.addEventListener("scroll",scheduleRender,{passive:true});
+window.addEventListener("resize",function(){layout(false)},{passive:true});
+window.addEventListener("orientationchange",function(){setTimeout(function(){layout(true)},220)});
+lightbox.addEventListener("click",function(e){if(e.target.closest("[data-close]"))closeItem()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeItem()});
+document.getElementById("home").addEventListener("click",function(e){e.preventDefault();scrollTo({top:0,behavior:"smooth"})});
+
+var fine=matchMedia("(hover:hover) and (pointer:fine)").matches,mx=innerWidth/2,my=innerHeight/2,dx=mx,dy=my;
+if(fine){
+  window.addEventListener("pointermove",function(e){
+    mx=e.clientX;my=e.clientY;
+    dot.classList.toggle("wide",!!(e.target.closest&&e.target.closest(".photo-card,a,button")));
+  },{passive:true});
+  (function cursor(){
+    dx+=(mx-dx)*.2;dy+=(my-dy)*.2;
+    dot.style.transform="translate3d("+dx+"px,"+dy+"px,0)";
+    requestAnimationFrame(cursor);
   })();
-  </script>
+}
+
+build();
+layout(true);
+setActive(0);
+scheduleRender();
+})();
+</script>
 </body>
 </html>
