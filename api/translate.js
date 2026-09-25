@@ -1,5 +1,6 @@
 import { domainPrompt, publicDomain, resolveDomain } from '../server/domain.js'
 import { validateDocumentUsage } from '../server/usageQuota.js'
+import { logAiUsage } from '../server/aiUsage.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -89,7 +90,7 @@ async function callResponses(body, signal) {
     error.status = response.status
     throw error
   }
-  return collectText(data)
+  return { content: collectText(data), usage: data?.usage || {}, responseId: data?.id || '' }
 }
 
 function cleanGifUrl(value) {
@@ -218,6 +219,21 @@ export default async function handler(req, res) {
   const reasoningEffort = (isAnaTranslation || isKeyboardSentenceCorrection) ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
   const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
 
+  const usageFeature = isMeetingNotes ? 'meeting_notes'
+    : isMeetingEnrichment ? 'meeting_enrichment'
+      : isMeetingQa ? 'meeting_qa'
+        : isMeetingOutput ? 'meeting_output'
+          : isDocumentTranslation ? 'document_translation'
+            : isVisualTranslation ? 'camera_translation'
+              : isKeyboardSentenceCorrection ? 'keyboard_correction'
+                : isWordRefinement ? 'word_refinement'
+                  : isLanguageDetection ? 'language_detection'
+                    : isAnaBriefing ? 'talk_briefing'
+                      : isTalkDebrief ? 'talk_debrief'
+                        : isTalkTurn ? 'talk_turn'
+                          : isAnaTranslation ? 'translation'
+                            : 'general'
+
   let finalInstructions = rawInstructions
   if (domainInstructions) finalInstructions += `\n\n${domainInstructions}`
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
@@ -255,14 +271,18 @@ export default async function handler(req, res) {
     if (isKeyboardSentenceCorrection) body.max_output_tokens = 420
     if (isAnaTranslation || isVisualOrDocumentTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
 
-    let content = await callResponses(body, controller.signal)
+    let result = await callResponses(body, controller.signal)
+    await logAiUsage(req, { feature: usageFeature, model, usage: result.usage, metadata: { responseId: result.responseId } })
+    let content = result.content
     if (!content) return res.status(502).json({ error: 'Model returned no text' })
 
     if (isWordRefinement && !validRefinementPayload(content)) {
-      content = await callResponses({
+      result = await callResponses({
         ...body,
         instructions: `${finalInstructions}\n\nRETRY REQUIREMENT: Return valid JSON only and make sourceTerm non-empty. Do not omit sourceTerm under any circumstance.`,
       }, controller.signal)
+      await logAiUsage(req, { feature: usageFeature, model, usage: result.usage, metadata: { responseId: result.responseId, retry: true } })
+      content = result.content
       if (!validRefinementPayload(content)) {
         return res.status(502).json({ error: 'Ana could not identify the source term for this glossary preference. Please tap the word again.' })
       }
