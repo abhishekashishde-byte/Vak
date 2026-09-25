@@ -510,6 +510,13 @@ CRITICAL FACT VERIFICATION — mandatory:
         break
       case 'response.done': {
         const responseId = event.response?.id || null
+        if (event.response?.usage) {
+          void fetch('/api/usage-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'realtime_response', responseId, usage: event.response.usage }),
+          }).catch(() => {})
+        }
         latestAnaRef.current = ''
         if (closingResponseRef.current && responseId === closingResponseRef.current) {
           closingResponseRef.current = null
