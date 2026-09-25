@@ -63,6 +63,24 @@ const scenes = [
     subtext: 'Use Ana Keyboard to write from intent, correct a paragraph, translate what you type and reply from selected context without leaving the app you are already in.',
     placeholder: 'Get Ana Keyboard access',
   },
+  {
+    label: 'Reply',
+    videoIndex: 3,
+    badge: 'Reply from context · review before sending',
+    headingTop: 'Know what they said.',
+    headingBottom: 'Know what to say back.',
+    subtext: 'Give Ana the message you received and the intent of your reply. Ana drafts a response that fits the conversation, then you review it before using it.',
+    placeholder: 'Get Reply access',
+  },
+  {
+    label: 'Privacy',
+    videoIndex: 2,
+    badge: 'Local-first typing · deliberate AI use',
+    headingTop: 'Helpful when you ask.',
+    headingBottom: 'Quiet when you don’t.',
+    subtext: 'Normal typing can stay local, sensitive fields are treated differently, and cloud AI is used only when you choose an Ana feature that needs it.',
+    placeholder: 'Join Ana early access',
+  },
 ]
 
 const navItems = [
@@ -146,7 +164,7 @@ function App() {
         <nav className="flex items-center justify-between">
           <a
             href="/marketing"
-            className="text-xl italic text-white sm:text-2xl"
+            className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl"
             aria-label="Ana marketing home"
           >
             Ana
