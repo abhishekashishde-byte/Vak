@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import AuthGate from './AuthGate.jsx'
 import { installAccountPreferenceSync } from './accountPreferences.js'
+import { installAuthenticatedApiFetch } from './apiAuthFetch.js'
 import { installAnaNaturalVoice } from './naturalVoice.js'
 import { installBrowserExtensionBridge } from './browserExtensionBridge.js'
 import { installContextualIntelligence } from './contextualIntelligence.js'
@@ -27,6 +28,7 @@ import './talkPolish.css'
 import './networkStatus.css'
 import './briefVoice.js'
 
+installAuthenticatedApiFetch()
 installBrowserExtensionBridge()
 installNetworkResilience()
 installAccountPreferenceSync()
