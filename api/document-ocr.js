@@ -1,5 +1,6 @@
 import { profileLabel, publicDomain, resolveDomain } from '../server/domain.js'
 import { validateDocumentUsage } from '../server/usageQuota.js'
+import { logAiUsage } from '../server/aiUsage.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -167,6 +168,13 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data?.error?.message || (purpose === 'camera' ? 'Could not read this image.' : 'Could not read this scanned page.') })
     }
 
+    const ocrModel = purpose === 'camera' ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
+    await logAiUsage(req, {
+      feature: purpose === 'camera' ? 'camera_ocr' : 'document_ocr',
+      model: ocrModel,
+      usage: data?.usage || {},
+      metadata: { pageNumber: Number(pageNumber) || 1 },
+    })
     const parsed = parseJson(collectText(data))
     const layout = ['form', 'document', 'scene', 'screen'].includes(parsed?.layout) ? parsed.layout : 'scene'
     const cleaned = cleanBlocks(parsed?.blocks, purpose)
