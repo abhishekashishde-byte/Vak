@@ -15,11 +15,52 @@ const duration = seconds => {
   return m ? `${h}h ${m}m` : `${h}h`
 }
 
+const money = value => `${Number(value || 0).toFixed(2)}`
+const compactNumber = value => {
+  const n = Math.max(0, Number(value || 0))
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}K`
+  return String(Math.round(n))
+}
+const featureLabel = value => ({
+  translation: 'Translation',
+  keyboard_correction: 'Keyboard correction',
+  document_translation: 'Document translation',
+  document_ocr: 'Document OCR',
+  camera_translation: 'Camera translation',
+  camera_ocr: 'Camera OCR',
+  meeting_notes: 'Meeting notes',
+  meeting_enrichment: 'Meeting intelligence',
+  meeting_qa: 'Meeting Q&A',
+  meeting_output: 'Meeting output',
+  live_translate: 'Live translation',
+  live_transcript: 'Live transcript',
+  talk_for_me: 'Talk for me',
+  talk_briefing: 'Talk briefing',
+  talk_debrief: 'Talk debrief',
+  word_refinement: 'Word refinement',
+  language_detection: 'Language detection',
+}[value] || String(value || 'Other').replace(/_/g, ' '))
+
+function DailyBars({ rows = [], metric = 'costUsd', kind = 'cost' }) {
+  const values = rows.map(row => Math.max(0, Number(row?.[metric] || 0)))
+  const max = Math.max(...values, 0)
+  return <div className="ana-cost-bars">{rows.map((row,index) => {
+    const value = values[index]
+    const height = max > 0 ? Math.max(value > 0 ? 6 : 0, value / max * 100) : 0
+    const date = row?.date ? new Date(`${row.date}T12:00:00`) : null
+    const day = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(undefined,{weekday:'short'}) : String(index + 1)
+    const display = kind === 'cost' ? money(value) : compactNumber(value)
+    return <div className="ana-cost-bar-col" key={row?.date || index}><span>{value > 0 ? display : ''}</span><div className="ana-cost-bar-track"><i style={{height:`${height}%`}}/></div><small>{day}</small></div>
+  })}</div>
+}
+
 export default function UsageStatus() {
   const [status, setStatus] = useState(null)
   const [email, setEmail] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminRows, setAdminRows] = useState([])
+  const [costReport, setCostReport] = useState(null)
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminError, setAdminError] = useState('')
 
@@ -52,9 +93,14 @@ export default function UsageStatus() {
     if (!supabase || !isAdmin) return
     setAdminLoading(true); setAdminError('')
     try {
-      const { data, error } = await supabase.rpc('ana_admin_user_usage')
+      const [{ data, error }, { data: costData, error: costError }] = await Promise.all([
+        supabase.rpc('ana_admin_user_usage'),
+        supabase.rpc('ana_admin_cost_report'),
+      ])
       if (error) throw error
+      if (costError) throw costError
       setAdminRows(Array.isArray(data) ? data : [])
+      setCostReport(costData && typeof costData === 'object' ? costData : null)
     } catch (error) {
       setAdminError(error?.message || 'Could not load tester activity.')
     } finally {
@@ -87,6 +133,17 @@ export default function UsageStatus() {
           <div><strong>Ana tester admin</strong><span>{adminRows.length} registered user{adminRows.length === 1 ? '' : 's'}</span></div>
           <div><button type="button" onClick={loadAdmin} disabled={adminLoading}><RefreshCw size={15}/></button><button type="button" onClick={() => setAdminOpen(false)}><X size={17}/></button></div>
         </header>
+        {costReport?.summary && <div className="ana-admin-cost-overview">
+          <div className="ana-admin-cost-hero"><span>Estimated AI cost · this week</span><strong>{money(costReport.summary.estimatedCostUsd)}</strong><small>{money(costReport.summary.tokenCostUsd)} tokens + {money(costReport.summary.audioCostUsd)} audio</small></div>
+          <div><span>Total tokens</span><strong>{compactNumber(costReport.summary.totalTokens)}</strong><small>{compactNumber(costReport.summary.inputTokens)} in · {compactNumber(costReport.summary.outputTokens)} out</small></div>
+          <div><span>Audio processed</span><strong>{Number(costReport.summary.audioMinutes || 0).toFixed(1)}m</strong><small>Live + meeting transcription estimate</small></div>
+          <div><span>Monthly run-rate</span><strong>{money(Number(costReport.summary.estimatedCostUsd || 0) * 4.345)}</strong><small>Current week × 4.345</small></div>
+        </div>}
+        {costReport?.daily?.length ? <div className="ana-admin-charts">
+          <section><header><strong>Daily estimated cost</strong><span>Mon–Sun · USD</span></header><DailyBars rows={costReport.daily} metric="costUsd" kind="cost"/></section>
+          <section><header><strong>Token usage</strong><span>Exact tracking from this release</span></header><DailyBars rows={costReport.daily} metric="tokens" kind="tokens"/></section>
+        </div> : null}
+        {!!costReport?.features?.length && <div className="ana-admin-feature-costs"><div className="ana-admin-section-title"><strong>Cost by feature</strong><span>Model tokens + audio-duration estimates</span></div><div>{costReport.features.filter(item=>Number(item.costUsd||0)>0 || Number(item.tokens||0)>0).map(item=><div className="ana-feature-cost" key={item.feature}><span>{featureLabel(item.feature)}</span><strong>{money(item.costUsd)}</strong><small>{item.tokens ? `${compactNumber(item.tokens)} tokens` : ''}{item.tokens && item.audioMinutes ? ' · ' : ''}{item.audioMinutes ? `${Number(item.audioMinutes).toFixed(1)}m audio` : ''}</small></div>)}</div></div>}
         <div className="ana-admin-summary">
           <div><strong>{adminRows.filter(row => row.has_logged_in).length}</strong><span>Logged in</span></div>
           <div><strong>{adminRows.filter(row => !row.has_logged_in).length}</strong><span>Never logged in</span></div>
@@ -96,7 +153,7 @@ export default function UsageStatus() {
         {adminError && <div className="ana-admin-error">{adminError}</div>}
         <div className="ana-admin-table-wrap">
           <table className="ana-admin-table">
-            <thead><tr><th>User</th><th>Last login</th><th>This week</th><th>Tracked total</th></tr></thead>
+            <thead><tr><th>User</th><th>Last login</th><th>This week</th><th>AI cost</th><th>Tracked total</th></tr></thead>
             <tbody>
               {adminRows.map(row => <tr key={row.user_id}>
                 <td><strong>{row.name || row.email}</strong><span>{row.email}</span>{row.location && <small>{row.location}</small>}</td>
@@ -107,16 +164,18 @@ export default function UsageStatus() {
                   <span>Talk {duration(row.week_talk_seconds)}</span>
                   <span>Docs {Number(row.week_documents||0)}/3</span>
                 </td>
+                <td>{(() => { const usage = costReport?.users?.find(item => String(item.email || '').toLowerCase() === String(row.email || '').toLowerCase()); return <><strong>{money(usage?.costUsd)}</strong><span>{compactNumber(usage?.tokens)} tokens</span><small>{Number(usage?.audioMinutes || 0).toFixed(1)}m audio</small></> })()}</td>
                 <td>
                   <span>Timed {duration(Number(row.total_meeting_seconds||0)+Number(row.total_talk_seconds||0))}</span>
                   <span>Docs {Number(row.total_documents||0)}</span>
                   <span>Historical meetings {duration(row.historical_meeting_seconds)}</span>
                 </td>
               </tr>)}
-              {!adminRows.length && !adminLoading && <tr><td colSpan="4">No registered testers found.</td></tr>}
+              {!adminRows.length && !adminLoading && <tr><td colSpan="5">No registered testers found.</td></tr>}
             </tbody>
           </table>
         </div>
+        <div className="ana-admin-cost-note">Cost is an estimate using the current OpenAI model rates configured for Ana. Exact token tracking starts with this release; earlier token usage was not stored. Existing meeting/audio cost is reconstructed from tracked session duration.</div>
         {adminLoading && <div className="ana-admin-loading">Refreshing tester activity…</div>}
       </section>
     </div>}
