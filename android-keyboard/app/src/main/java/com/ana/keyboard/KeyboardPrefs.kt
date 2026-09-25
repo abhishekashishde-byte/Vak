@@ -31,7 +31,9 @@ object KeyboardPrefs {
     private const val KEY_SHARED_GLOSSARY = "shared_glossary_v1"
     private const val KEY_THEME = "keyboard_theme"
     private const val KEY_BACKGROUND_URI = "background_uri"
+    private const val KEY_BACKGROUND_PRESET = "background_preset_v1"
     private const val KEY_BACKGROUND_TINT = "background_tint_percent"
+    private const val KEY_KEY_PRESS_ANIMATION = "key_press_animation_v1"
     private const val KEY_WORD_SUGGESTIONS = "word_suggestions"
     private const val KEY_AUTO_CORRECTION = "auto_correction"
     private const val KEY_SMART_SENTENCE_CORRECTION = "smart_sentence_correction"
@@ -48,6 +50,8 @@ object KeyboardPrefs {
     private const val KEY_PERSONAL_DICTIONARY_PREFIX = "personal_dictionary_"
     private const val KEY_LEARNED_CORRECTIONS_PREFIX = "learned_corrections_"
     private const val KEY_PENDING_GIF_URI = "pending_gif_uri"
+    private const val KEY_PENDING_IMAGE_URI = "pending_image_uri"
+    private const val KEY_PENDING_IMAGE_MIME = "pending_image_mime"
     private const val KEY_SHORTCUTS_PREFIX = "text_shortcuts_"
     private const val KEY_NEXT_WORD_PREFIX = "next_word_model_"
     private const val KEY_SAVED_EMAILS = "saved_emails_v1"
@@ -281,6 +285,26 @@ object KeyboardPrefs {
 
     fun backgroundUri(context: Context): String = prefs(context).getString(KEY_BACKGROUND_URI, "") ?: ""
     fun setBackgroundUri(context: Context, value: String) = prefs(context).edit().putString(KEY_BACKGROUND_URI, value).apply()
+
+    fun backgroundPreset(context: Context): String {
+        val value = prefs(context).getString(KEY_BACKGROUND_PRESET, "none") ?: "none"
+        return value.takeIf { it in setOf("none", "graphite", "aurora", "midnight_blue", "warm_sand", "purple_haze", "ana_gold") } ?: "none"
+    }
+
+    fun setBackgroundPreset(context: Context, value: String) {
+        val safe = value.takeIf { it in setOf("none", "graphite", "aurora", "midnight_blue", "warm_sand", "purple_haze", "ana_gold") } ?: "none"
+        prefs(context).edit().putString(KEY_BACKGROUND_PRESET, safe).apply()
+    }
+
+    fun keyPressAnimation(context: Context): String {
+        val value = prefs(context).getString(KEY_KEY_PRESS_ANIMATION, "subtle") ?: "subtle"
+        return value.takeIf { it in setOf("off", "subtle", "pop") } ?: "subtle"
+    }
+
+    fun setKeyPressAnimation(context: Context, value: String) =
+        prefs(context).edit()
+            .putString(KEY_KEY_PRESS_ANIMATION, value.takeIf { it in setOf("off", "subtle", "pop") } ?: "subtle")
+            .apply()
 
     fun backgroundTintPercent(context: Context): Int = prefs(context).getInt(KEY_BACKGROUND_TINT, 22).coerceIn(0, 80)
     fun setBackgroundTintPercent(context: Context, value: Int) = prefs(context).edit().putInt(KEY_BACKGROUND_TINT, value.coerceIn(0, 80)).apply()
@@ -740,7 +764,9 @@ object KeyboardPrefs {
         prefs(context).edit()
             .remove(KEY_THEME)
             .remove(KEY_BACKGROUND_URI)
+            .remove(KEY_BACKGROUND_PRESET)
             .remove(KEY_BACKGROUND_TINT)
+            .remove(KEY_KEY_PRESS_ANIMATION)
             .remove(KEY_KEY_GAP)
             .remove(KEY_KEY_RADIUS)
             .remove(KEY_KEY_LABEL_SCALE)
@@ -902,5 +928,20 @@ object KeyboardPrefs {
         val value = prefs(context).getString(KEY_PENDING_GIF_URI, "").orEmpty()
         if (value.isNotBlank()) prefs(context).edit().remove(KEY_PENDING_GIF_URI).apply()
         return value
+    }
+
+    fun setPendingImage(context: Context, uri: String, mimeType: String) =
+        prefs(context).edit()
+            .putString(KEY_PENDING_IMAGE_URI, uri)
+            .putString(KEY_PENDING_IMAGE_MIME, mimeType.ifBlank { "image/*" })
+            .apply()
+
+    fun consumePendingImage(context: Context): Pair<String, String>? {
+        val store = prefs(context)
+        val uri = store.getString(KEY_PENDING_IMAGE_URI, "").orEmpty()
+        val mime = store.getString(KEY_PENDING_IMAGE_MIME, "image/*").orEmpty().ifBlank { "image/*" }
+        if (uri.isBlank()) return null
+        store.edit().remove(KEY_PENDING_IMAGE_URI).remove(KEY_PENDING_IMAGE_MIME).apply()
+        return uri to mime
     }
 }
