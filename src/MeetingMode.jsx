@@ -494,7 +494,7 @@ export default function MeetingMode() {
     try { if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop() } catch {}; recorderRef.current = null; closeRealtime(false); stopTracks(); void closeQuotaSession()
   }
 
-  const connectPeer = async ({ stream, token, onEvent }) => {
+  const connectPeer = async ({ stream, token, onEvent, callsUrl = 'https://api.openai.com/v1/realtime/calls' }) => {
     const pc = new RTCPeerConnection(); peerRef.current = pc; const audioTrack = stream.getAudioTracks()[0]; pc.addTrack(audioTrack, stream); pc.ontrack = () => {}
     pc.addEventListener('connectionstatechange', () => {
       if (!activeRef.current) return
@@ -505,8 +505,13 @@ export default function MeetingMode() {
     const channel = pc.createDataChannel('oai-events'); dataChannelRef.current = channel
     channel.addEventListener('message', message => { try { onEvent(JSON.parse(message.data)) } catch {} })
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer)
-    const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', body: offer.sdp, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/sdp' } })
-    const answerSdp = await response.text(); if (!response.ok) throw new Error(answerSdp || 'Could not connect the live meeting session.')
+    const response = await fetch(callsUrl, { method: 'POST', body: offer.sdp, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/sdp' } })
+    const answerSdp = await response.text()
+    if (!response.ok) {
+      let message = answerSdp
+      try { message = JSON.parse(answerSdp)?.error?.message || answerSdp } catch {}
+      throw new Error(message || 'Could not connect the live meeting session.')
+    }
     await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
     await new Promise((resolve, reject) => {
       if (channel.readyState === 'open') return resolve()
@@ -518,7 +523,7 @@ export default function MeetingMode() {
     const headers = await authenticatedHeaders({ 'Content-Type': 'application/json' })
     const tokenResponse = await fetch('/api/realtime-translation-token', { method: 'POST', headers, body: JSON.stringify({ targetLanguage: codeFor(targetRef.current), quotaSessionId: quotaSessionRef.current }) }), tokenData = await tokenResponse.json()
     if (!tokenResponse.ok || !tokenData?.value) throw new Error(tokenData?.error || 'Could not start realtime meeting translation.')
-    await connectPeer({ stream, token: tokenData.value, onEvent: handleTranslationEvent })
+    await connectPeer({ stream, token: tokenData.value, onEvent: handleTranslationEvent, callsUrl: 'https://api.openai.com/v1/realtime/translations/calls' })
   }
   const startLiveTranscription = async stream => {
     const hints = glossaryHints(), headers = await authenticatedHeaders({ 'Content-Type': 'application/json' })
