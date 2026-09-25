@@ -2,23 +2,10 @@ import { useState } from 'react'
 import { authConfigured, supabase } from './lib/supabase'
 import AnaMark from './AnaMark.jsx'
 
-async function notifyAdmin(event, session) {
-  const token = session?.access_token
-  if (!token) return
+const AUTH_EVENT_KEY = 'ana-pending-admin-auth-event'
 
-  try {
-    await fetch('/api/auth-notify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ event }),
-      keepalive: true,
-    })
-  } catch {
-    // Login/signup must never fail just because the private admin notification could not be delivered.
-  }
+function markPendingAuthEvent(event) {
+  try { sessionStorage.setItem(AUTH_EVENT_KEY, event) } catch {}
 }
 
 export default function AuthPage() {
@@ -46,6 +33,7 @@ export default function AuthPage() {
       if (mode === 'signup') {
         if (!name.trim() || !location.trim()) throw new Error('Please enter your name and location.')
 
+        markPendingAuthEvent('signup')
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -59,10 +47,7 @@ export default function AuthPage() {
 
         if (signUpError) throw signUpError
 
-        if (data?.session) {
-          await notifyAdmin('signup', data.session)
-          return
-        }
+        if (data?.session) return
 
         setSuccess('Account created. You can sign in with your email and password.')
         setMode('login')
@@ -70,13 +55,13 @@ export default function AuthPage() {
         return
       }
 
+      markPendingAuthEvent('login')
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       })
 
       if (loginError) throw loginError
-      await notifyAdmin('login', data?.session)
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
