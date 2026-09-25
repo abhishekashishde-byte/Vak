@@ -192,6 +192,7 @@ export default async function handler(req, res) {
   const isTalkDebrief = rawInstructions.includes('reviewing a live real-world conversation after speaking for the user')
   const isTalkTurn = !isTalkDebrief && (rawInstructions.includes('live real-world conversation') || rawInstructions.includes('speaking for the user'))
   const isAnaTranslation = rawInstructions.includes('premium translation engine')
+  const isWriteForMe = rawInstructions.includes('Ana Write for me')
   const isWordRefinement = rawInstructions.includes('bilingual editor refining a translation')
   const isLanguageDetection = rawInstructions.includes("Ana's language detector")
   const isKeyboardSentenceCorrection = rawInstructions.includes('Smart Sentence Correction') || rawInstructions.includes('Smart Paragraph Correction')
@@ -216,8 +217,8 @@ export default async function handler(req, res) {
   const domainInstructions = (isLanguageDetection || isKeyboardSentenceCorrection) ? '' : domainPrompt(domainResolution)
 
   const model = isTalkTurn || isAnaTranslation || isVisualOrDocumentTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
-  const reasoningEffort = (isAnaTranslation || isKeyboardSentenceCorrection) ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
-  const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 4500 : isAnaBriefing ? 5500 : isTalkDebrief ? 6500 : isTalkTurn ? 15000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
+  const reasoningEffort = (isAnaTranslation || isKeyboardSentenceCorrection || isWriteForMe) ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
+  const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 6500 : isAnaBriefing ? 7000 : isTalkDebrief ? 8000 : isTalkTurn ? 15000 : isWriteForMe ? 14000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
 
   const usageFeature = isMeetingNotes ? 'meeting_notes'
     : isMeetingEnrichment ? 'meeting_enrichment'
@@ -269,6 +270,7 @@ export default async function handler(req, res) {
     if (isMeetingQa) body.max_output_tokens = 1000
     if (isMeetingOutput) body.max_output_tokens = 1800
     if (isKeyboardSentenceCorrection) body.max_output_tokens = 420
+    if (isWriteForMe) body.max_output_tokens = 1200
     if (isAnaTranslation || isVisualOrDocumentTranslation) body.max_output_tokens = Math.max(1200, Math.min(6000, Math.ceil(String(text).length * 1.6)))
 
     let result = await callResponses(body, controller.signal)
