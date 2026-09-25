@@ -18,6 +18,7 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
         fun onPaste(text: String)
         fun onBackToLetters()
         fun onClearHistory()
+        fun onPickImage()
         fun onTogglePin(text: String)
         fun onDelete(text: String)
     }
@@ -46,11 +47,14 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), 0, dp(12), 0)
         }, LayoutParams(0, dp(44), 1f))
-        header.addView(action("Clear") { listener?.onClearHistory() })
+        header.addView(action("Photos") { listener?.onPickImage() })
+        header.addView(action("Clear") { listener?.onClearHistory() }.apply {
+            setPadding(dp(10), 0, dp(10), 0)
+        })
         addView(header, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
 
         addView(TextView(context).apply {
-            text = "Ana reads the clipboard only when you open this panel. Unpinned clips expire after 1 hour; pinned clips stay on this device."
+            text = "Text clips stay local. Tap Photos for a recent photo or screenshot; Ana only uses Android's system picker."
             textSize = 11f
             setTextColor(Color.LTGRAY)
             setPadding(dp(8), dp(2), dp(8), dp(6))
@@ -130,12 +134,20 @@ class ClipboardPanelView(context: Context) : LinearLayout(context) {
                 setTextColor(Color.WHITE)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 maxLines = 2
-                backgroundTintList = ColorStateList.valueOf(Color.rgb(52, 52, 52))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(15).toFloat()
+                    setColor(Color.rgb(47, 47, 50))
+                    setStroke(dp(1), Color.rgb(67, 67, 72))
+                }
                 setPadding(dp(14), dp(7), dp(14), dp(7))
+                contentDescription = "Paste copied text"
                 setOnClickListener { listener?.onPaste(clip.text) }
             }
             row.addView(button, LayoutParams(0, dp(58), 1f))
-            row.addView(action(if (clip.pinned) "Unpin" else "Pin") { listener?.onTogglePin(clip.text) }, LayoutParams(dp(70), dp(48)).apply {
+            row.addView(action(if (clip.pinned) "★" else "☆") { listener?.onTogglePin(clip.text) }.apply {
+                contentDescription = if (clip.pinned) "Unpin clip" else "Pin clip"
+            }, LayoutParams(dp(48), dp(48)).apply {
                 marginStart = dp(5)
             })
             row.addView(action("×") { listener?.onDelete(clip.text) }, LayoutParams(dp(48), dp(48)).apply {
