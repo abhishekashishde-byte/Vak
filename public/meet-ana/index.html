@@ -439,9 +439,9 @@
       transform:translateY(0);
       filter:blur(0);
       transition:
-        opacity .42s ease,
-        transform .52s cubic-bezier(.22,.61,.36,1),
-        filter .42s ease
+        opacity .72s ease,
+        transform .92s cubic-bezier(.22,.61,.36,1),
+        filter .72s ease
     }
     .train-cap-story.is-changing .train-cap-badge,
     .train-cap-story.is-changing .train-cap-heading h2,
@@ -449,8 +449,8 @@
     .train-cap-story.is-changing .train-cap-meta,
     .train-cap-story.is-changing .train-cap-detail{
       opacity:0;
-      transform:translateY(10px);
-      filter:blur(5px)
+      transform:translateY(18px);
+      filter:blur(9px)
     }
     .train-cap-story.is-entering .train-cap-badge,
     .train-cap-story.is-entering .train-cap-heading h2,
@@ -470,14 +470,40 @@
       transform:translateY(0);
       filter:blur(0)
     }
-    .train-cap-story.is-entering .train-cap-badge{transition-delay:.02s}
-    .train-cap-story.is-entering .train-cap-heading h2{transition-delay:.10s}
-    .train-cap-story.is-entering .train-cap-heading>p{transition-delay:.18s}
-    .train-cap-story.is-entering .train-cap-meta{transition-delay:.26s}
-    .train-cap-story.is-entering .train-cap-detail:nth-child(1){transition-delay:.34s}
-    .train-cap-story.is-entering .train-cap-detail:nth-child(2){transition-delay:.40s}
-    .train-cap-story.is-entering .train-cap-detail:nth-child(3){transition-delay:.46s}
-    .train-cap-story.is-entering .train-cap-detail:nth-child(4){transition-delay:.52s}
+    .train-cap-story.is-entering .train-cap-badge{transition-delay:.08s}
+    .train-cap-story.is-entering .train-cap-heading h2{transition-delay:.28s}
+    .train-cap-story.is-entering .train-cap-heading>p{transition-delay:.48s}
+    .train-cap-story.is-entering .train-cap-meta{transition-delay:.66s}
+    .train-cap-story.is-entering .train-cap-detail:nth-child(1){transition-delay:.82s}
+    .train-cap-story.is-entering .train-cap-detail:nth-child(2){transition-delay:.98s}
+    .train-cap-story.is-entering .train-cap-detail:nth-child(3){transition-delay:1.14s}
+    .train-cap-story.is-entering .train-cap-detail:nth-child(4){transition-delay:1.30s}
+
+    .train-cap-story{position:relative}
+    .train-cap-story:after{
+      content:"";
+      position:absolute;
+      inset:-20px -28px -22px -28px;
+      z-index:-1;
+      border-radius:28px;
+      background:linear-gradient(90deg,rgba(0,0,0,.24),rgba(0,0,0,.10) 62%,rgba(0,0,0,0));
+      opacity:.34;
+      filter:blur(1px);
+      transition:opacity .9s ease,transform .9s cubic-bezier(.22,.61,.36,1);
+      transform:translateY(0)
+    }
+    .train-cap-story.is-changing:after{
+      opacity:.08;
+      transform:translateY(8px)
+    }
+    .train-cap-story.is-entering:after{
+      opacity:.08;
+      transform:translateY(8px)
+    }
+    .train-cap-story.is-entering.is-visible:after{
+      opacity:.34;
+      transform:translateY(0)
+    }
 </style>
 </head>
 <body>
@@ -957,8 +983,8 @@
       setTimeout(()=>{
         story.classList.remove('is-entering','is-visible');
         locked=false;
-      },900);
-    },220);
+      },1900);
+    },520);
   }
 
   buttons.forEach((button,index)=>{
