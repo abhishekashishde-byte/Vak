@@ -208,10 +208,10 @@ function App() {
         <nav className="flex items-center justify-between">
           <a
             href="/marketing"
-            className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl"
+            className="ana-marketing-brand"
             aria-label="Ana marketing home"
           >
-            Ana
+            <img src="/ana-logo.svg" alt="Ana" />
           </a>
 
           <div className="liquid-glass hidden items-center gap-1 rounded-full p-1.5 md:flex">
