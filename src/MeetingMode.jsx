@@ -458,10 +458,10 @@ export default function MeetingMode() {
     if (!id) return
     try { await endTimedUsage(id) } catch {}
   }
-  const startQuotaSession = async kind => {
+  const startQuotaSession = async (kind, feature = '') => {
     await closeQuotaSession()
     quotaExpiredRef.current = false
-    const quota = await startTimedUsage(kind)
+    const quota = await startTimedUsage(kind, feature)
     quotaSessionRef.current = quota.sessionId
 
     const expire = () => {
@@ -541,7 +541,10 @@ export default function MeetingMode() {
     originalTextRef.current = ''; translatedTextRef.current = ''; setOriginalText(''); setTranslatedText(''); try { localStorage.removeItem(STORAGE_KEY) } catch {}
     try {
       const stream = await getMeetingStream(); streamRef.current = stream
-      await startQuotaSession(meetingModeRef.current === 'mom' ? 'meeting_notes' : 'meeting_live')
+      await startQuotaSession(
+        meetingModeRef.current === 'mom' ? 'meeting_notes' : 'meeting_live',
+        meetingModeRef.current === 'mom' ? 'meeting_notes' : meetingModeRef.current === 'transcript' ? 'live_transcript' : 'live_translate'
+      )
       stream.getTracks().forEach(track => track.addEventListener('ended', () => { if (activeRef.current) setError('Audio sharing ended. Press End meeting to prepare the transcript and notes from what was recorded.') }, { once: true }))
       startRecorder(stream); const now = Date.now(); startedAtRef.current = now; setStartedAt(now); setElapsed(0)
       if (meetingModeRef.current === 'mom') { setSessionState('listening'); return }
