@@ -4,6 +4,18 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/marketing",
+      "destination": "/marketing.html"
+    },
+    {
+      "source": "/marketing/",
+      "destination": "/marketing.html"
+    },
+    {
+      "source": "/marketing/index.html",
+      "destination": "/marketing.html"
+    },
+    {
       "source": "/api/google-callback",
       "destination": "/api/auth-notify?action=google-callback"
     },
