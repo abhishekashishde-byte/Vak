@@ -6,16 +6,13 @@ const backgroundVideos = [
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4',
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4',
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4',
-  'https://videos.pexels.com/video-files/34732324/14723215_1080_1920_60fps.mp4',
-  'https://videos.pexels.com/video-files/36546412/15496739_1080_1920_30fps.mp4',
-  'https://videos.pexels.com/video-files/36620147/15526034_1440_2218_30fps.mp4',
-  'https://videos.pexels.com/video-files/34883446/14779089_1080_1920_50fps.mp4',
 ]
 
 const scenes = [
   {
     label: 'Translate',
     videoIndex: 0,
+    startAt: 0,
     badge: 'Natural translation · meaning before words',
     headingTop: 'Say it your way.',
     headingBottom: 'Ana carries it across.',
@@ -25,6 +22,7 @@ const scenes = [
   {
     label: 'Meetings',
     videoIndex: 1,
+    startAt: 0,
     badge: 'Live meetings · transcript · translation · notes',
     headingTop: 'Stay in the meeting.',
     headingBottom: 'Even when language changes.',
@@ -34,6 +32,7 @@ const scenes = [
   {
     label: 'Documents',
     videoIndex: 2,
+    startAt: 0,
     badge: 'PDF · Word · scanned documents',
     headingTop: 'Translate the words.',
     headingBottom: 'Keep the document.',
@@ -43,6 +42,7 @@ const scenes = [
   {
     label: 'Talk for Me',
     videoIndex: 3,
+    startAt: 0,
     badge: 'Talk for Me · early access',
     headingTop: 'Tell Ana what you need.',
     headingBottom: 'Ana helps say it.',
@@ -51,7 +51,8 @@ const scenes = [
   },
   {
     label: 'Camera',
-    videoIndex: 4,
+    videoIndex: 0,
+    startAt: 5.5,
     badge: 'Camera · signs · menus · labels',
     headingTop: 'Point at it.',
     headingBottom: 'Understand it.',
@@ -60,7 +61,8 @@ const scenes = [
   },
   {
     label: 'Keyboard',
-    videoIndex: 5,
+    videoIndex: 1,
+    startAt: 5.5,
     badge: 'Write · correct · reply · translate',
     headingTop: 'Ana where you already type.',
     headingBottom: 'No app switching.',
@@ -69,7 +71,8 @@ const scenes = [
   },
   {
     label: 'Reply',
-    videoIndex: 6,
+    videoIndex: 3,
+    startAt: 5.5,
     badge: 'Reply from context · review before sending',
     headingTop: 'Know what they said.',
     headingBottom: 'Know what to say back.',
@@ -78,7 +81,8 @@ const scenes = [
   },
   {
     label: 'Privacy',
-    videoIndex: 7,
+    videoIndex: 2,
+    startAt: 5.5,
     badge: 'Local-first typing · deliberate AI use',
     headingTop: 'Helpful when you ask.',
     headingBottom: 'Quiet when you don’t.',
@@ -117,8 +121,25 @@ function App() {
   useEffect(() => {
     videoRefs.current.forEach((video, index) => {
       if (!video) return
+
       if (index === activeVideoIndex) {
-        video.play().catch(() => {})
+        const seekToScene = () => {
+          const requested = Number(activeContent.startAt || 0)
+          const safeTime = Number.isFinite(video.duration) && video.duration > 0
+            ? Math.min(requested, Math.max(0, video.duration - 0.25))
+            : requested
+
+          if (Math.abs(video.currentTime - safeTime) > 0.6) {
+            try { video.currentTime = safeTime } catch {}
+          }
+          video.play().catch(() => {})
+        }
+
+        if (video.readyState >= 1) {
+          seekToScene()
+        } else {
+          video.addEventListener('loadedmetadata', seekToScene, { once: true })
+        }
       } else {
         video.pause()
       }
@@ -128,7 +149,7 @@ function App() {
     if (button && window.innerWidth < 640) {
       button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
     }
-  }, [activeScene, activeVideoIndex])
+  }, [activeScene, activeVideoIndex, activeContent.startAt])
 
   const switchScene = (index: number) => {
     if (index === activeScene || isTransitioning) return
