@@ -392,9 +392,41 @@
       .train-cap-picker button{min-height:38px;padding:0 13px}
     }
     @media(min-width:761px){
-      .train-cap-heading{max-width:960px}
-      .train-cap-heading>p{max-width:640px;font-size:14px;line-height:1.68}
-      .train-cap-meta{margin-top:13px}
+      .train-cap-heading{max-width:1040px}
+      .train-cap-heading h2{
+        font-size:clamp(58px,6.4vw,88px);
+        line-height:.94
+      }
+      .train-cap-heading>p{
+        max-width:720px;
+        font-size:17px;
+        line-height:1.72
+      }
+      .train-cap-meta{
+        margin-top:14px;
+        font-size:11px;
+        letter-spacing:.09em
+      }
+      .train-cap-details{
+        margin-top:28px;
+        width:min(980px,84vw);
+        column-gap:64px;
+        row-gap:22px
+      }
+      .train-cap-detail strong{
+        font-size:14px;
+        margin-bottom:6px
+      }
+      .train-cap-detail span{
+        max-width:420px;
+        font-size:13px;
+        line-height:1.6
+      }
+      .train-cap-picker button{
+        font-size:12px;
+        min-height:42px;
+        padding:0 16px
+      }
     }
 </style>
 </head>
