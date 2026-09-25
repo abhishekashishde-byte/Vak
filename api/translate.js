@@ -1,6 +1,6 @@
 import { domainPrompt, publicDomain, resolveDomain } from '../server/domain.js'
 import { validateDocumentUsage } from '../server/usageQuota.js'
-import { logAiUsage } from '../server/aiUsage.js'
+import { logAiUsage, realtimeUsageCost } from '../server/aiUsage.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -180,6 +180,18 @@ async function handleGifRequest(req, res) {
 export default async function handler(req, res) {
   if (req.method === 'GET' && String(req.query?.mode || '') === 'gifs') {
     return handleGifRequest(req, res)
+  }
+  if (req.method === 'POST' && String(req.body?.type || '') === 'realtime_response') {
+    const usage = req.body?.usage && typeof req.body.usage === 'object' ? req.body.usage : {}
+    const model = 'gpt-realtime-2.1'
+    const saved = await logAiUsage(req, {
+      feature: 'talk_for_me',
+      model,
+      usage,
+      estimatedCostUsd: realtimeUsageCost(model, usage),
+      metadata: { responseId: String(req.body?.responseId || '').slice(0,120) },
+    })
+    return res.status(saved ? 200 : 202).json({ ok: true })
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
