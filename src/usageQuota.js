@@ -30,12 +30,16 @@ export async function refreshQuotaStatus() {
   return status
 }
 
-export async function startTimedUsage(kind) {
+export async function startTimedUsage(kind, feature = '') {
   if (!supabase) throw new Error('Ana account services are unavailable.')
   const { data, error } = await supabase.rpc('ana_start_timed_usage', { p_kind: kind })
   if (error) throw rpcError(error, 'Could not start this tester session.')
   const row = Array.isArray(data) ? data[0] : data
   if (!row?.session_id) throw new Error('Ana could not create a tester usage session.')
+  const label = String(feature || (kind === 'talk' ? 'talk_for_me' : kind) || '').slice(0,64)
+  if (label) {
+    try { await supabase.rpc('ana_label_timed_usage', { p_session_id: row.session_id, p_feature: label }) } catch {}
+  }
   emitUsage(null)
   return {
     sessionId: row.session_id,
