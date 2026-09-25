@@ -337,6 +337,20 @@
     }
     .train-cap-story p{margin:0;font-size:13px;line-height:1.64;color:rgba(255,255,255,.82)}
     .train-cap-meta{margin-top:12px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.50)}
+    .train-cap-details{
+      margin-top:24px;width:min(860px,78vw);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px 12px
+    }
+    .train-cap-detail{
+      min-height:78px;padding:14px 16px;border:1px solid rgba(255,255,255,.13);border-radius:15px;
+      background:rgba(0,0,0,.18);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)
+    }
+    .train-cap-detail strong{
+      display:block;margin-bottom:5px;font-size:11px;line-height:1.3;color:#fff;font-weight:800
+    }
+    .train-cap-detail span{
+      display:block;font-size:10px;line-height:1.48;color:rgba(255,255,255,.66)
+    }
     .train-cap-picker-wrap{margin-top:auto}
     .train-cap-prompt{
       margin-bottom:8px;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.72)
@@ -367,6 +381,7 @@
       .train-cap-heading{max-width:92%;padding:0}
       .train-cap-heading h2{font-size:42px}
       .train-cap-heading p{font-size:12px}
+      .train-cap-details{display:none}
       .train-cap-story{max-width:100%;border-radius:0}
       .train-cap-story h3{font-size:30px}
       .train-cap-story p{font-size:12px}
@@ -447,6 +462,13 @@
             <h2 id="trainCapTitle">Translate what you write, paste or dictate.</h2>
             <p id="trainCapText">Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.</p>
             <div class="train-cap-meta" id="trainCapMeta">Typed · pasted · dictated · mixed-language text</div>
+
+            <div class="train-cap-details" id="trainCapDetails" aria-label="More about this capability">
+              <div class="train-cap-detail"><strong>Type, paste or dictate</strong><span>Start with the text in whatever way is quickest for you.</span></div>
+              <div class="train-cap-detail"><strong>Meaning first</strong><span>Ana focuses on natural meaning rather than literal word-for-word replacement.</span></div>
+              <div class="train-cap-detail"><strong>Mixed-language text</strong><span>Useful when one sentence already contains more than one language.</span></div>
+              <div class="train-cap-detail"><strong>Review before use</strong><span>Keep control of the final wording before you send or paste it.</span></div>
+            </div>
           </div>
 
           <div class="train-cap-picker-wrap">
@@ -647,61 +669,121 @@
       video:0,start:0,badge:'TRANSLATE TEXT',
       title:'Translate what you write, paste or dictate.',
       text:'Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.',
-      meta:'Typed · pasted · dictated · mixed-language text'
+      meta:'Typed · pasted · dictated · mixed-language text',
+      details:[
+        ['Type, paste or dictate','Start with the text in whatever way is quickest for you.'],
+        ['Meaning first','Ana focuses on natural meaning rather than literal word-for-word replacement.'],
+        ['Mixed-language text','Useful when one sentence already contains more than one language.'],
+        ['Review before use','Keep control of the final wording before you send or paste it.']
+      ]
     },
     {
       video:1,start:0,badge:'WRITE FOR YOU',
       title:'Tell Ana what you want to say. Ana writes it.',
       text:'Start with a rough thought, a few words or just the point you want to make.',
-      meta:'Messages · emails · everyday writing'
+      meta:'Messages · emails · everyday writing',
+      details:[
+        ['Start rough','Give Ana a thought, a few words or the point you need to communicate.'],
+        ['Ready-to-send writing','Turn the intent into a complete message, email or everyday note.'],
+        ['Keep your meaning','The goal is clearer writing without changing what you actually wanted to say.'],
+        ['Review it first','Read and adjust the result before you use it.']
+      ]
     },
     {
       video:3,start:0,badge:'REPLY FOR YOU',
       title:'Reply without opening a separate AI app.',
       text:'Select or copy the incoming message, tap Reply in Ana Keyboard, review the answer and use it where you are.',
-      meta:'Works from Ana Keyboard inside other Android apps'
+      meta:'Works from Ana Keyboard inside other Android apps',
+      details:[
+        ['Use the message context','Reply can work from text you deliberately select or copy.'],
+        ['Stay in the app','Draft the answer from Ana Keyboard instead of moving to a separate AI app.'],
+        ['Review the answer','Accept, reject or adjust the suggestion before using it.'],
+        ['No screen reading','Ana does not need to read the rest of your screen to create the reply.']
+      ]
     },
     {
       video:1,start:5.5,badge:'CORRECT YOUR WRITING',
       title:'Fix the sentence or the whole paragraph.',
       text:'Ana checks spelling, grammar, wording and clarity while keeping what you meant.',
-      meta:'Review the full change before accepting it'
+      meta:'Review the full change before accepting it',
+      details:[
+        ['Spelling & grammar','Catch basic language errors without changing the intended message.'],
+        ['Wording & clarity','Improve awkward phrasing and make the sentence easier to understand.'],
+        ['Whole paragraph','Correct more than the last word or sentence when the surrounding context matters.'],
+        ['Review before replacing','See the full change before Ana replaces your original text.']
+      ]
     },
     {
       video:2,start:0,badge:'TRANSLATE DOCUMENTS',
       title:'Translate PDF and Word. Keep the original look.',
       text:'Headings, tables, images, headers and formatting stay where they belong wherever possible.',
-      meta:'PDF · scanned PDF · Word · Compare'
+      meta:'PDF · scanned PDF · Word · Compare',
+      details:[
+        ['PDF','Work with native PDFs as well as scanned documents.'],
+        ['Word','Keep an editable .docx output after translation.'],
+        ['Structure','Retain tables, headings, images, headers and footers wherever possible.'],
+        ['Review','Switch between Original, Translated and Compare views.']
+      ]
     },
     {
       video:0,start:5.5,badge:'TRANSLATE PICTURES & SIGNS',
       title:'Point your camera at what you need to understand.',
       text:'Translate signs, menus, notices, labels and other text inside pictures.',
-      meta:'Camera · pictures · signs · menus · labels'
+      meta:'Camera · pictures · signs · menus · labels',
+      details:[
+        ['In place','Translated text stays connected to the area where it appeared.'],
+        ['Compare','Switch between the original image and the translated view.'],
+        ['Inspect','Zoom into small or difficult text when you need a closer look.'],
+        ['Uncertainty','Hard-to-read OCR can be flagged instead of silently guessed.']
+      ]
     },
     {
       video:1,start:8.5,badge:'INTERPRET MEETINGS',
       title:'Follow the meeting even when the language changes.',
       text:'Ana can listen, transcribe and translate longer conversations while the meeting continues.',
-      meta:'Live transcript · translated meeting text'
+      meta:'Live transcript · translated meeting text',
+      details:[
+        ['Live transcript','Follow what is being said as the meeting continues.'],
+        ['Translated meeting text','Read the conversation in the language you understand best.'],
+        ['Longer conversations','Designed for more than one short sentence or voice command.'],
+        ['Stay in the discussion','Use the transcript as support without stopping the meeting flow.']
+      ]
     },
     {
       video:3,start:5.5,badge:'TALK FOR YOU · EARLY ACCESS',
       title:'Tell Ana what you need. Ana can help carry the conversation.',
       text:'Useful for routine back-and-forth while important choices and commitments stay with you.',
-      meta:'Appointments · service conversations · everyday dialogue'
+      meta:'Appointments · service conversations · everyday dialogue',
+      details:[
+        ['Appointments','Help with ordinary appointment and reception conversations.'],
+        ['Service conversations','Support routine questions and answers when language is the barrier.'],
+        ['Everyday dialogue','Useful for common back-and-forth where the goal is straightforward.'],
+        ['You keep control','Important decisions and commitments remain yours.']
+      ]
     },
     {
       video:2,start:6.5,badge:'PROTECT YOUR DATA',
       title:'Privacy is part of how Ana works.',
       text:'Normal typing can stay local. Sensitive fields, Privacy Shield, Incognito and per-app controls limit when cloud AI is used.',
-      meta:'Local-first typing · sensitive-field protection · user control'
+      meta:'Local-first typing · sensitive-field protection · user control',
+      details:[
+        ['Local first','Basic typing, suggestions, autocorrection, learned words and glide do not need a cloud AI round-trip.'],
+        ['Private contexts','Password and OTP-style fields disable Ana AI behaviour and keep voice and clipboard features away.'],
+        ['You control AI','Privacy Shield, Incognito and per-app controls decide when Ana may use cloud features.'],
+        ['Reply stays deliberate','Ana only uses text you intentionally select, copy or place in the editor.']
+      ]
     },
     {
       video:0,start:10,badge:'ANA API',
       title:'Bring Ana into your own app or workflow.',
       text:'Use Ana’s translation and language capabilities inside an existing product, service or internal tool.',
-      meta:'For products · internal tools · custom workflows'
+      meta:'For products · internal tools · custom workflows',
+      details:[
+        ['Existing products','Add selected Ana language capabilities to a product you already operate.'],
+        ['Internal tools','Use the same language layer inside business or team workflows.'],
+        ['Custom workflows','Connect only the capabilities that fit the process you are building.'],
+        ['Same Ana layer','Bring translation and language assistance closer to where the work already happens.']
+      ]
     }
   ];
 
@@ -715,6 +797,7 @@
   const title=document.getElementById('trainCapTitle');
   const text=document.getElementById('trainCapText');
   const meta=document.getElementById('trainCapMeta');
+  const details=document.getElementById('trainCapDetails');
   let active=0;
   let locked=false;
 
@@ -751,6 +834,9 @@
       title.textContent=scene.title;
       text.textContent=scene.text;
       meta.textContent=scene.meta;
+      details.innerHTML=scene.details.map(item =>
+        '<div class="train-cap-detail"><strong>'+item[0]+'</strong><span>'+item[1]+'</span></div>'
+      ).join('');
       buttons.forEach((button,i)=>{
         const on=i===index;
         button.classList.toggle('is-active',on);
