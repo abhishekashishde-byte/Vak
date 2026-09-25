@@ -68,6 +68,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val clipboardManager by lazy { getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
     private var quickClipboardText = ""
+    private var quickClipboardImageUri = ""
+    private var quickClipboardImageMime = ""
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!isInputViewShown || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return@OnPrimaryClipChangedListener
         mainHandler.post {
@@ -135,8 +137,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         completeVoiceRecognition("", fromTimeout = true)
     }
 
-    private enum class SuggestionKind { WORD, NEXT_WORD, EMAIL, EMOJI, CLIPBOARD }
-    private data class SuggestionEntry(val label: String, val value: String, val kind: SuggestionKind)
+    private enum class SuggestionKind { WORD, NEXT_WORD, EMAIL, IMAGE, EMOJI, CLIPBOARD }
+    private data class SuggestionEntry(
+        val label: String,
+        val value: String,
+        val kind: SuggestionKind,
+        val mimeType: String = ""
+    )
 
     private data class AutoCorrectionRecord(val original: String, val corrected: String)
     private data class SentenceCorrectionRecord(val original: String, val corrected: String, val trailing: String)
@@ -453,6 +460,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     showStatus("Unpinned clipboard history cleared")
                 }
 
+                override fun onPickImage() {
+                    if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this@AnaKeyboardService)) return
+                    startActivity(
+                        Intent(this@AnaKeyboardService, PhotoPasteActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    showStatus("Choose a photo or screenshot")
+                }
+
                 override fun onTogglePin(text: String) {
                     KeyboardPrefs.toggleClipboardPin(this@AnaKeyboardService, text)
                     refreshClipboardPanel()
@@ -563,7 +579,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             if (appAiButton != null) appAiButton?.text = if (isAppAiAllowed()) "AI app ✓" else "AI app off"
             updateAiAvailability()
             requestSuggestionsSoon()
-            mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
+            mainHandler.postDelayed({
+            commitPendingGifIfAny()
+            commitPendingImageIfAny()
+        }, 120)
         }
     }
 
@@ -607,7 +626,10 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     override fun onWindowShown() {
         super.onWindowShown()
-        mainHandler.postDelayed({ commitPendingGifIfAny() }, 120)
+        mainHandler.postDelayed({
+            commitPendingGifIfAny()
+            commitPendingImageIfAny()
+        }, 120)
     }
 
     override fun onUpdateSelection(
@@ -679,7 +701,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (isSensitiveField()) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val primary = clipboard.primaryClip
-        if (primary != null && primary.itemCount > 0) {
+        if (primary != null && primary.itemCount > 0 && !primary.description.hasMimeType("image/*")) {
             val text = primary.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
             if (text.isNotBlank()) KeyboardPrefs.rememberClipboard(this, text)
         }
@@ -982,22 +1004,40 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     private fun refreshQuickClipboard() {
-        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) {
-            quickClipboardText = ""
-            return
-        }
+        quickClipboardText = ""
+        quickClipboardImageUri = ""
+        quickClipboardImageMime = ""
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+
         try {
-            val clip = clipboardManager.primaryClip
-            quickClipboardText = if (clip != null && clip.itemCount > 0) {
-                clip.getItemAt(0).coerceToText(this)?.toString()?.trim()?.take(800).orEmpty()
-            } else ""
-        } catch (_: Exception) { quickClipboardText = "" }
+            val clip = clipboardManager.primaryClip ?: return
+            if (clip.itemCount == 0) return
+            val item = clip.getItemAt(0)
+            val description = clip.description
+            val imageMime = description.filterMimeTypes("image/*")?.firstOrNull()
+            val imageUri = item.uri
+            if (imageUri != null && !imageMime.isNullOrBlank()) {
+                quickClipboardImageUri = imageUri.toString()
+                quickClipboardImageMime = imageMime
+                return
+            }
+            quickClipboardText = item.coerceToText(this)?.toString()?.trim()?.take(800).orEmpty()
+        } catch (_: Exception) {
+            quickClipboardText = ""
+            quickClipboardImageUri = ""
+            quickClipboardImageMime = ""
+        }
     }
 
     private fun clipboardQuickEntry(): SuggestionEntry? {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return null
+        if (quickClipboardImageUri.isNotBlank() && editorAcceptsMime(quickClipboardImageMime.ifBlank { "image/*" })) {
+            return SuggestionEntry("Paste image", quickClipboardImageUri, SuggestionKind.IMAGE, quickClipboardImageMime)
+        }
+
         val value = quickClipboardText.trim()
-        if (value.isBlank() || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return null
-        val label = "📋 " + value.replace('\n', ' ').replace(Regex("\\s+"), " ").take(22)
+        if (value.isBlank()) return null
+        val label = "Paste · " + value.replace('\n', ' ').replace(Regex("\\s+"), " ").take(20)
         return SuggestionEntry(label, value, SuggestionKind.CLIPBOARD)
     }
 
@@ -1333,6 +1373,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             button.contentDescription = entry?.let {
                 when (it.kind) {
                     SuggestionKind.CLIPBOARD -> "Paste " + it.value.take(40)
+                    SuggestionKind.IMAGE -> "Paste image from clipboard"
                     SuggestionKind.EMAIL -> "Email suggestion " + it.value
                     SuggestionKind.EMOJI -> "Insert emoji " + it.value
                     SuggestionKind.NEXT_WORD -> "Next word " + it.value
@@ -1368,6 +1409,15 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 KeyboardPrefs.rememberEmail(this, entry.value)
                 clearSuggestions()
                 refreshShiftFromEditor()
+            }
+            SuggestionKind.IMAGE -> {
+                finishLocalComposition(connection)
+                val uri = try { Uri.parse(entry.value) } catch (_: Exception) { null }
+                if (uri != null) {
+                    val inserted = commitRichImage(uri, entry.mimeType.ifBlank { "image/*" }, "Clipboard image")
+                    showStatus(if (inserted) "Image pasted" else "This app does not accept image paste")
+                }
+                clearSuggestions()
             }
             SuggestionKind.EMOJI -> {
                 finishLocalComposition(connection)
@@ -1722,6 +1772,42 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         } catch (_: Exception) {
             keyboard.setBackgroundBitmap(null)
         }
+    }
+
+    private fun editorAcceptsMime(mimeType: String): Boolean {
+        val supported = currentInputEditorInfo?.contentMimeTypes.orEmpty()
+        if (supported.isEmpty()) return false
+        val safe = mimeType.ifBlank { "image/*" }
+        val major = safe.substringBefore('/', "")
+        return supported.any { candidate ->
+            candidate == safe ||
+                candidate == "*/*" ||
+                (candidate.endsWith("/*") && major.isNotBlank() && candidate.substringBefore('/') == major)
+        }
+    }
+
+    private fun commitRichImage(uri: Uri, mimeType: String, label: String): Boolean {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return false
+        val safeMime = mimeType.ifBlank { "image/*" }
+        if (!editorAcceptsMime(safeMime)) return false
+        val content = InputContentInfo(uri, ClipDescription(label, arrayOf(safeMime)), null)
+        return try {
+            currentInputConnection?.commitContent(
+                content,
+                InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,
+                null
+            ) == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun commitPendingImageIfAny() {
+        val pending = KeyboardPrefs.consumePendingImage(this) ?: return
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+        val uri = try { Uri.parse(pending.first) } catch (_: Exception) { return }
+        val inserted = commitRichImage(uri, pending.second, "Photo")
+        showStatus(if (inserted) "Photo inserted" else "This app does not accept photo or screenshot paste")
     }
 
     private fun commitPendingGifIfAny() {
