@@ -258,7 +258,123 @@
       .footer{flex-direction:column;align-items:flex-start}
     }
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-  </style>
+  
+    /* TRAIN CAPABILITIES — replaces the old card carousel */
+    .train-capabilities{background:#000;color:#fff;padding:0}
+    .train-cap-shell{
+      position:relative;height:min(860px,100dvh);min-height:700px;overflow:hidden;background:#000;
+      isolation:isolate
+    }
+    .train-cap-video-stack,.train-cap-video{position:absolute;inset:0;width:100%;height:100%}
+    .train-cap-video{
+      object-fit:cover;opacity:0;transition:opacity 1s ease-in-out;
+      filter:saturate(.88) contrast(1.03) brightness(.86)
+    }
+    .train-cap-video.is-active{opacity:1}
+    .train-cap-window{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+    .train-cap-ceiling{
+      position:absolute;top:0;left:0;right:0;height:8.5vh;min-height:58px;
+      background:linear-gradient(180deg,rgba(20,20,22,.98),rgba(52,50,54,.97) 44%,rgba(16,16,18,.99));
+      box-shadow:inset 0 -2px 0 rgba(255,255,255,.08),0 12px 25px rgba(0,0,0,.38)
+    }
+    .train-cap-side{
+      position:absolute;top:0;bottom:0;width:clamp(28px,4.5vw,72px);
+      background:linear-gradient(90deg,rgba(8,8,10,.99),rgba(64,61,66,.95) 39%,rgba(25,24,27,.99) 72%,rgba(4,4,5,.99));
+      box-shadow:inset -1px 0 0 rgba(255,255,255,.09),inset 1px 0 0 rgba(255,255,255,.03)
+    }
+    .train-cap-side.left{left:0}.train-cap-side.right{right:0;transform:scaleX(-1)}
+    .train-cap-rim{
+      position:absolute;inset:max(7.2vh,54px) clamp(32px,5.5vw,90px) max(14vh,112px);
+      border:clamp(6px,.72vw,11px) solid rgba(57,55,60,.97);border-radius:clamp(18px,2vw,34px);
+      box-shadow:0 0 0 2px rgba(6,6,7,.96),0 0 0 3px rgba(255,255,255,.07),
+      inset 0 0 0 1px rgba(255,255,255,.06),inset 0 0 22px rgba(0,0,0,.34),0 14px 30px rgba(0,0,0,.28)
+    }
+    .train-cap-rim:before{
+      content:"";position:absolute;inset:7px;border:1px solid rgba(255,255,255,.08);
+      border-radius:calc(clamp(18px,2vw,34px) - 7px)
+    }
+    .train-cap-sill{
+      position:absolute;left:clamp(28px,4.8vw,78px);right:clamp(28px,4.8vw,78px);bottom:max(9vh,70px);
+      height:clamp(44px,6.5vh,70px);border-radius:8px 8px 0 0;
+      background:linear-gradient(180deg,rgba(70,67,72,.97),rgba(27,26,29,.99) 55%,rgba(8,8,9,.99));
+      box-shadow:inset 0 2px 0 rgba(255,255,255,.08),0 -9px 20px rgba(0,0,0,.35)
+    }
+    .train-cap-reflection{
+      position:absolute;height:5px;border-radius:999px;background:rgba(255,255,255,.75);
+      filter:blur(16px);opacity:.18
+    }
+    .train-cap-reflection.one{width:22vw;top:17vh;left:17vw;transform:rotate(-7deg)}
+    .train-cap-reflection.two{width:14vw;top:26vh;right:18vw;transform:rotate(10deg)}
+    .train-cap-shade{
+      position:absolute;inset:0;z-index:3;pointer-events:none;
+      background:
+        linear-gradient(90deg,rgba(0,0,0,.54) 0%,rgba(0,0,0,.12) 37%,rgba(0,0,0,.08) 63%,rgba(0,0,0,.44) 100%),
+        linear-gradient(0deg,rgba(0,0,0,.72) 0%,rgba(0,0,0,.13) 42%,rgba(0,0,0,.18) 100%)
+    }
+    .train-cap-content{
+      position:relative;z-index:4;height:100%;max-width:1180px;margin:0 auto;padding:clamp(28px,5vh,54px) 22px 24px;
+      display:flex;flex-direction:column
+    }
+    .train-cap-heading{max-width:520px}
+    .train-cap-heading .kicker{color:rgba(255,255,255,.55)}
+    .train-cap-heading h2{
+      margin:10px 0 10px;font-size:clamp(42px,5vw,70px);line-height:.95;letter-spacing:-.055em;color:#fff
+    }
+    .train-cap-heading p{
+      margin:0;max-width:500px;font-size:13px;line-height:1.6;color:rgba(255,255,255,.70)
+    }
+    .train-cap-story{
+      margin-top:auto;max-width:640px;padding:22px 24px;border:1px solid rgba(255,255,255,.15);
+      border-radius:24px;background:rgba(7,12,17,.27);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+      transition:opacity .22s ease,transform .22s ease
+    }
+    .train-cap-story.is-changing{opacity:.1;transform:translateY(6px)}
+    .train-cap-badge{
+      font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.58);font-weight:800
+    }
+    .train-cap-story h3{
+      margin:10px 0 10px;font-size:clamp(28px,3.3vw,46px);line-height:1;letter-spacing:-.045em;color:#fff
+    }
+    .train-cap-story p{margin:0;font-size:13px;line-height:1.64;color:rgba(255,255,255,.82)}
+    .train-cap-meta{margin-top:12px;font-size:9px;letter-spacing:.08em;color:rgba(255,255,255,.50)}
+    .train-cap-picker-wrap{margin-top:18px}
+    .train-cap-prompt{
+      margin-bottom:8px;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.72)
+    }
+    .train-cap-picker{
+      display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch
+    }
+    .train-cap-picker::-webkit-scrollbar{display:none}
+    .train-cap-picker button{
+      flex:0 0 auto;min-height:40px;padding:0 15px;border:1px solid rgba(255,255,255,.28);border-radius:999px;
+      background:rgba(0,0,0,.24);color:rgba(255,255,255,.88);font-size:11px;font-weight:750;
+      backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+      transition:background .3s ease,color .3s ease,border-color .3s ease,transform .3s ease,opacity .3s ease
+    }
+    .train-cap-picker button:hover{border-color:rgba(255,255,255,.60);background:rgba(255,255,255,.08)}
+    .train-cap-picker button.is-active{
+      background:#fff;color:#0d1720;border-color:#fff;box-shadow:0 5px 16px rgba(0,0,0,.22)
+    }
+    @media(max-width:760px){
+      .train-cap-shell{height:100dvh;min-height:680px}
+      .train-cap-ceiling{height:7vh;min-height:50px}
+      .train-cap-side{width:18px}
+      .train-cap-rim{inset:max(7vh,50px) 18px max(16vh,120px);border-width:6px;border-radius:24px}
+      .train-cap-sill{left:17px;right:17px;bottom:max(10vh,76px);height:50px}
+      .train-cap-reflection.one{width:34vw;left:20vw;top:16vh}
+      .train-cap-reflection.two{width:22vw;right:18vw;top:24vh}
+      .train-cap-content{padding:26px 18px 20px}
+      .train-cap-heading{max-width:88%}
+      .train-cap-heading h2{font-size:44px}
+      .train-cap-heading p{font-size:12px}
+      .train-cap-story{max-width:100%;padding:18px 18px;border-radius:20px}
+      .train-cap-story h3{font-size:30px}
+      .train-cap-story p{font-size:12px}
+      .train-cap-picker{margin-right:-18px;padding-right:18px}
+      .train-cap-picker button{min-height:38px;padding:0 13px}
+    }
+</style>
 </head>
 <body>
   <header class="topbar">
@@ -297,133 +413,66 @@
       </div>
     </section>
 
-    <section class="quick" id="products">
-      <div class="wrap">
-        <div class="section-head">
-          <div class="kicker">WHAT ANA DOES</div>
-          <h2>These are Ana’s main capabilities.</h2>
-          <p>Each one solves a different communication problem. Swipe through the cards for the details.</p>
+    <section class="train-capabilities" id="products">
+      <div class="train-cap-shell">
+        <div class="train-cap-video-stack" aria-hidden="true">
+          <video class="train-cap-video is-active" muted loop playsinline preload="auto">
+            <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4" type="video/mp4">
+          </video>
+          <video class="train-cap-video" muted loop playsinline preload="metadata">
+            <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_092026_dd05b805-ea0f-40b2-8c52-332b88502592.mp4" type="video/mp4">
+          </video>
+          <video class="train-cap-video" muted loop playsinline preload="metadata">
+            <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081042_df7202bf-bd80-4b2b-bbc6-1f09ba2870e9.mp4" type="video/mp4">
+          </video>
+          <video class="train-cap-video" muted loop playsinline preload="metadata">
+            <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_080959_4cac5234-3573-464e-a5b7-76b94b8a7d61.mp4" type="video/mp4">
+          </video>
         </div>
 
-        <div class="cap-index" aria-label="Ana capability summary">
-          <span>Translate text</span>
-          <span>Write for you</span>
-          <span>Reply from your keyboard</span>
-          <span>Correct your writing</span>
-          <span>Translate PDF & Word</span>
-          <span>Translate pictures & signs</span>
-          <span>Interpret meetings</span>
-          <span>Talk for you</span>
-          <span>Protect your data</span>
-          <span>Ana API</span>
+        <div class="train-cap-window" aria-hidden="true">
+          <div class="train-cap-ceiling"></div>
+          <div class="train-cap-side left"></div>
+          <div class="train-cap-side right"></div>
+          <div class="train-cap-rim"></div>
+          <div class="train-cap-sill"></div>
+          <div class="train-cap-reflection one"></div>
+          <div class="train-cap-reflection two"></div>
+        </div>
+
+        <div class="train-cap-shade" aria-hidden="true"></div>
+
+        <div class="train-cap-content">
+          <div class="train-cap-heading">
+            <div class="kicker">MEET ANA</div>
+            <h2>One Ana.<br>Different moments.</h2>
+            <p>Choose a capability and see what Ana does without leaving the journey.</p>
+          </div>
+
+          <div class="train-cap-story" id="trainCapStory">
+            <div class="train-cap-badge" id="trainCapBadge">TRANSLATE TEXT</div>
+            <h3 id="trainCapTitle">Translate what you write, paste or dictate.</h3>
+            <p id="trainCapText">Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.</p>
+            <div class="train-cap-meta" id="trainCapMeta">Typed · pasted · dictated · mixed-language text</div>
+          </div>
+
+          <div class="train-cap-picker-wrap">
+            <div class="train-cap-prompt">Tap a capability</div>
+            <div class="train-cap-picker" id="trainCapPicker" role="tablist" aria-label="Ana capabilities">
+              <button class="is-active" type="button" data-scene="0" role="tab" aria-selected="true">Translate</button>
+              <button type="button" data-scene="1" role="tab" aria-selected="false">Write</button>
+              <button type="button" data-scene="2" role="tab" aria-selected="false">Reply</button>
+              <button type="button" data-scene="3" role="tab" aria-selected="false">Correct</button>
+              <button type="button" data-scene="4" role="tab" aria-selected="false">Documents</button>
+              <button type="button" data-scene="5" role="tab" aria-selected="false">Camera</button>
+              <button type="button" data-scene="6" role="tab" aria-selected="false">Meetings</button>
+              <button type="button" data-scene="7" role="tab" aria-selected="false">Talk for Me</button>
+              <button type="button" data-scene="8" role="tab" aria-selected="false">Privacy</button>
+              <button type="button" data-scene="9" role="tab" aria-selected="false">Ana API</button>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div class="cap-carousel" aria-label="Swipe through Ana capabilities">
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/3769138/pexels-photo-3769138.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a phone while traveling">
-                  <div class="cap-copy">
-                    <small>TRANSLATE TEXT</small>
-                    <h3>Translate what you write, paste or dictate.</h3>
-                    <p>Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.</p>
-                    <span class="cap-meta">Typed · pasted · dictated · mixed-language text</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/261949/pexels-photo-261949.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person writing on a laptop">
-                  <div class="cap-copy">
-                    <small>WRITE FOR YOU</small>
-                    <h3>Tell Ana what you want to say. Ana writes it.</h3>
-                    <p>Start with a rough thought, a few words or just the point you want to make.</p>
-                    <span class="cap-meta">Messages · emails · everyday writing</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/19474421/pexels-photo-19474421.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person replying to a message on a smartphone">
-                  <div class="cap-copy">
-                    <small>REPLY FOR YOU</small>
-                    <h3>Reply without opening a separate AI app.</h3>
-                    <p>Select or copy the incoming message, tap Reply in Ana Keyboard, review the answer and use it where you are.</p>
-                    <span class="cap-meta">Works from Ana Keyboard inside other Android apps</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/4050291/pexels-photo-4050291.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person editing text on a laptop">
-                  <div class="cap-copy">
-                    <small>CORRECT YOUR WRITING</small>
-                    <h3>Fix the sentence or the whole paragraph.</h3>
-                    <p>Ana checks spelling, grammar, wording and clarity while keeping what you meant.</p>
-                    <span class="cap-meta">Review the full change before accepting it</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/92631/pexels-photo-92631.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Laptop, document and pen on a desk">
-                  <div class="cap-copy">
-                    <small>TRANSLATE DOCUMENTS</small>
-                    <h3>Translate PDF and Word. Keep the original look.</h3>
-                    <p>Headings, tables, images, headers and formatting stay where they belong wherever possible.</p>
-                    <span class="cap-meta">PDF · scanned PDF · Word · Compare</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/18240395/pexels-photo-18240395.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Person using a smartphone camera to photograph signs">
-                  <div class="cap-copy">
-                    <small>TRANSLATE PICTURES & SIGNS</small>
-                    <h3>Point your camera at what you need to understand.</h3>
-                    <p>Translate signs, menus, notices, labels and other text inside pictures.</p>
-                    <span class="cap-meta">Camera · pictures · signs · menus · labels</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/8133989/pexels-photo-8133989.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="People in a work meeting">
-                  <div class="cap-copy">
-                    <small>INTERPRET MEETINGS</small>
-                    <h3>Follow the meeting even when the language changes.</h3>
-                    <p>Ana can listen, transcribe and translate longer conversations while the meeting continues.</p>
-                    <span class="cap-meta">Live transcript · translated meeting text</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/7108327/pexels-photo-7108327.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Two people speaking during an appointment">
-                  <div class="cap-copy">
-                    <span class="cap-early">Early access</span>
-                    <small>TALK FOR YOU</small>
-                    <h3>Tell Ana what you need. Ana can help carry the conversation.</h3>
-                    <p>Useful for routine back-and-forth while important choices and commitments stay with you.</p>
-                    <span class="cap-meta">Appointments · service conversations · everyday dialogue</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/4260314/pexels-photo-4260314.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Parent and child working together at home">
-                  <div class="cap-copy">
-                    <small>PROTECT YOUR DATA</small>
-                    <h3>Privacy is part of how Ana works.</h3>
-                    <p>Normal typing can stay local. Sensitive fields, Privacy Shield, Incognito and per-app controls limit when cloud AI is used.</p>
-                    <span class="cap-meta">Local-first typing · sensitive-field protection · user control</span>
-                  </div>
-                </article>
-
-        <article class="cap-slide">
-                  <img src="https://images.pexels.com/photos/5483077/pexels-photo-5483077.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Developer working with software on a laptop">
-                  <div class="cap-copy">
-                    <small>ANA API</small>
-                    <h3>Bring Ana into your own app or workflow.</h3>
-                    <p>Use Ana’s translation and language capabilities inside an existing product, service or internal tool.</p>
-                    <span class="cap-meta">For products · internal tools · custom workflows</span>
-                  </div>
-                </article>
-
-      </div>
-
-      <div class="swipe-note">Swipe horizontally to explore all Ana capabilities</div>
     </section>
 
     <section class="splits">
@@ -597,5 +646,146 @@
     </div>
   </footer>
 
+
+<script>
+(function(){
+  const scenes=[
+    {
+      video:0,start:0,badge:'TRANSLATE TEXT',
+      title:'Translate what you write, paste or dictate.',
+      text:'Ana aims for natural meaning in the target language rather than a mechanical word-for-word result.',
+      meta:'Typed · pasted · dictated · mixed-language text'
+    },
+    {
+      video:1,start:0,badge:'WRITE FOR YOU',
+      title:'Tell Ana what you want to say. Ana writes it.',
+      text:'Start with a rough thought, a few words or just the point you want to make.',
+      meta:'Messages · emails · everyday writing'
+    },
+    {
+      video:3,start:0,badge:'REPLY FOR YOU',
+      title:'Reply without opening a separate AI app.',
+      text:'Select or copy the incoming message, tap Reply in Ana Keyboard, review the answer and use it where you are.',
+      meta:'Works from Ana Keyboard inside other Android apps'
+    },
+    {
+      video:1,start:5.5,badge:'CORRECT YOUR WRITING',
+      title:'Fix the sentence or the whole paragraph.',
+      text:'Ana checks spelling, grammar, wording and clarity while keeping what you meant.',
+      meta:'Review the full change before accepting it'
+    },
+    {
+      video:2,start:0,badge:'TRANSLATE DOCUMENTS',
+      title:'Translate PDF and Word. Keep the original look.',
+      text:'Headings, tables, images, headers and formatting stay where they belong wherever possible.',
+      meta:'PDF · scanned PDF · Word · Compare'
+    },
+    {
+      video:0,start:5.5,badge:'TRANSLATE PICTURES & SIGNS',
+      title:'Point your camera at what you need to understand.',
+      text:'Translate signs, menus, notices, labels and other text inside pictures.',
+      meta:'Camera · pictures · signs · menus · labels'
+    },
+    {
+      video:1,start:8.5,badge:'INTERPRET MEETINGS',
+      title:'Follow the meeting even when the language changes.',
+      text:'Ana can listen, transcribe and translate longer conversations while the meeting continues.',
+      meta:'Live transcript · translated meeting text'
+    },
+    {
+      video:3,start:5.5,badge:'TALK FOR YOU · EARLY ACCESS',
+      title:'Tell Ana what you need. Ana can help carry the conversation.',
+      text:'Useful for routine back-and-forth while important choices and commitments stay with you.',
+      meta:'Appointments · service conversations · everyday dialogue'
+    },
+    {
+      video:2,start:6.5,badge:'PROTECT YOUR DATA',
+      title:'Privacy is part of how Ana works.',
+      text:'Normal typing can stay local. Sensitive fields, Privacy Shield, Incognito and per-app controls limit when cloud AI is used.',
+      meta:'Local-first typing · sensitive-field protection · user control'
+    },
+    {
+      video:0,start:10,badge:'ANA API',
+      title:'Bring Ana into your own app or workflow.',
+      text:'Use Ana’s translation and language capabilities inside an existing product, service or internal tool.',
+      meta:'For products · internal tools · custom workflows'
+    }
+  ];
+
+  const section=document.querySelector('.train-capabilities');
+  if(!section) return;
+
+  const videos=[...section.querySelectorAll('.train-cap-video')];
+  const buttons=[...section.querySelectorAll('.train-cap-picker button')];
+  const story=document.getElementById('trainCapStory');
+  const badge=document.getElementById('trainCapBadge');
+  const title=document.getElementById('trainCapTitle');
+  const text=document.getElementById('trainCapText');
+  const meta=document.getElementById('trainCapMeta');
+  let active=0;
+  let locked=false;
+
+  function playVideo(index,start){
+    videos.forEach((video,i)=>{
+      video.classList.toggle('is-active',i===index);
+      if(i===index){
+        const seek=()=>{
+          const safe=Number.isFinite(video.duration)&&video.duration>0
+            ? Math.min(start,Math.max(0,video.duration-.2))
+            : start;
+          if(Math.abs(video.currentTime-safe)>.5){
+            try{ video.currentTime=safe }catch(e){}
+          }
+          video.play().catch(()=>{});
+        };
+        if(video.readyState>=1) seek();
+        else video.addEventListener('loadedmetadata',seek,{once:true});
+      }else{
+        video.pause();
+      }
+    });
+  }
+
+  function activate(index){
+    if(index===active||locked) return;
+    locked=true;
+    const scene=scenes[index];
+    story.classList.add('is-changing');
+
+    setTimeout(()=>{
+      active=index;
+      badge.textContent=scene.badge;
+      title.textContent=scene.title;
+      text.textContent=scene.text;
+      meta.textContent=scene.meta;
+      buttons.forEach((button,i)=>{
+        const on=i===index;
+        button.classList.toggle('is-active',on);
+        button.setAttribute('aria-selected',on?'true':'false');
+      });
+      playVideo(scene.video,scene.start);
+      story.classList.remove('is-changing');
+      buttons[index].scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+      setTimeout(()=>{locked=false},580);
+    },140);
+  }
+
+  buttons.forEach((button,index)=>{
+    button.addEventListener('click',()=>activate(index));
+  });
+
+  const observer=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        playVideo(scenes[active].video,scenes[active].start);
+      }else{
+        videos.forEach(v=>v.pause());
+      }
+    });
+  },{threshold:.18});
+
+  observer.observe(section);
+})();
+</script>
 </body>
 </html>
