@@ -6,6 +6,11 @@ on:
     paths:
       - 'android-keyboard/**'
       - '.github/workflows/ana-keyboard.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-keyboard/**'
+      - '.github/workflows/ana-keyboard.yml'
   workflow_dispatch:
 
 jobs:
@@ -16,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
