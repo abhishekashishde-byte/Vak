@@ -533,7 +533,7 @@ export default function MeetingMode() {
   }
 
   const startMeeting = async () => {
-    if (!consentVerified) { setError('Confirm that participants have been informed and you have permission to record/process this meeting.'); return }
+    if (!consentVerified) { setError('Confirm that all participants have agreed to the meeting being recorded, transcribed and processed by Ana.'); return }
     if (!navigator.mediaDevices?.getUserMedia) { setError('Meeting capture is not supported in this browser.'); return }
     setError(''); setNotesError(''); setMeetingNotes(null); setNotesStatus('idle'); setSessionState('connecting'); setPaused(false); pausedRef.current = false; activeRef.current = true
     setBookmarks([]); setMissedSummary('')
@@ -719,7 +719,7 @@ export default function MeetingMode() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (!consentVerified) { setError('Confirm consent before importing meeting audio.'); return }
+    if (!consentVerified) { setError('Confirm that all participants agreed before importing or processing meeting audio.'); return }
     if (file.size > MAX_FINAL_AUDIO_BYTES) { setError('This audio file is larger than the supported final transcription size.'); return }
     setImportingAudio(true); setError(''); setNotesError(''); setNotesStatus('transcribing'); setSessionState('processing')
     const end = Date.now()
@@ -887,8 +887,8 @@ export default function MeetingMode() {
         {selectedMomTemplate === 'custom' && <div className="meeting-custom-template"><input value={customMomName} onChange={event => setCustomMomName(event.target.value)} placeholder="Template name"/><textarea value={customMomInstruction} onChange={event => setCustomMomInstruction(event.target.value)} placeholder="Example: Business requirement, SAP solution, gaps, decisions and follow-up actions."/></div>}
       </section>
 
-      <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Consent verified</strong> I confirm participants have been informed and I have the necessary permission to record/process this meeting.</span></label>
-      <label className="meeting-consent meeting-keep-audio"><input type="checkbox" checked={keepAudio} onChange={event => setKeepAudio(event.target.checked)} disabled={active || processing}/><span><strong>Keep audio after transcription</strong> Off by default. If enabled, Ana retains this meeting audio privately so transcript timestamps can replay the original moment.</span></label>
+      <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Everyone has agreed</strong> I confirm that all participants have been informed and have agreed to this meeting being recorded, transcribed and processed by Ana.</span></label>
+      <label className="meeting-consent meeting-keep-audio"><input type="checkbox" checked={keepAudio} onChange={event => setKeepAudio(event.target.checked)} disabled={active || processing}/><span><strong>Keep audio after transcription</strong> Off by default. Enable only if participants also agreed that Ana may retain the meeting audio; otherwise Ana deletes the temporary audio after transcription.</span></label>
       <div className={`meeting-single-card ${active ? 'active' : ''}`}>
         <div className="meeting-status-row meeting-live-status"><div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div><span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span></div>
 
