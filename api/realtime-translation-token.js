@@ -1,5 +1,6 @@
 import { publicDomain, resolveDomain } from '../server/domain.js'
 import { validateTesterSession } from '../server/usageQuota.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 const ALLOWED_LANGUAGES = new Set([
   'de', 'en', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it',
@@ -7,6 +8,8 @@ const ALLOWED_LANGUAGES = new Set([
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'realtime_translation_token', requireAuth: true, authenticatedLimit: 30, windowSeconds: 60 })
+  if (!protection) return
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
   const quota = await validateTesterSession(req, 'meeting_live', req.body?.quotaSessionId)
