@@ -20,7 +20,9 @@
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "perfect-freehand": "latest",
+    "rbush": "latest"
   },
   "devDependencies": {
     "@tailwindcss/vite": "latest",
