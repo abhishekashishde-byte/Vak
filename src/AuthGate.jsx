@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Workspace from './Workspace.jsx'
 import AuthPage from './AuthPage.jsx'
+import BetaAccessGate, { hasBetaAcceptance } from './BetaAccessGate.jsx'
 import { authConfigured, supabase } from './lib/supabase'
 import { hydrateAndStartAccountPersistence, stopAccountPersistence } from './accountDataPersistence.js'
 
@@ -127,5 +128,8 @@ export default function AuthGate() {
   }
 
   if (!session) return <AuthPage />
+  if (!hasBetaAcceptance(session.user)) {
+    return <BetaAccessGate user={session.user} onAccepted={user => setSession(current => current ? { ...current, user } : current)}/>
+  }
   return <Workspace />
 }
