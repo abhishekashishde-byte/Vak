@@ -25,11 +25,11 @@ function parseJson(text = '') {
   return null
 }
 
-async function readVisualText(imageData) {
+async function readVisualText(imageData, target) {
   const response = await fetch('/api/document-ocr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageData, purpose: 'camera', pageNumber: 1 }),
+    body: JSON.stringify({ imageData, purpose: 'camera', pageNumber: 1, target }),
   })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Ana could not read this image.')
@@ -100,26 +100,46 @@ function targetDirection(target) {
   return target === 'Urdu' ? 'rtl' : 'ltr'
 }
 
+function hexLuminance(value) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(value || '').trim())
+  if (!match) return null
+  const channels = [0, 2, 4].map(offset => parseInt(match[1].slice(offset, offset + 2), 16) / 255)
+    .map(channel => channel <= .03928 ? channel / 12.92 : Math.pow((channel + .055) / 1.055, 2.4))
+  return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2]
+}
+
+function visualColors(style = {}) {
+  const backgroundColor = /^#[0-9a-f]{6}$/i.test(String(style.backgroundColor || '')) ? style.backgroundColor : '#202020'
+  let textColor = /^#[0-9a-f]{6}$/i.test(String(style.textColor || '')) ? style.textColor : '#ffffff'
+  const bg = hexLuminance(backgroundColor)
+  const fg = hexLuminance(textColor)
+  if (bg != null && fg != null) {
+    const contrast = (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05)
+    if (contrast < 4.2) textColor = bg > .42 ? '#111111' : '#ffffff'
+  }
+  return { backgroundColor, textColor }
+}
+
 function blockStyle(block, target) {
   const x = Math.max(0, Math.min(1000, Number(block.x) || 0))
   const y = Math.max(0, Math.min(1000, Number(block.y) || 0))
   const width = Math.max(12, Math.min(1000 - x, Number(block.width) || 120))
   const height = Math.max(18, Math.min(1000 - y, Number(block.height) || 50))
-  const sourceLength = Math.max(1, String(block.text || '').length)
-  const translatedLength = Math.max(1, String(block.translation || '').length)
-  const expansion = Math.max(1, translatedLength / sourceLength)
-  const fontSize = Math.max(9, Math.min(24, (height / 3.4) / Math.sqrt(expansion)))
+  const translatedLength = Math.max(1, String(block.translation || block.text || '').length)
+  const areaFit = Math.sqrt(Math.max(1, (width * height) / (translatedLength * .72)))
+  const fontCqw = Math.max(.5, Math.min(3.15, areaFit / 10))
   const style = block.style || {}
+  const colors = visualColors(style)
   return {
     left: (x / 10) + '%',
     top: (y / 10) + '%',
     width: (width / 10) + '%',
-    minHeight: (height / 10) + '%',
-    fontSize: fontSize + 'px',
-    color: style.textColor || '#ffffff',
-    backgroundColor: style.backgroundColor || 'rgba(20,20,20,.84)',
+    height: (height / 10) + '%',
+    fontSize: `clamp(5px, ${fontCqw.toFixed(2)}cqw, 20px)`,
+    color: colors.textColor,
+    backgroundColor: colors.backgroundColor,
     textAlign: style.align || 'left',
-    fontWeight: style.weight === 'bold' ? 700 : style.weight === 'semibold' ? 600 : 400,
+    fontWeight: style.weight === 'bold' ? 700 : style.weight === 'semibold' ? 600 : 500,
     fontStyle: style.italic ? 'italic' : 'normal',
     fontFamily: visualFontFamily(style.family),
     direction: targetDirection(target),
@@ -254,12 +274,18 @@ export default function CameraMode() {
     setQuality({ low: 0, handwritten: 0 })
     setStage('reading')
     try {
-      const reading = await readVisualText(data)
+      const reading = await readVisualText(data, language)
       const sourceBlocks = Array.isArray(reading.blocks) ? reading.blocks : []
       if (!sourceBlocks.length) throw new Error('Ana could not find readable text in this image.')
 
-      setStage('translating')
-      const translated = await translateBlocks(sourceBlocks, language)
+      const direct = sourceBlocks.map((block, index) => ({
+        ...block,
+        id: `visual-${index + 1}`,
+        translation: clean(block.translation),
+      }))
+      const translated = direct.every(block => block.translation)
+        ? direct
+        : (setStage('translating'), await translateBlocks(sourceBlocks, language))
       setBlocks(translated)
       setQuality({
         low: translated.filter(block => block.confidence === 'low').length,
@@ -322,31 +348,33 @@ export default function CameraMode() {
       const h = (Math.max(18, Number(block.height) || 50) / 1000) * canvas.height
 
       const style = block.style || {}
-      ctx.fillStyle = style.backgroundColor || 'rgba(20,20,20,.84)'
-      ctx.fillRect(x, y, w, Math.max(h, 22))
+      const colors = visualColors(style)
+      ctx.fillStyle = colors.backgroundColor
+      ctx.fillRect(x, y, w, h)
 
-      let fontSize = Math.max(11, Math.min(30, h * 0.42))
+      const translatedLength = Math.max(1, String(block.translation || '').length)
+      let fontSize = Math.max(6, Math.min(28, h * .34, Math.sqrt(Math.max(1, (w * h) / (translatedLength * .72)))))
       const weight = style.weight === 'bold' ? '700' : style.weight === 'semibold' ? '600' : '400'
       const italic = style.italic ? 'italic ' : ''
       const family = visualFontFamily(style.family)
       const setFont = () => { ctx.font = italic + weight + ' ' + fontSize + 'px ' + family }
       setFont()
-      ctx.fillStyle = style.textColor || '#ffffff'
+      ctx.fillStyle = colors.textColor
       ctx.textBaseline = 'top'
       ctx.textAlign = style.align === 'center' ? 'center' : style.align === 'right' ? 'right' : 'left'
       ctx.direction = targetDirection(target)
       let lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
 
-      while (lines.length * fontSize * 1.2 > Math.max(h, 30) && fontSize > 9) {
+      while (lines.length * fontSize * 1.12 > Math.max(h - 6, 8) && fontSize > 5) {
         fontSize -= 1
         setFont()
         lines = canvasWrapText(ctx, block.translation, Math.max(20, w - 10))
       }
 
       const drawX = ctx.textAlign === 'center' ? x + w / 2 : ctx.textAlign === 'right' ? x + w - 5 : x + 5
-      const maxLines = Math.max(1, Math.floor(Math.max(h, 30) / (fontSize * 1.2)))
+      const maxLines = Math.max(1, Math.floor(Math.max(h - 6, 8) / (fontSize * 1.12)))
       lines.slice(0, maxLines).forEach((line, index) => {
-        ctx.fillText(line, drawX, y + 4 + index * fontSize * 1.2, Math.max(20, w - 10))
+        ctx.fillText(line, drawX, y + 3 + index * fontSize * 1.12, Math.max(20, w - 10))
       })
     }
 
@@ -412,8 +440,8 @@ export default function CameraMode() {
       {imageData && <img src={imageData} alt="Captured scene"/>}
       <div className="camera-processing-mask">
         <LoaderCircle className="spin" size={28}/>
-        <strong>{stage === 'reading' ? 'Reading visible text…' : `Translating to ${target}…`}</strong>
-        <span>{stage === 'reading' ? 'Ana is locating the words and their position.' : 'Ana is keeping names, prices, dates and other critical details intact.'}</span>
+        <strong>{stage === 'reading' ? `Reading & translating to ${target}…` : `Finishing translation to ${target}…`}</strong>
+        <span>{stage === 'reading' ? 'Ana is reading the image and translating it in one pass.' : 'Ana is completing a fallback translation for a few detected areas.'}</span>
       </div>
     </div>}
 
