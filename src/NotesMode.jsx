@@ -19,6 +19,12 @@ const BRUSH_WIDTHS = [
   { label:'Thick', value:3.8 },
   { label:'Bold', value:5.8 },
 ]
+const PAPER_TEMPLATES = [
+  { id:'blank', label:'Blank' },
+  { id:'ruled', label:'Lined' },
+  { id:'grid', label:'Grid / mesh' },
+  { id:'bullets', label:'Bullet sheet' },
+]
 const BRUSH_PREFS_KEY = 'ana-notes-brush-v1'
 function readBrushPrefs() {
   try {
@@ -78,6 +84,9 @@ export default function NotesMode() {
   const [inkColor,setInkColor]=useState(()=>readBrushPrefs().color||'#171717')
   const [inkWidth,setInkWidth]=useState(()=>Number(readBrushPrefs().width)||2.2)
   const [ink,setInk]=useState([])
+  const [paperTemplate,setPaperTemplate]=useState('ruled')
+  const [textBlocks,setTextBlocks]=useState([])
+  const [focusedTextId,setFocusedTextId]=useState('')
   const [typedText,setTypedText]=useState('')
   const [recognizedText,setRecognizedText]=useState('')
   const [language,setLanguage]=useState('English')
@@ -92,6 +101,7 @@ export default function NotesMode() {
   const [transcript,setTranscript]=useState('')
   const [meetingStatus,setMeetingStatus]=useState('')
   const [meetingBusy,setMeetingBusy]=useState(false)
+  const paperRef=useRef(null)
   const canvasRef=useRef(null)
   const inputCanvasRef=useRef(null)
   const inkRef=useRef([])
@@ -114,6 +124,7 @@ export default function NotesMode() {
   const quotaDeadlineRef=useRef(null)
   const recordingRef=useRef(false)
   const recordingStartedRef=useRef(null)
+  const stylusActiveUntilRef=useRef(0)
 
   const updateCurrentLocal=(patch)=>{
     if (!currentId) return
@@ -149,7 +160,13 @@ export default function NotesMode() {
   useEffect(()=>{
     if (!current) return
     setInk(Array.isArray(current.ink)?current.ink:[])
-    setTypedText(current.typed_text||'')
+    const metadata=current.metadata&&typeof current.metadata==='object'?current.metadata:{}
+    const savedBlocks=Array.isArray(metadata.textBlocks)?metadata.textBlocks.filter(block=>block&&typeof block==='object'):[]
+    const legacyText=String(current.typed_text||'')
+    const initialBlocks=savedBlocks.length?savedBlocks:(legacyText?[{id:uuid(),x:.08,y:.08,w:.82,text:legacyText}]:[])
+    setTextBlocks(initialBlocks)
+    setPaperTemplate(PAPER_TEMPLATES.some(item=>item.id===metadata.paperTemplate)?metadata.paperTemplate:'ruled')
+    setTypedText(initialBlocks.map(block=>String(block.text||'').trim()).filter(Boolean).join('\n\n')||legacyText)
     setRecognizedText(current.recognized_text||'')
     setLanguage(current.language||'English')
     setAi({...emptyAi,...(current.ai_note||{})})
@@ -173,6 +190,9 @@ export default function NotesMode() {
   },[currentId])
 
   useEffect(()=>{ drawInk(canvasRef.current,ink,null) },[ink])
+  useEffect(()=>{
+    setTypedText(textBlocks.map(block=>String(block?.text||'').trim()).filter(Boolean).join('\n\n'))
+  },[textBlocks])
 
   useEffect(()=>{
     if (!currentId || loading) return
@@ -188,6 +208,7 @@ export default function NotesMode() {
           ai_note:ai,
           language,
           meeting_transcript:transcript,
+          metadata:{...(current?.metadata||{}),paperTemplate,textBlocks},
           updated_at:new Date().toISOString(),
         }
         const { error:saveError }=await supabase.from('ana_notes').update(patch).eq('id',currentId)
@@ -197,7 +218,7 @@ export default function NotesMode() {
       finally { setSaving(false) }
     },800)
     return ()=>clearTimeout(saveTimerRef.current)
-  },[ink,typedText,recognizedText,ai,language,transcript,currentId,loading])
+  },[ink,typedText,recognizedText,ai,language,transcript,paperTemplate,textBlocks,currentId,loading])
 
   useEffect(()=>{
     if (!recording || !recordingStarted) return
@@ -215,7 +236,7 @@ export default function NotesMode() {
       const user=userData?.user
       if (!user) throw new Error('Please sign in again.')
       const title=type==='meeting'?'Meeting note':'New note'
-      const row={user_id:user.id,title,note_type:type,typed_text:'',recognized_text:'',ink:[],ai_note:{},language:'English',meeting_transcript:'',metadata:{}}
+      const row={user_id:user.id,title,note_type:type,typed_text:'',recognized_text:'',ink:[],ai_note:{},language:'English',meeting_transcript:'',metadata:{paperTemplate:'ruled',textBlocks:[]}}
       const { data,error:createError }=await supabase.from('ana_notes').insert(row).select('*').single()
       if (createError) throw createError
       setNotes(prev=>[data,...prev])
@@ -279,7 +300,8 @@ export default function NotesMode() {
 
   const pointerDown=event=>{
     if (!current || tool==='type') return
-    if (penOnly && event.pointerType==='touch') return
+    if (event.pointerType==='pen') stylusActiveUntilRef.current=Date.now()+1200
+    if (event.pointerType==='touch' && (penOnly || Date.now()<stylusActiveUntilRef.current)) return
     const canvas=inputCanvasRef.current
     if (!canvas) return
     event.preventDefault()
@@ -305,7 +327,8 @@ export default function NotesMode() {
   }
   const pointerMove=event=>{
     if (pointerIdRef.current!==event.pointerId) return
-    if (penOnly && event.pointerType==='touch') return
+    if (event.pointerType==='pen') stylusActiveUntilRef.current=Date.now()+1200
+    if (event.pointerType==='touch' && (penOnly || Date.now()<stylusActiveUntilRef.current)) return
     const canvas=inputCanvasRef.current
     if(!canvas) return
     event.preventDefault()
@@ -325,6 +348,24 @@ export default function NotesMode() {
     activeStrokeRef.current=null
     drawInk(inputCanvasRef.current,[],null)
     if (stroke?.points?.length) setInk(prev=>[...prev,stroke])
+  }
+
+  const addTextBlockAt=event=>{
+    if(tool!=='type'||event.target!==event.currentTarget) return
+    const rect=paperRef.current?.getBoundingClientRect()
+    if(!rect) return
+    const x=Math.max(.04,Math.min(.78,(event.clientX-rect.left)/Math.max(1,rect.width)))
+    const y=Math.max(.035,Math.min(.9,(event.clientY-rect.top)/Math.max(1,rect.height)))
+    const id=uuid()
+    const block={id,x,y,w:Math.max(.18,Math.min(.88-x,.72)),text:''}
+    setTextBlocks(prev=>[...prev,block])
+    setFocusedTextId(id)
+  }
+
+  const updateTextBlock=(id,text)=>setTextBlocks(prev=>prev.map(block=>block.id===id?{...block,text}:block))
+  const removeTextBlock=id=>{
+    setTextBlocks(prev=>prev.filter(block=>block.id!==id))
+    if(focusedTextId===id)setFocusedTextId('')
   }
 
   const tidyInk=()=>{
@@ -354,7 +395,10 @@ export default function NotesMode() {
   const applyAiToTyped=()=>{
     const value=clean(ai.outputText||ai.summary)
     if(!value) return
-    setTypedText(prev=>[clean(prev),value].filter(Boolean).join('\n\n'))
+    const id=uuid()
+    setTextBlocks(prev=>[...prev,{id,x:.08,y:Math.min(.84,.08+prev.length*.09),w:.82,text:value}])
+    setFocusedTextId(id)
+    setTool('type')
   }
 
   const exportPng=async()=>{
@@ -572,22 +616,34 @@ export default function NotesMode() {
               {BRUSH_WIDTHS.map(item=><button key={item.value} type="button" className={Number(inkWidth)===item.value?'active':''} onClick={()=>setInkWidth(item.value)} title={item.label}><span style={{'--ana-brush-size':`${Math.max(2,item.value*1.45)}px`}}/></button>)}
             </div>
           </div>}
+          <div className="ana-notes-paper-picker">
+            <span>Paper</span>
+            <select value={paperTemplate} onChange={e=>setPaperTemplate(e.target.value)}>
+              {PAPER_TEMPLATES.map(item=><option value={item.id} key={item.id}>{item.label}</option>)}
+            </select>
+          </div>
           <div className="ana-notes-toolgroup">
             <button onClick={undo}><Undo2 size={15}/></button><button onClick={redo}><Redo2 size={15}/></button>
             <button onClick={tidyInk} disabled={!ink.length}><AlignJustify size={15}/>Tidy ink</button>
           </div>
-          <label className="ana-notes-penonly"><input type="checkbox" checked={penOnly} onChange={e=>setPenOnly(e.target.checked)}/><span>Pen only</span><small>Ignore finger / palm</small></label>
+          <label className="ana-notes-penonly"><input type="checkbox" checked={penOnly} onChange={e=>setPenOnly(e.target.checked)}/><span>Palm protection</span><small>{penOnly?'Finger / hand ignored':'Touch drawing allowed'}</small></label>
         </div>
 
         <div className="ana-notes-workarea">
           <section className="ana-notes-paper">
-            <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing mode':tool==='eraser'?'Eraser':tool==='pencil'?'Pencil':'Pen'}</span><small>{tool==='type'?'Type below':`${tool==='eraser'?'Erase':'Write'} · ${BRUSH_WIDTHS.find(item=>item.value===Number(inkWidth))?.label||'Custom'} · ${penOnly?'Palm/finger ignored':'Touch enabled'}`}</small></div>
-            <div className="ana-notes-canvas-wrap">
+            <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing on sheet':tool==='eraser'?'Eraser':tool==='pencil'?'Pencil':'Pen'}</span><small>{tool==='type'?'Click anywhere on the page and type':`${tool==='eraser'?'Erase':'Write'} · ${BRUSH_WIDTHS.find(item=>item.value===Number(inkWidth))?.label||'Custom'} · ${penOnly?'Palm/finger ignored':'Touch enabled'}`}</small></div>
+            <div ref={paperRef} className={`ana-notes-canvas-wrap paper-${paperTemplate}`}>
               <canvas ref={canvasRef} className="ana-notes-canvas ana-notes-ink-layer" aria-hidden="true"/>
               <canvas ref={inputCanvasRef} className={`ana-notes-canvas ana-notes-input-layer tool-${tool}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}/>
-              {!ink.length&&tool!=='type'&&<div className="ana-notes-canvas-hint"><PenLine size={22}/><span>Write here with your pen.</span></div>}
+              <div className={`ana-notes-text-layer ${tool==='type'?'active':''}`} onPointerDown={addTextBlockAt}>
+                {textBlocks.map(block=><div className={`ana-notes-text-block ${focusedTextId===block.id?'focused':''}`} key={block.id} style={{left:`${block.x*100}%`,top:`${block.y*100}%`,width:`${block.w*100}%`}}>
+                  <textarea value={block.text||''} autoFocus={focusedTextId===block.id} onFocus={()=>setFocusedTextId(block.id)} onChange={e=>updateTextBlock(block.id,e.target.value)} onPointerDown={e=>e.stopPropagation()} placeholder={paperTemplate==='bullets'?'Type a point…':'Type here…'}/>
+                  {tool==='type'&&focusedTextId===block.id&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={()=>removeTextBlock(block.id)} aria-label="Remove text block">×</button>}
+                </div>)}
+              </div>
+              {!ink.length&&!textBlocks.length&&tool!=='type'&&<div className="ana-notes-canvas-hint"><PenLine size={22}/><span>Write here with your pen.</span></div>}
+              {!textBlocks.length&&tool==='type'&&<div className="ana-notes-canvas-hint"><Type size={22}/><span>Click anywhere on the sheet and start typing.</span></div>}
             </div>
-            <textarea className={tool==='type'?'ana-notes-typed active':'ana-notes-typed'} value={typedText} onChange={e=>setTypedText(e.target.value)} placeholder="Type here too — handwritten and typed notes belong to the same page."/>
           </section>
 
           <aside className="ana-notes-ai">
