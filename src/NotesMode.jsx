@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignJustify, Check, Download, Eraser, FileText, Languages, Mic, NotebookPen,
-  PenLine, Plus, Redo2, Sparkles, Square, Trash2, Type, Undo2, WandSparkles,
+  PenLine, Pencil, Plus, Redo2, Sparkles, Square, Trash2, Type, Undo2, WandSparkles,
 } from 'lucide-react'
 import { supabase } from './lib/supabase.js'
 import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, startTimedUsage } from './usageQuota.js'
@@ -12,6 +12,20 @@ import './notes.css'
 const AUDIO_BUCKET = 'ana-meeting-audio'
 const SEGMENT_MS = 10 * 60 * 1000
 const LANGUAGES = ['English','German','Hindi','Hinglish','Bengali','Tamil','Telugu','Marathi','Gujarati','Punjabi','Malayalam','Kannada','Urdu','French','Spanish','Italian','Dutch','Polish','Portuguese','Turkish','Arabic','Chinese','Japanese','Korean','Russian','Ukrainian']
+const BRUSH_COLORS = ['#171717','#1E4E8C','#A33B3B','#2F6B4F','#6A4E8A','#B86B2E']
+const BRUSH_WIDTHS = [
+  { label:'Fine', value:1.2 },
+  { label:'Medium', value:2.2 },
+  { label:'Thick', value:3.8 },
+  { label:'Bold', value:5.8 },
+]
+const BRUSH_PREFS_KEY = 'ana-notes-brush-v1'
+function readBrushPrefs() {
+  try {
+    const value=JSON.parse(localStorage.getItem(BRUSH_PREFS_KEY)||'{}')
+    return value&&typeof value==='object'?value:{}
+  } catch { return {} }
+}
 const emptyAi = { outputText:'', title:'', summary:'', decisions:[], actions:[], openQuestions:[], keyPoints:[], personalNotes:[] }
 const clean = value => String(value || '').trim()
 const fmtDuration = ms => {
@@ -59,8 +73,10 @@ export default function NotesMode() {
   const current=useMemo(()=>notes.find(note=>note.id===currentId)||null,[notes,currentId])
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
-  const [tool,setTool]=useState('pen')
-  const [penOnly,setPenOnly]=useState(true)
+  const [tool,setTool]=useState(()=>readBrushPrefs().tool||'pen')
+  const [penOnly,setPenOnly]=useState(()=>readBrushPrefs().penOnly!==false)
+  const [inkColor,setInkColor]=useState(()=>readBrushPrefs().color||'#171717')
+  const [inkWidth,setInkWidth]=useState(()=>Number(readBrushPrefs().width)||2.2)
   const [ink,setInk]=useState([])
   const [typedText,setTypedText]=useState('')
   const [recognizedText,setRecognizedText]=useState('')
@@ -105,6 +121,9 @@ export default function NotesMode() {
   }
 
   useEffect(()=>{ inkRef.current=ink },[ink])
+  useEffect(()=>{
+    try { localStorage.setItem(BRUSH_PREFS_KEY,JSON.stringify({tool,penOnly,color:inkColor,width:inkWidth})) } catch {}
+  },[tool,penOnly,inkColor,inkWidth])
   useEffect(()=>{ recordingRef.current=recording },[recording])
   useEffect(()=>{ recordingStartedRef.current=recordingStarted },[recordingStarted])
 
@@ -250,8 +269,9 @@ export default function NotesMode() {
   }
 
   const eraseAt=point=>{
+    const radius=Math.min(.07,.007+(Number(inkWidth)||2.2)*.006)
     setInk(prev=>{
-      const index=prev.findIndex(stroke=>strokeHit(stroke,point,.022))
+      const index=prev.findIndex(stroke=>strokeHit(stroke,point,radius))
       if(index<0) return prev
       return prev.filter((_,i)=>i!==index)
     })
@@ -274,8 +294,9 @@ export default function NotesMode() {
     }
     const stroke={
       id:uuid(),
-      color:'#171717',
-      width:event.pointerType==='pen'?2.15:2.35,
+      kind:tool==='pencil'?'pencil':'pen',
+      color:inkColor,
+      width:Number(inkWidth)||2.2,
       at:recordingStartedRef.current?Math.max(0,Date.now()-recordingStartedRef.current):null,
       points:[point],
     }
@@ -537,10 +558,20 @@ export default function NotesMode() {
 
         <div className="ana-notes-toolbar">
           <div className="ana-notes-toolgroup">
+            <button className={tool==='pencil'?'active':''} onClick={()=>setTool('pencil')}><Pencil size={15}/>Pencil</button>
             <button className={tool==='pen'?'active':''} onClick={()=>setTool('pen')}><PenLine size={15}/>Pen</button>
             <button className={tool==='type'?'active':''} onClick={()=>setTool('type')}><Type size={15}/>Type</button>
             <button className={tool==='eraser'?'active':''} onClick={()=>setTool('eraser')}><Eraser size={15}/>Eraser</button>
           </div>
+          {tool!=='type'&&<div className="ana-notes-brush-controls">
+            {tool!=='eraser'&&<div className="ana-notes-color-picker" aria-label="Ink colour">
+              {BRUSH_COLORS.map(color=><button key={color} type="button" className={inkColor.toLowerCase()===color.toLowerCase()?'active':''} style={{'--ana-ink-color':color}} onClick={()=>setInkColor(color)} aria-label={`Use ${color} ink`}/>)}
+              <label className="ana-notes-custom-color" title="Custom colour"><input type="color" value={inkColor} onChange={e=>setInkColor(e.target.value)}/><span style={{'--ana-ink-color':inkColor}}/></label>
+            </div>}
+            <div className="ana-notes-width-picker" aria-label={tool==='eraser'?'Eraser thickness':'Stroke thickness'}>
+              {BRUSH_WIDTHS.map(item=><button key={item.value} type="button" className={Number(inkWidth)===item.value?'active':''} onClick={()=>setInkWidth(item.value)} title={item.label}><span style={{'--ana-brush-size':`${Math.max(2,item.value*1.45)}px`}}/></button>)}
+            </div>
+          </div>}
           <div className="ana-notes-toolgroup">
             <button onClick={undo}><Undo2 size={15}/></button><button onClick={redo}><Redo2 size={15}/></button>
             <button onClick={tidyInk} disabled={!ink.length}><AlignJustify size={15}/>Tidy ink</button>
@@ -550,7 +581,7 @@ export default function NotesMode() {
 
         <div className="ana-notes-workarea">
           <section className="ana-notes-paper">
-            <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing mode':'Handwriting canvas'}</span><small>{penOnly?'Palm/finger input ignored':'Touch drawing enabled'}</small></div>
+            <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing mode':tool==='eraser'?'Eraser':tool==='pencil'?'Pencil':'Pen'}</span><small>{tool==='type'?'Type below':`${tool==='eraser'?'Erase':'Write'} · ${BRUSH_WIDTHS.find(item=>item.value===Number(inkWidth))?.label||'Custom'} · ${penOnly?'Palm/finger ignored':'Touch enabled'}`}</small></div>
             <div className="ana-notes-canvas-wrap">
               <canvas ref={canvasRef} className="ana-notes-canvas ana-notes-ink-layer" aria-hidden="true"/>
               <canvas ref={inputCanvasRef} className={`ana-notes-canvas ana-notes-input-layer tool-${tool}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}/>
