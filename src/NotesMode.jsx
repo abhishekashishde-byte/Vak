@@ -62,7 +62,6 @@ export default function NotesMode() {
   const [tool,setTool]=useState('pen')
   const [penOnly,setPenOnly]=useState(true)
   const [ink,setInk]=useState([])
-  const [activeStroke,setActiveStroke]=useState(null)
   const [typedText,setTypedText]=useState('')
   const [recognizedText,setRecognizedText]=useState('')
   const [language,setLanguage]=useState('English')
@@ -76,12 +75,15 @@ export default function NotesMode() {
   const [elapsed,setElapsed]=useState(0)
   const [transcript,setTranscript]=useState('')
   const [meetingStatus,setMeetingStatus]=useState('')
+  const [meetingBusy,setMeetingBusy]=useState(false)
   const canvasRef=useRef(null)
+  const inputCanvasRef=useRef(null)
   const inkRef=useRef([])
   const activeStrokeRef=useRef(null)
   const undoRef=useRef([])
   const redoRef=useRef([])
   const saveTimerRef=useRef(null)
+  const titleTimerRef=useRef(null)
   const pointerIdRef=useRef(null)
   const erasingRef=useRef(false)
   const streamRef=useRef(null)
@@ -90,6 +92,7 @@ export default function NotesMode() {
   const segmentBlobsRef=useRef([])
   const segmentTimerRef=useRef(null)
   const rotatingRef=useRef(false)
+  const stoppingRef=useRef(false)
   const quotaRef=useRef(null)
   const quotaTimerRef=useRef(null)
   const quotaDeadlineRef=useRef(null)
@@ -102,7 +105,6 @@ export default function NotesMode() {
   }
 
   useEffect(()=>{ inkRef.current=ink },[ink])
-  useEffect(()=>{ activeStrokeRef.current=activeStroke },[activeStroke])
   useEffect(()=>{ recordingRef.current=recording },[recording])
   useEffect(()=>{ recordingStartedRef.current=recordingStarted },[recordingStarted])
 
@@ -139,15 +141,19 @@ export default function NotesMode() {
 
   useEffect(()=>{
     const canvas=canvasRef.current
-    if (!canvas) return
-    const redraw=()=>drawInk(canvas,inkRef.current,activeStrokeRef.current)
+    const inputCanvas=inputCanvasRef.current
+    if (!canvas || !inputCanvas) return
+    const redraw=()=>{
+      drawInk(canvas,inkRef.current,null)
+      drawInk(inputCanvas,[],activeStrokeRef.current)
+    }
     redraw()
     const observer=new ResizeObserver(redraw)
     observer.observe(canvas)
     return ()=>observer.disconnect()
   },[currentId])
 
-  useEffect(()=>{ drawInk(canvasRef.current,ink,activeStroke) },[ink,activeStroke])
+  useEffect(()=>{ drawInk(canvasRef.current,ink,null) },[ink])
 
   useEffect(()=>{
     if (!currentId || loading) return
@@ -222,8 +228,8 @@ export default function NotesMode() {
   const renameNote=async(value)=>{
     const title=String(value||'').slice(0,160)
     updateCurrentLocal({title})
-    clearTimeout(saveTimerRef.current)
-    saveTimerRef.current=setTimeout(()=>patchNote({title:title.trim()||'Untitled note'}).catch(err=>setError(err.message)),500)
+    clearTimeout(titleTimerRef.current)
+    titleTimerRef.current=setTimeout(()=>patchNote({title:title.trim()||'Untitled note'}).catch(err=>setError(err.message)),500)
   }
 
   const pushHistory=()=>{
@@ -254,7 +260,7 @@ export default function NotesMode() {
   const pointerDown=event=>{
     if (!current || tool==='type') return
     if (penOnly && event.pointerType==='touch') return
-    const canvas=canvasRef.current
+    const canvas=inputCanvasRef.current
     if (!canvas) return
     event.preventDefault()
     pointerIdRef.current=event.pointerId
@@ -273,24 +279,31 @@ export default function NotesMode() {
       at:recordingStartedRef.current?Math.max(0,Date.now()-recordingStartedRef.current):null,
       points:[point],
     }
-    setActiveStroke(stroke)
+    activeStrokeRef.current=stroke
+    drawInk(inputCanvasRef.current,[],stroke)
   }
   const pointerMove=event=>{
     if (pointerIdRef.current!==event.pointerId) return
     if (penOnly && event.pointerType==='touch') return
-    const canvas=canvasRef.current
+    const canvas=inputCanvasRef.current
     if(!canvas) return
     event.preventDefault()
     const point=pointFromPointer(event,canvas.getBoundingClientRect())
     if (erasingRef.current) { eraseAt(point); return }
-    setActiveStroke(stroke=>stroke?{...stroke,points:[...stroke.points,point]}:stroke)
+    const stroke=activeStrokeRef.current
+    if(stroke){
+      stroke.points.push(point)
+      drawInk(inputCanvasRef.current,[],stroke)
+    }
   }
   const pointerUp=event=>{
     if (pointerIdRef.current!==event.pointerId) return
     pointerIdRef.current=null
     erasingRef.current=false
-    if (activeStrokeRef.current?.points?.length) setInk(prev=>[...prev,activeStrokeRef.current])
-    setActiveStroke(null)
+    const stroke=activeStrokeRef.current
+    activeStrokeRef.current=null
+    drawInk(inputCanvasRef.current,[],null)
+    if (stroke?.points?.length) setInk(prev=>[...prev,stroke])
   }
 
   const tidyInk=()=>{
@@ -442,7 +455,9 @@ export default function NotesMode() {
   }
 
   async function stopBackgroundRecording(process=true){
-    if(!recordingRef.current&&!recorderRef.current) return
+    if(stoppingRef.current || (!recordingRef.current&&!recorderRef.current)) return
+    stoppingRef.current=true
+    if(process) setMeetingBusy(true)
     recordingRef.current=false
     setRecording(false)
     clearInterval(segmentTimerRef.current);segmentTimerRef.current=null
@@ -454,7 +469,7 @@ export default function NotesMode() {
     }catch{}
     streamRef.current?.getTracks?.().forEach(track=>track.stop());streamRef.current=null
     await closeQuota()
-    if(!process){setMeetingStatus('');return}
+    if(!process){setMeetingStatus('');stoppingRef.current=false;setMeetingBusy(false);return}
     try{
       const blobs=[...segmentBlobsRef.current];segmentBlobsRef.current=[]
       if(!blobs.length) throw new Error('No meeting audio was captured.')
@@ -482,6 +497,7 @@ export default function NotesMode() {
       await patchNote({recognized_text:latestRecognized,meeting_transcript:full,ai_note:nextAi,title:data?.title||current?.title||'Meeting note'})
       setMeetingStatus('Meeting Note ready.')
     }catch(err){setMeetingStatus('');setError(err?.message||'Could not finish this Meeting Note.')}
+    finally{stoppingRef.current=false;setMeetingBusy(false)}
   }
 
   if(loading) return <section className="ana-notes-loading"><NotebookPen size={24}/><span>Opening Ana Notes…</span></section>
@@ -491,7 +507,7 @@ export default function NotesMode() {
       <div className="ana-notes-sidebar-head"><div><small>ANA NOTES</small><strong>Your notebook</strong></div><button onClick={()=>createNote('quick')} title="New note"><Plus size={17}/></button></div>
       <div className="ana-notes-new-row"><button onClick={()=>createNote('quick')}><FileText size={14}/>Quick note</button><button onClick={()=>createNote('meeting')}><Mic size={14}/>Meeting note</button></div>
       <div className="ana-notes-list">
-        {notes.map(note=><button key={note.id} className={note.id===currentId?'active':''} onClick={()=>{if(!recording)setCurrentId(note.id)}}>
+        {notes.map(note=><button key={note.id} className={note.id===currentId?'active':''} onClick={()=>{if(!recording&&!meetingBusy)setCurrentId(note.id)}}>
           <span className="ana-notes-list-icon">{note.note_type==='meeting'?<Mic size={14}/>:<FileText size={14}/>}</span>
           <span><strong>{note.title||'Untitled note'}</strong><small>{note.note_type==='meeting'?'Meeting note':'Quick note'} · {new Date(note.updated_at||note.created_at).toLocaleDateString()}</small></span>
         </button>)}
@@ -508,7 +524,7 @@ export default function NotesMode() {
           </div>
           <div className="ana-notes-head-actions">
             <button onClick={exportPng}><Download size={15}/>PNG</button>
-            <button onClick={deleteNote} disabled={recording}><Trash2 size={15}/></button>
+            <button onClick={deleteNote} disabled={recording||meetingBusy}><Trash2 size={15}/></button>
           </div>
         </header>
 
@@ -536,7 +552,8 @@ export default function NotesMode() {
           <section className="ana-notes-paper">
             <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing mode':'Handwriting canvas'}</span><small>{penOnly?'Palm/finger input ignored':'Touch drawing enabled'}</small></div>
             <div className="ana-notes-canvas-wrap">
-              <canvas ref={canvasRef} className={`ana-notes-canvas tool-${tool}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}/>
+              <canvas ref={canvasRef} className="ana-notes-canvas ana-notes-ink-layer" aria-hidden="true"/>
+              <canvas ref={inputCanvasRef} className={`ana-notes-canvas ana-notes-input-layer tool-${tool}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}/>
               {!ink.length&&tool!=='type'&&<div className="ana-notes-canvas-hint"><PenLine size={22}/><span>Write here with your pen.</span></div>}
             </div>
             <textarea className={tool==='type'?'ana-notes-typed active':'ana-notes-typed'} value={typedText} onChange={e=>setTypedText(e.target.value)} placeholder="Type here too — handwritten and typed notes belong to the same page."/>
