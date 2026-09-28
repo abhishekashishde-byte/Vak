@@ -602,8 +602,8 @@ export default function NotesMode() {
 
         <div className="ana-notes-toolbar">
           <div className="ana-notes-toolgroup">
-            <button className={tool==='pencil'?'active':''} onClick={()=>setTool('pencil')}><Pencil size={15}/>Pencil</button>
-            <button className={tool==='pen'?'active':''} onClick={()=>setTool('pen')}><PenLine size={15}/>Pen</button>
+            <button className={tool==='pencil'?'active':''} onClick={()=>{setTool('pencil');setPenOnly(true)}}><Pencil size={15}/>Pencil</button>
+            <button className={tool==='pen'?'active':''} onClick={()=>{setTool('pen');setPenOnly(true)}}><PenLine size={15}/>Pen</button>
             <button className={tool==='type'?'active':''} onClick={()=>setTool('type')}><Type size={15}/>Type</button>
             <button className={tool==='eraser'?'active':''} onClick={()=>setTool('eraser')}><Eraser size={15}/>Eraser</button>
           </div>
