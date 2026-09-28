@@ -230,7 +230,7 @@ export default async function handler(req, res) {
 
   const model = isTalkTurn || isAnaTranslation || isVisualOrDocumentTranslation ? 'gpt-5.6-sol' : 'gpt-5.6-luna'
   const reasoningEffort = (isAnaTranslation || isKeyboardSentenceCorrection || isWriteForMe) ? 'none' : (isWordRefinement || isLanguageDetection || isAnaBriefing || isTalkDebrief || isMeetingIntelligence ? 'low' : 'medium')
-  const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 6500 : isAnaBriefing ? 7000 : isTalkDebrief ? 8000 : isTalkTurn ? 15000 : isWriteForMe ? 14000 : isAnaTranslation ? 22000 : isMeetingIntelligence ? 18000 : isVisualOrDocumentTranslation ? 24000 : 20000
+  const deadlineMs = isKeyboardSentenceCorrection ? 6500 : isWordRefinement ? 6000 : isLanguageDetection ? 6500 : isAnaBriefing ? 7000 : isTalkDebrief ? 8000 : isTalkTurn ? 15000 : isWriteForMe ? 14000 : isAnaTranslation ? 22000 : isMeetingNotes ? 45000 : isMeetingEnrichment ? 30000 : (isMeetingQa || isMeetingOutput) ? 30000 : isVisualOrDocumentTranslation ? 24000 : 20000
 
   const usageFeature = isMeetingNotes ? 'meeting_notes'
     : isMeetingEnrichment ? 'meeting_enrichment'
