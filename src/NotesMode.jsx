@@ -33,8 +33,22 @@ function readBrushPrefs() {
     return value&&typeof value==='object'?value:{}
   } catch { return {} }
 }
-const emptyAi = { outputText:'', title:'', summary:'', decisions:[], actions:[], openQuestions:[], keyPoints:[], personalNotes:[] }
+const emptyAi = { outputText:'', title:'', summary:'', decisions:[], actions:[], openQuestions:[], keyPoints:[], personalNotes:[], selectionSource:'' }
 const clean = value => String(value || '').trim()
+function noteSearchContent(note) {
+  const metadata=note?.metadata&&typeof note.metadata==='object'?note.metadata:{}
+  const doc=metadata.notesDocumentV2
+  const pageText=Array.isArray(doc?.pages)?doc.pages.flatMap(page=>Array.isArray(page?.textBlocks)?page.textBlocks.map(block=>block?.text||''):[]):[]
+  const ai=note?.ai_note&&typeof note.ai_note==='object'?note.ai_note:{}
+  const aiText=[
+    ai.summary,
+    ...(Array.isArray(ai.keyPoints)?ai.keyPoints:[]),
+    ...(Array.isArray(ai.decisions)?ai.decisions:[]),
+    ...(Array.isArray(ai.openQuestions)?ai.openQuestions:[]),
+    ...(Array.isArray(ai.actions)?ai.actions.map(item=>typeof item==='string'?item:item?.task||''):[]),
+  ]
+  return [note?.typed_text,note?.recognized_text,...pageText,...aiText].map(clean).filter(Boolean).join('\n')
+}
 const fmtDuration = ms => {
   const total = Math.max(0, Math.floor(Number(ms || 0) / 1000))
   const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60
@@ -95,6 +109,8 @@ export default function NotesMode() {
   const [ai,setAi]=useState(emptyAi)
   const [aiStyle,setAiStyle]=useState('typed')
   const [busy,setBusy]=useState('')
+  const [notesQuestion,setNotesQuestion]=useState('')
+  const [notesAnswer,setNotesAnswer]=useState(null)
   const [error,setError]=useState('')
   const [consent,setConsent]=useState(false)
   const [recording,setRecording]=useState(false)
@@ -432,6 +448,60 @@ export default function NotesMode() {
     }catch(err){setError(err?.message||'Ana could not convert this handwriting to text.');return ''}
   }
 
+  const selectionLabels={
+    translate:'Translated selection',
+    explain:'Explanation',
+    action:'Action from selection',
+    email:'Email draft',
+    clean_german:'Clean German note',
+  }
+
+  const askSelection=async(intent,{imageData='',selectedText=''}={})=>{
+    setBusy(`selection_${intent}`);setError('')
+    try{
+      const headers=await authenticatedHeaders({'Content-Type':'application/json'})
+      const response=await fetch('/api/note-intelligence',{method:'POST',headers,body:JSON.stringify({
+        action:'selection_ask',intent,imageData,typedText:selectedText,targetLanguage:language,
+      })})
+      const data=await response.json()
+      if(!response.ok)throw new Error(data?.error||'Ana could not work with this selection.')
+      setAi({...emptyAi,title:selectionLabels[intent]||'Selected note',outputText:data?.outputText||'',selectionSource:data?.recognizedText||selectedText||''})
+    }catch(err){setError(err?.message||'Ana could not work with this selection.')}
+    finally{setBusy('')}
+  }
+
+  const cleanGermanNote=async()=>{
+    setBusy('clean_german');setError('')
+    try{
+      const imageData=ink.length?await noteImage():''
+      const headers=await authenticatedHeaders({'Content-Type':'application/json'})
+      const response=await fetch('/api/note-intelligence',{method:'POST',headers,body:JSON.stringify({
+        action:'selection_ask',intent:'clean_german',imageData,typedText,targetLanguage:'German',
+      })})
+      const data=await response.json()
+      if(!response.ok)throw new Error(data?.error||'Ana could not create the German note.')
+      setAi({...emptyAi,title:'Clean German note',outputText:data?.outputText||'',selectionSource:data?.recognizedText||''})
+    }catch(err){setError(err?.message||'Ana could not create the German note.')}
+    finally{setBusy('')}
+  }
+
+  const askMyNotes=async()=>{
+    const question=clean(notesQuestion)
+    if(!question)return
+    setBusy('ask_notes');setError('')
+    try{
+      const corpus=notes.map(note=>({id:note.id,title:note.title||'Untitled note',updatedAt:note.updated_at||note.created_at||'',content:noteSearchContent(note)})).filter(item=>item.content)
+      const headers=await authenticatedHeaders({'Content-Type':'application/json'})
+      const response=await fetch('/api/note-intelligence',{method:'POST',headers,body:JSON.stringify({
+        action:'ask_notes',question,notes:corpus,targetLanguage:language,
+      })})
+      const data=await response.json()
+      if(!response.ok)throw new Error(data?.error||'Ana could not search your notes.')
+      setNotesAnswer({answer:data?.answer||'',sources:Array.isArray(data?.sources)?data.sources:[]})
+    }catch(err){setError(err?.message||'Ana could not search your notes.')}
+    finally{setBusy('')}
+  }
+
   const exportPng=async()=>{
     const data=await noteImage()
     if(!data) return
@@ -633,14 +703,23 @@ export default function NotesMode() {
 
         <div className="ana-notes-workarea ana-notes-workarea-v2">
           <section className="ana-notes-paper ana-notes-paper-v2">
-            {noteDocument&&<NotesCanvasV2 ref={notesV2Ref} document={noteDocument} onChange={handleNotesV2Change} onTextChange={setTypedText} onConvertSelection={recognizeSelection}/>}
+            {noteDocument&&<NotesCanvasV2 ref={notesV2Ref} document={noteDocument} onChange={handleNotesV2Change} onTextChange={setTypedText} onConvertSelection={recognizeSelection} onAskSelection={askSelection}/>} 
           </section>
 
           <aside className="ana-notes-ai">
-            <div className="ana-notes-ai-head"><div><Sparkles size={16}/><span><strong>Ana understands this note</strong><small>Your ink remains original. AI changes are suggestions.</small></span></div></div>
+            <div className="ana-notes-ai-head"><div><Sparkles size={16}/><span><strong>Ana understands this note</strong><small>Select handwriting with Lasso and ask Ana, or ask across your entire notebook.</small></span></div></div>
+
+            <div className="ana-notes-askall">
+              <label>ASK MY NOTES</label>
+              <div><input value={notesQuestion} onChange={e=>setNotesQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')askMyNotes()}} placeholder="What did I note about the inspection plan?"/><button onClick={askMyNotes} disabled={busy==='ask_notes'||!clean(notesQuestion)}>{busy==='ask_notes'?'Searching…':'Ask'}</button></div>
+              {notesAnswer?.answer&&<div className="ana-notes-ask-answer"><p>{notesAnswer.answer}</p>{!!notesAnswer.sources?.length&&<small>From: {notesAnswer.sources.map(source=>source.title).filter(Boolean).join(' · ')}</small>}</div>}
+            </div>
+
             <div className="ana-notes-ai-actions">
               <button onClick={()=>aiAction('recognize')} disabled={!!busy||(!ink.length&&!typedText)}><WandSparkles size={14}/>{busy==='recognize'?'Reading…':'Read handwriting'}</button>
               <button onClick={()=>aiAction('polish')} disabled={!!busy||(!ink.length&&!typedText&&!recognizedText)}><Sparkles size={14}/>{busy==='polish'?'Polishing…':'Polish note'}</button>
+              <button onClick={()=>aiAction('interpret')} disabled={!!busy||(!ink.length&&!typedText&&!recognizedText)}><Sparkles size={14}/>{busy==='interpret'?'Understanding…':'Find actions & questions'}</button>
+              <button onClick={cleanGermanNote} disabled={!!busy||(!ink.length&&!typedText&&!recognizedText)}><Languages size={14}/>{busy==='clean_german'?'Writing German…':'Clean German note'}</button>
               <div className="ana-notes-translate"><select value={language} onChange={e=>setLanguage(e.target.value)}>{LANGUAGES.map(item=><option key={item}>{item}</option>)}</select><button onClick={()=>aiAction('translate')} disabled={!!busy||(!ink.length&&!typedText&&!recognizedText)}><Languages size={14}/>{busy==='translate'?'Translating…':'Translate'}</button></div>
             </div>
 
@@ -648,6 +727,7 @@ export default function NotesMode() {
 
             {(ai.outputText||ai.summary||ai.keyPoints?.length||ai.decisions?.length||ai.actions?.length)&&<div className="ana-notes-result">
               <div className="ana-notes-result-head"><strong>{ai.title||'Ana note'}</strong><div><button className={aiStyle==='typed'?'active':''} onClick={()=>setAiStyle('typed')}>Typed</button><button className={aiStyle==='hand'?'active':''} onClick={()=>setAiStyle('hand')}>Handwritten</button></div></div>
+              {ai.selectionSource&&<><label>ANA READ</label><p className="ana-notes-selection-source">{ai.selectionSource}</p></>}
               {ai.outputText&&<p className={aiStyle==='hand'?'hand':''}>{ai.outputText}</p>}
               {ai.summary&&<><label>SUMMARY</label><p>{ai.summary}</p></>}
               {!!ai.personalNotes?.length&&<ResultList label="YOUR NOTES" items={ai.personalNotes}/>}
