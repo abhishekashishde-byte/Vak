@@ -75,7 +75,7 @@ function pointInPolygon(point,poly){
   return inside
 }
 
-const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextChange},ref){
+const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextChange,onConvertSelection},ref){
   const [doc,setDoc]=useState(()=>normalizeNotesDocument(document))
   const [tool,setTool]=useState('ballpoint')
   const [color,setColor]=useState('#171717')
@@ -119,6 +119,11 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     getDocument(){return doc},
     getAllText(){return doc.pages.flatMap(p=>p.textBlocks||[]).map(b=>b.text||'').filter(Boolean).join('\n\n')},
     getAllStrokes(){return doc.pages.flatMap(p=>p.strokes||[])},
+    appendText(text){
+      const value=String(text||'').trim();if(!value)return
+      const block={id:uid(),x:.08,y:clamp(.08+(page.textBlocks||[]).length*.08,.08,.82),w:.76,h:.12,text:value,style:{fontSize:15,font:'Inter',color:page.paperColor==='dark'?'#f4f4f4':'#171717'}}
+      pushHistory();updatePage({textBlocks:[...(page.textBlocks||[]),block]},false);setActiveTextId(block.id);setTool('type')
+    },
   }),[doc,page])
 
   function emit(next){
@@ -333,10 +338,16 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     pushHistory();updatePage({strokes:[...page.strokes,...strokes],textBlocks:[...(page.textBlocks||[]),...text]},false)
     setSelected({strokeIds:strokes.map(s=>s.id),textIds:text.map(b=>b.id)})
   }
-  function convertSelectionToText(){
-    const sids=new Set(selected.strokeIds);if(!sids.size)return
-    const b=selectionBounds(page.strokes,selected.strokeIds,[],[])
-    const block={id:uid(),x:b?.minX||.1,y:b?.minY||.1,w:Math.max(.25,(b?.maxX||.6)-(b?.minX||.1)),h:.1,text:'',style:{fontSize:15,font:'Inter',color:'#171717'},needsRecognition:true}
+  async function convertSelectionToText(){
+    const sids=new Set(selected.strokeIds);if(!sids.size||!onConvertSelection)return
+    const b=selectionBounds(page.strokes,selected.strokeIds,[],[]);if(!b)return
+    const source=staticRef.current;if(!source)return
+    const sx=Math.max(0,Math.floor(b.minX*source.width)),sy=Math.max(0,Math.floor(b.minY*source.height))
+    const sw=Math.max(12,Math.ceil((b.maxX-b.minX)*source.width)),sh=Math.max(12,Math.ceil((b.maxY-b.minY)*source.height))
+    const crop=globalThis.document.createElement('canvas');crop.width=sw;crop.height=sh
+    const ctx=crop.getContext('2d');ctx.fillStyle=page.paperColor==='dark'?'#202124':'#fff';ctx.fillRect(0,0,sw,sh);ctx.drawImage(source,sx,sy,sw,sh,0,0,sw,sh)
+    const text=String(await onConvertSelection(crop.toDataURL('image/png',.94))||'').trim();if(!text)return
+    const block={id:uid(),x:b.minX,y:b.minY,w:Math.max(.25,b.maxX-b.minX),h:Math.max(.08,b.maxY-b.minY),text,style:{fontSize:15,font:'Inter',color:page.paperColor==='dark'?'#f4f4f4':'#171717'}}
     pushHistory();updatePage({textBlocks:[...(page.textBlocks||[]),block]},false);setActiveTextId(block.id);setTool('type')
   }
   function addText(p){
