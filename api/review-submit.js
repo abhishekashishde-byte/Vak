@@ -1,3 +1,4 @@
+import { guardApiRequest } from '../server/apiSecurity.js'
 function escapeHtml(value = '') {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -12,6 +13,8 @@ const FEATURES = new Set(['Translate', 'Live interpreter', 'Talk for me', 'Live 
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'review_submit', requireAuth: false, authenticatedLimit: 10, anonymousLimit: 5, windowSeconds: 3600 })
+  if (!protection) return
 
   const resendKey = process.env.RESEND_API_KEY
   const adminEmail = process.env.ANA_ADMIN_EMAIL
