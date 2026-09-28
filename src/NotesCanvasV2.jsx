@@ -162,7 +162,8 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   function pointerDown(event){
     if(event.pointerType==='pen')stylusUntilRef.current=Date.now()+1400
     if(event.pointerType==='touch'){
-      touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY})
+      if(Date.now()<stylusUntilRef.current||Number(event.width)>34||Number(event.height)>34)return
+      touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY,w:event.width||0,h:event.height||0})
       if(touchesRef.current.size>=2){
         const vals=[...touchesRef.current.values()]
         const dist=Math.hypot(vals[1].x-vals[0].x,vals[1].y-vals[0].y)
@@ -170,14 +171,14 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         gestureRef.current={dist,zoom,mid,scrollLeft:viewportRef.current?.scrollLeft||0,scrollTop:viewportRef.current?.scrollTop||0,angle:Math.atan2(vals[1].y-vals[0].y,vals[1].x-vals[0].x),rulerAngle}
         return
       }
-      if(Date.now()<stylusUntilRef.current||PEN_TOOLS.includes(tool)||tool==='eraser'||tool==='lasso')return
+      if(PEN_TOOLS.includes(tool)||tool==='eraser'||tool==='lasso')return
     }
     if(pointerRef.current!==null)return
     const p=normalizedPoint(event)
     if(tool==='type'){addText(p);return}
     const b=selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)
     if(tool==='lasso'&&b&&p.x>=b.minX&&p.x<=b.maxX&&p.y>=b.minY&&p.y<=b.maxY){
-      pointerRef.current=event.pointerId;dragSelectionRef.current={start:p,last:p,textBlocks:page.textBlocks||[]};event.preventDefault();return
+      pushHistory();pointerRef.current=event.pointerId;dragSelectionRef.current={start:p,last:p,textBlocks:page.textBlocks||[]};event.preventDefault();return
     }
     pointerRef.current=event.pointerId;downAtRef.current=performance.now();event.preventDefault()
     try{event.currentTarget.setPointerCapture(event.pointerId)}catch{}
@@ -196,7 +197,8 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   function pointerMove(event){
     if(event.pointerType==='pen')stylusUntilRef.current=Date.now()+1400
     if(event.pointerType==='touch'){
-      if(touchesRef.current.has(event.pointerId))touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY})
+      if(Date.now()<stylusUntilRef.current||Number(event.width)>34||Number(event.height)>34){touchesRef.current.delete(event.pointerId);return}
+      if(touchesRef.current.has(event.pointerId))touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY,w:event.width||0,h:event.height||0})
       if(gestureRef.current&&touchesRef.current.size>=2){
         const vals=[...touchesRef.current.values()],g=gestureRef.current
         const dist=Math.hypot(vals[1].x-vals[0].x,vals[1].y-vals[0].y)
@@ -244,7 +246,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     pointerRef.current=null
     if(dragSelectionRef.current){
       const movedBlocks=dragSelectionRef.current.textBlocks||page.textBlocks||[]
-      dragSelectionRef.current=null;pushHistory()
+      dragSelectionRef.current=null
       const next={...doc,pages:doc.pages.map(pg=>pg.id===page.id?{...pg,strokes:strokesRef.current,textBlocks:movedBlocks}:pg)}
       emit(next);indexRef.current=makeStrokeIndex(strokesRef.current);return
     }
@@ -311,7 +313,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     const textBlocks=(page.textBlocks||[]).map(block=>{
       if(!tids.has(block.id))return block
       let x=(block.x-b.cx)*(transform.scaleX||1),y=(block.y-b.cy)*(transform.scaleY||1)
-      return {...block,x:b.cx+x*cos-y*sin+(transform.dx||0),y:b.cy+x*sin+y*cos+(transform.dy||0),w:(block.w||.3)*(transform.scaleX||1),h:(block.h||.08)*(transform.scaleY||1),style:{...(block.style||{}),color:transform.color||block.style?.color,fontSize:(block.style?.fontSize||15)*(transform.widthScale||1)}}
+      return {...block,x:b.cx+x*cos-y*sin+(transform.dx||0),y:b.cy+x*sin+y*cos+(transform.dy||0),w:(block.w||.3)*(transform.scaleX||1),h:(block.h||.08)*(transform.scaleY||1),style:{...(block.style||{}),color:transform.color||block.style?.color,fontSize:(block.style?.fontSize||15)*(transform.widthScale||1),rotation:(block.style?.rotation||0)+(transform.rotation||0)}}
     })
     updatePage({strokes,textBlocks},false)
   }
@@ -448,10 +450,10 @@ function TextBlock({block,active,zoom,editing,onFocus,onChange,onDragStart}){
   const st=block.style||{}
   return <div className={`ana-v2-text ${active?'active':''}`} style={{left:`${block.x*100}%`,top:`${block.y*100}%`,width:`${(block.w||.3)*100}%`,height:`${(block.h||.08)*100}%`}}>
     {editing&&<button className="ana-v2-text-drag" onPointerDown={onDragStart}><Move size={11}/></button>}
-    <textarea value={block.text||''} onFocus={onFocus} readOnly={!editing} onChange={e=>onChange({text:e.target.value})} onPointerDown={e=>{if(editing)e.stopPropagation()}} placeholder={block.needsRecognition?'Use “Convert to text” from Ana AI to recognise this selection…':'Type…'} style={{fontFamily:st.font||'Inter',fontSize:`${(st.fontSize||15)*zoom}px`,fontWeight:st.bold?700:400,fontStyle:st.italic?'italic':'normal',textDecoration:st.underline?'underline':'none',color:st.color||'var(--inkText)',lineHeight:1.45}}/>
+    <textarea value={block.text||''} onFocus={onFocus} readOnly={!editing} onChange={e=>onChange({text:e.target.value})} onPointerDown={e=>{if(editing)e.stopPropagation()}} placeholder={block.needsRecognition?'Use “Convert to text” from Ana AI to recognise this selection…':'Type…'} style={{fontFamily:st.font||'Inter',fontSize:`${(st.fontSize||15)*zoom}px`,fontWeight:st.bold?700:400,fontStyle:st.italic?'italic':'normal',textDecoration:st.underline?'underline':'none',color:st.color||'var(--inkText)',lineHeight:1.45,transform:`rotate(${st.rotation||0}rad)`,transformOrigin:'center'}}/>
     {editing&&<span className="ana-v2-resize" onPointerDown={e=>{
-      e.preventDefault();e.stopPropagation();const start={x:e.clientX,y:e.clientY,w:block.w||.3,h:block.h||.08}
-      const move=ev=>{const page=e.currentTarget.closest('.ana-v2-page')?.getBoundingClientRect();if(!page)return;onChange({w:clamp(start.w+(ev.clientX-start.x)/page.width,.12,.9),h:clamp(start.h+(ev.clientY-start.y)/page.height,.04,.7)})}
+      e.preventDefault();e.stopPropagation();const pageRect=e.currentTarget.closest('.ana-v2-page')?.getBoundingClientRect();const start={x:e.clientX,y:e.clientY,w:block.w||.3,h:block.h||.08}
+      const move=ev=>{if(!pageRect)return;onChange({w:clamp(start.w+(ev.clientX-start.x)/pageRect.width,.12,.9),h:clamp(start.h+(ev.clientY-start.y)/pageRect.height,.04,.7)})}
       const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}
       window.addEventListener('pointermove',move);window.addEventListener('pointerup',up)
     }}/>}
