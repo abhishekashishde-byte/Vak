@@ -87,6 +87,7 @@ export function drawInk(canvas, strokes, activeStroke = null) {
     const base = Math.max(.8, Number(stroke.width) || 2.2)
     ctx.strokeStyle = stroke.color || '#171717'
     ctx.fillStyle = stroke.color || '#171717'
+    ctx.globalAlpha = stroke.kind === 'pencil' ? .68 : 1
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
 
@@ -100,7 +101,8 @@ export function drawInk(canvas, strokes, activeStroke = null) {
     for (let i = 1; i < points.length; i += 1) {
       const a = points[i - 1], b = points[i]
       const pressure = Math.max(.2, Math.min(1, ((a.p || .5) + (b.p || .5)) / 2))
-      ctx.lineWidth = base * (.72 + pressure * .58)
+      const pressureScale = stroke.kind === 'pencil' ? (.56 + pressure * .62) : (.72 + pressure * .58)
+      ctx.lineWidth = base * pressureScale
       ctx.beginPath()
       ctx.moveTo(a.x * cssW, a.y * cssH)
       if (i < points.length - 1) {
@@ -111,6 +113,7 @@ export function drawInk(canvas, strokes, activeStroke = null) {
       }
       ctx.stroke()
     }
+    ctx.globalAlpha = 1
   }
 
   ;(Array.isArray(strokes) ? strokes : []).forEach(render)
