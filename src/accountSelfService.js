@@ -11,6 +11,7 @@ const TABLES = [
   'ana_ai_usage_events',
   'ana_consent_events',
   'ana_feedback',
+  'ana_notes',
 ]
 
 function safeMetadata(metadata = {}) {
