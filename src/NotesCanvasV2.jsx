@@ -1,8 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowUp, Brush, CheckSquare, Circle, Copy, Eraser, FilePlus2, Grid3X3,
-  Highlighter, Lasso, Maximize2, Minus, MousePointer2, Move, Palette, PenLine, Pencil,
-  Plus, Redo2, RotateCw, Ruler, ScanLine, Square, Trash2, Type, Undo2, ZoomIn, ZoomOut,
+  ArrowDown, ArrowUp, BookOpen, Brush, CheckSquare, Circle, Copy, Eraser, FilePlus2, Grid3X3,
+  Highlighter, Languages, Lasso, ListTodo, Mail, Maximize2, Minus, MousePointer2, Move, Palette, PenLine, Pencil,
+  Plus, Redo2, RotateCw, Ruler, ScanLine, Sparkles, Square, Trash2, Type, Undo2, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import {
   PEN_PRESETS, cloneStrokes, erasePrecise, eraseWholeStroke, eventPoints, makeStrokeIndex,
@@ -75,7 +75,7 @@ function pointInPolygon(point,poly){
   return inside
 }
 
-const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextChange,onConvertSelection},ref){
+const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextChange,onConvertSelection,onAskSelection},ref){
   const [doc,setDoc]=useState(()=>normalizeNotesDocument(document))
   const [tool,setTool]=useState('ballpoint')
   const [color,setColor]=useState('#171717')
@@ -340,6 +340,31 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     pushHistory();updatePage({strokes:[...page.strokes,...strokes],textBlocks:[...(page.textBlocks||[]),...text]},false)
     setSelected({strokeIds:strokes.map(s=>s.id),textIds:text.map(b=>b.id)})
   }
+  function selectionPayload() {
+    const b=selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)
+    if(!b)return null
+    const tids=new Set(selected.textIds)
+    const selectedText=(page.textBlocks||[]).filter(block=>tids.has(block.id)).map(block=>block.text||'').filter(Boolean).join('\n\n')
+    const source=staticRef.current
+    let imageData=''
+    if(source&&selected.strokeIds.length){
+      const sx=Math.max(0,Math.floor(b.minX*source.width)),sy=Math.max(0,Math.floor(b.minY*source.height))
+      const sw=Math.max(12,Math.min(source.width-sx,Math.ceil((b.maxX-b.minX)*source.width)))
+      const sh=Math.max(12,Math.min(source.height-sy,Math.ceil((b.maxY-b.minY)*source.height)))
+      const crop=globalThis.document.createElement('canvas');crop.width=sw;crop.height=sh
+      const ctx=crop.getContext('2d');ctx.fillStyle=page.paperColor==='dark'?'#202124':'#fff';ctx.fillRect(0,0,sw,sh)
+      ctx.drawImage(source,sx,sy,sw,sh,0,0,sw,sh)
+      imageData=crop.toDataURL('image/png',.94)
+    }
+    return {imageData,selectedText,bounds:b}
+  }
+
+  async function askSelection(intent){
+    if(!onAskSelection)return
+    const payload=selectionPayload();if(!payload)return
+    await onAskSelection(intent,payload)
+  }
+
   async function convertSelectionToText(){
     const sids=new Set(selected.strokeIds);if(!sids.size||!onConvertSelection)return
     const b=selectionBounds(page.strokes,selected.strokeIds,[],[]);if(!b)return
@@ -438,7 +463,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
           <canvas ref={liveRef} className="ana-v2-canvas live" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}/>
           <canvas ref={overlayRef} className="ana-v2-canvas overlay"/>
           {rulerOn&&<div className="ana-v2-ruler" style={{transform:`translate(-50%,-50%) rotate(${rulerAngle}deg)`}}><span>0</span><i/><span>20</span></div>}
-          {!!(selected.strokeIds.length||selected.textIds.length)&&<SelectionMenu bounds={selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)} onDelete={deleteSelection} onDuplicate={duplicateSelection} onCopy={copySelection} onPaste={pasteSelection} canPaste={!!clipboard} onText={convertSelectionToText} onMove={(x,y)=>transformSelection({dx:x,dy:y})} onScale={s=>transformSelection({scaleX:s,scaleY:s,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onRotate={r=>transformSelection({rotation:r,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onColor={c=>transformSelection({color:c})} onWidth={s=>transformSelection({widthScale:s})}/>}
+          {!!(selected.strokeIds.length||selected.textIds.length)&&<SelectionMenu bounds={selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)} onDelete={deleteSelection} onDuplicate={duplicateSelection} onCopy={copySelection} onPaste={pasteSelection} canPaste={!!clipboard} onText={convertSelectionToText} onAsk={askSelection} onMove={(x,y)=>transformSelection({dx:x,dy:y})} onScale={s=>transformSelection({scaleX:s,scaleY:s,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onRotate={r=>transformSelection({rotation:r,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onColor={c=>transformSelection({color:c})} onWidth={s=>transformSelection({widthScale:s})}/>}
         </div>
       </div>
       {activeText&&tool==='type'&&<TextToolbar block={activeText} onChange={patch=>updateText(activeText.id,patch)}/>}
@@ -478,13 +503,24 @@ function TextToolbar({block,onChange}){
     <select value={s.list||'none'} onChange={e=>onChange({style:{list:e.target.value},text:formatList(block.text,e.target.value)})}><option value="none">Text</option><option value="bullet">Bullets</option><option value="number">Numbered</option><option value="checkbox">Checkboxes</option></select>
   </div>
 }
-function SelectionMenu({bounds,onDelete,onDuplicate,onCopy,onPaste,canPaste,onText,onMove,onScale,onRotate,onColor,onWidth}){
+function SelectionMenu({bounds,onDelete,onDuplicate,onCopy,onPaste,canPaste,onText,onAsk,onMove,onScale,onRotate,onColor,onWidth}){
+  const [anaOpen,setAnaOpen]=useState(false)
   if(!bounds)return null
-  return <div className="ana-v2-selection-menu" style={{left:`${clamp(bounds.cx,0.12,.88)*100}%`,top:`${clamp(bounds.minY-.045,.02,.92)*100}%`}}>
-    <button onClick={()=>onMove(-.015,0)}>←</button><button onClick={()=>onMove(.015,0)}>→</button><button onClick={()=>onMove(0,-.015)}>↑</button><button onClick={()=>onMove(0,.015)}>↓</button>
-    <button onClick={()=>onScale(.9)}>-size</button><button onClick={()=>onScale(1.1)}>+size</button><button onClick={()=>onRotate(Math.PI/18)}><RotateCw size={12}/></button>
-    <input type="color" onChange={e=>onColor(e.target.value)}/><button onClick={()=>onWidth(.85)}><Minus size={12}/></button><button onClick={()=>onWidth(1.15)}><Plus size={12}/></button>
-    <button onClick={onDuplicate}><Copy size={12}/></button><button onClick={onCopy}>Copy</button><button disabled={!canPaste} onClick={onPaste}>Paste</button><button onClick={onText}>Text</button><button onClick={onDelete}><Trash2 size={12}/></button>
+  return <div className="ana-v2-selection-wrap" style={{left:`${clamp(bounds.cx,0.12,.88)*100}%`,top:`${clamp(bounds.minY-.045,.02,.92)*100}%`}}>
+    {anaOpen&&<div className="ana-v2-ask-menu">
+      <button onClick={()=>onAsk('translate')}><Languages size={12}/>Translate</button>
+      <button onClick={()=>onAsk('explain')}><BookOpen size={12}/>Explain</button>
+      <button onClick={()=>onAsk('action')}><ListTodo size={12}/>Turn into action</button>
+      <button onClick={()=>onAsk('email')}><Mail size={12}/>Write email</button>
+      <button onClick={()=>onAsk('clean_german')}><Sparkles size={12}/>Clean German</button>
+    </div>}
+    <div className="ana-v2-selection-menu">
+      <button className={anaOpen?'active':''} onClick={()=>setAnaOpen(v=>!v)}><Sparkles size={12}/>Ask Ana</button>
+      <button onClick={()=>onMove(-.015,0)}>←</button><button onClick={()=>onMove(.015,0)}>→</button><button onClick={()=>onMove(0,-.015)}>↑</button><button onClick={()=>onMove(0,.015)}>↓</button>
+      <button onClick={()=>onScale(.9)}>-size</button><button onClick={()=>onScale(1.1)}>+size</button><button onClick={()=>onRotate(Math.PI/18)}><RotateCw size={12}/></button>
+      <input type="color" onChange={e=>onColor(e.target.value)}/><button onClick={()=>onWidth(.85)}><Minus size={12}/></button><button onClick={()=>onWidth(1.15)}><Plus size={12}/></button>
+      <button onClick={onDuplicate}><Copy size={12}/></button><button onClick={onCopy}>Copy</button><button disabled={!canPaste} onClick={onPaste}>Paste</button><button onClick={onText}>Text</button><button onClick={onDelete}><Trash2 size={12}/></button>
+    </div>
   </div>
 }
 export default NotesCanvasV2
