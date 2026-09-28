@@ -1,4 +1,5 @@
 import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 function extensionFor(mime = '') {
   if (mime.includes('mp4') || mime.includes('m4a')) return 'm4a'
@@ -55,6 +56,8 @@ async function meetingBytes(audioUrl, fallbackMime = '') {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'transcribe', requireAuth: true, authenticatedLimit: 30, windowSeconds: 60 })
+  if (!protection) return
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
   const { audio, audioUrl, mimeType = 'audio/webm', meeting = false, speakerLabels = false, contextHints = '' } = req.body || {}

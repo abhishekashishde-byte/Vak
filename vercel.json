@@ -44,5 +44,12 @@
     "api/v1/platform.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "fra1"
+  ],
+  "functionFailoverRegions": [
+    "dub1"
+  ]
 }

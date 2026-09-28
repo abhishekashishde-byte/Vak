@@ -1,5 +1,6 @@
 import { domainKeywords, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
 import { validateTesterSession } from '../server/usageQuota.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 const TRANSCRIPTION_LANGUAGES = new Set(['en', 'de', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'ml', 'kn', 'ur', 'fr', 'es', 'it'])
 
@@ -100,6 +101,8 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
+  const protection = await guardApiRequest(req, res, { feature: 'realtime_token', requireAuth: true, authenticatedLimit: 30, windowSeconds: 60 })
+  if (!protection) return
 
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured.' })

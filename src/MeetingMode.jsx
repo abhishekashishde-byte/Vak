@@ -3,6 +3,7 @@ import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, L
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
 import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, refundFixedTimedUsage, reserveFixedTimedUsage, startTimedUsage } from './usageQuota.js'
+import { CONSENT_VERSIONS, recordConsentEvent } from './consentEvents.js'
 import './meeting-notes.css'
 import './meeting-modes.css'
 
@@ -547,6 +548,8 @@ export default function MeetingMode() {
       )
       stream.getTracks().forEach(track => track.addEventListener('ended', () => { if (activeRef.current) setError('Audio sharing ended. Press End meeting to prepare the transcript and notes from what was recorded.') }, { once: true }))
       startRecorder(stream); const now = Date.now(); startedAtRef.current = now; setStartedAt(now); setElapsed(0)
+      void recordConsentEvent('meeting_recording', 'confirmed', CONSENT_VERSIONS.meeting, { mode: meetingModeRef.current, keepAudio: Boolean(keepAudio) })
+      if (keepAudio) void recordConsentEvent('meeting_audio_retention', 'confirmed', CONSENT_VERSIONS.audioRetention, { mode: meetingModeRef.current })
       if (meetingModeRef.current === 'mom') { setSessionState('listening'); return }
       if (meetingModeRef.current === 'transcript') await startLiveTranscription(stream); else await startTranslation(stream)
       setSessionState('listening')
@@ -844,6 +847,8 @@ export default function MeetingMode() {
       if (!durationSeconds) throw new Error('Ana could not determine the audio duration before applying the tester allowance.')
       const reservation = await reserveFixedTimedUsage('meeting_notes', Math.ceil(durationSeconds), file.name)
       quotaReservationId = reservation.sessionId
+      void recordConsentEvent('meeting_recording', 'confirmed', CONSENT_VERSIONS.meeting, { mode: 'import', keepAudio: Boolean(keepAudio) })
+      if (keepAudio) void recordConsentEvent('meeting_audio_retention', 'confirmed', CONSENT_VERSIONS.audioRetention, { mode: 'import' })
       const result = await transcribeRecording(file, keepAudio)
       const segments = result.segments
       const durationMs = segments.length ? Math.max(...segments.map(item => Number(item.end) || 0)) * 1000 : durationSeconds * 1000

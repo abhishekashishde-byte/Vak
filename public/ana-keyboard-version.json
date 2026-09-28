@@ -1,0 +1,9 @@
+{
+  "product": "Ana Keyboard",
+  "versionName": "0.21.5",
+  "versionCode": 29,
+  "minimumAndroid": 9,
+  "downloadUrl": "https://ana-translate.vercel.app/meet-ana",
+  "notes": "Current Ana Keyboard early-access release.",
+  "publishedAt": "2026-09-28"
+}

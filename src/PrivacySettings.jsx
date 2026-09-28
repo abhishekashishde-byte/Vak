@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Cloud, Database, ShieldCheck, Trash2, X } from 'lucide-react'
+import { CheckCircle2, Cloud, Database, Download, ShieldCheck, Trash2, X } from 'lucide-react'
 import { clearRememberedLanguageData, getPreferenceSyncState, getPrivacySettings, updatePrivacySettings } from './accountPreferences.js'
+import { deleteAnaAccount, downloadAnaData, exportAnaAccountData } from './accountSelfService.js'
 
 export default function PrivacySettings({ open, onClose }) {
   const [settings, setSettings] = useState(getPrivacySettings)
   const [syncState, setSyncState] = useState(getPreferenceSyncState())
   const [cleared, setCleared] = useState(false)
+  const [accountAction, setAccountAction] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [accountError, setAccountError] = useState('')
 
   useEffect(() => {
     const onPrivacy = event => setSettings({ ...getPrivacySettings(), ...(event.detail || {}) })
@@ -28,6 +32,17 @@ export default function PrivacySettings({ open, onClose }) {
     await clearRememberedLanguageData()
     setCleared(true)
     setTimeout(() => setCleared(false), 1800)
+  }
+  const exportData = async () => {
+    setAccountAction('exporting'); setAccountError('')
+    try { downloadAnaData(await exportAnaAccountData()); setAccountAction('') }
+    catch (error) { setAccountError(error?.message || 'Could not export your Ana data.'); setAccountAction('') }
+  }
+  const deleteAccount = async () => {
+    if (deleteConfirm !== 'DELETE') return
+    setAccountAction('deleting'); setAccountError('')
+    try { await deleteAnaAccount(); window.location.reload() }
+    catch (error) { setAccountError(error?.message || 'Could not delete your Ana account.'); setAccountAction('') }
   }
 
   return <div className="privacy-settings-backdrop" onMouseDown={onClose}>
@@ -67,10 +82,22 @@ export default function PrivacySettings({ open, onClose }) {
 
       <section className="privacy-architecture-card">
         <div><Database size={17}/><strong>What Ana stores</strong></div>
-        <p><b>Raw voice audio:</b> not stored in Ana's account memory.</p>
-        <p><b>Voice-session transcript:</b> kept only in the current app session and not synced into personal language memory.</p>
-        <p><b>Personal memory:</b> language preferences, glossary terms, register choices and privacy settings only.</p>
+        <p><b>Raw realtime voice audio:</b> not stored in Ana's language memory. Meeting audio is temporary unless you explicitly choose to retain it.</p>
+        <p><b>Meeting history:</b> transcript/notes may sync to your account and are subject to Ana's current 60-day meeting-retention policy.</p>
+        <p><b>Personal memory:</b> language preferences, glossary terms, register choices and privacy settings.</p>
         <small>The privacy disclosure improves transparency but is not a substitute for checking the legal requirements that apply to a particular workplace, institution or country.</small>
+      </section>
+
+      <section className="privacy-setting-section">
+        <div className="privacy-section-title"><Download size={18}/><div><strong>Your Ana account data</strong><span>Download a machine-readable copy or permanently delete your Ana account.</span></div></div>
+        <button className="privacy-clear-memory" onClick={exportData} disabled={accountAction === 'exporting'}><Download size={15}/>{accountAction === 'exporting' ? 'Preparing export…' : 'Export my Ana data'}</button>
+        <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid rgba(35,31,27,.1)'}}>
+          <strong style={{fontSize:13}}>Delete account permanently</strong>
+          <p className="privacy-setting-note">This deletes your Ana account and account-linked records. Type DELETE to confirm. This cannot be undone.</p>
+          <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)} placeholder="Type DELETE" style={{width:'100%',height:42,border:'1px solid rgba(35,31,27,.15)',borderRadius:10,padding:'0 11px',marginBottom:8}}/>
+          <button className="privacy-clear-memory" style={{color:'#9a3038'}} onClick={deleteAccount} disabled={deleteConfirm !== 'DELETE' || accountAction === 'deleting'}><Trash2 size={15}/>{accountAction === 'deleting' ? 'Deleting…' : 'Delete my Ana account'}</button>
+        </div>
+        {accountError && <p className="privacy-setting-note" style={{color:'#9a3038'}}>{accountError}</p>}
       </section>
     </aside>
   </div>

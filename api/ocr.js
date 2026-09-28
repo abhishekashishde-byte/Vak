@@ -1,3 +1,4 @@
+import { guardApiRequest } from '../server/apiSecurity.js'
 const MODEL = 'baidu/Unlimited-OCR'
 
 function cleanOcrOutput(value = '') {
@@ -11,6 +12,8 @@ function cleanOcrOutput(value = '') {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'legacy_ocr', requireAuth: true, authenticatedLimit: 18, windowSeconds: 60 })
+  if (!protection) return
 
   const baseUrl = String(process.env.UNLIMITED_OCR_BASE_URL || '').replace(/\/$/, '')
   const apiKey = process.env.UNLIMITED_OCR_API_KEY || ''

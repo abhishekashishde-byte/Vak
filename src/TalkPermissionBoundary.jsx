@@ -260,7 +260,7 @@ export default function TalkPermissionBoundary({ children }) {
         </div>}
 
         {(status === 'declined' || status === 'withdrawn' || status === 'error') && <button className="permission-close" onClick={cancel}>Close</button>}
-        <small>Ana stores only a minimal local permission receipt: session ID, notice version, language, time and accepted/declined status. No consent audio is stored by Ana.</small>
+        <small>Ana stores only a minimal permission receipt: session ID, notice version, language, time and accepted/declined status. No consent audio or conversation content is stored in the receipt.</small>
       </section>
     </div>}
   </div>

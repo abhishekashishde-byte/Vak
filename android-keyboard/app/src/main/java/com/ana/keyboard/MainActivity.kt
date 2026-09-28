@@ -156,6 +156,29 @@ class MainActivity : Activity() {
         root.addView(menuRow("Dictionary & corrections", "Personal words, shortcuts and learned corrections") { renderDictionary() })
         root.addView(menuRow("Privacy & Ana", "Ana connection and local typing protection") { renderPrivacy() })
 
+        root.addView(section("Updates"))
+        root.addView(infoCard("Installed version", BuildConfig.VERSION_NAME + " • updates are checked only when you ask"))
+        root.addView(actionCard("Check for Ana Keyboard update") {
+            Toast.makeText(this, "Checking for update…", Toast.LENGTH_SHORT).show()
+            Thread {
+                try {
+                    val update = AnaUpdateChecker.check(this)
+                    runOnUiThread {
+                        if (update.updateAvailable) {
+                            val label = if (update.versionName.isBlank()) "A newer Ana Keyboard is available." else "Ana Keyboard " + update.versionName + " is available."
+                            Toast.makeText(this, label, Toast.LENGTH_LONG).show()
+                            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(update.downloadUrl)))
+                        } else {
+                            Toast.makeText(this, "Ana Keyboard is up to date.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (error: Exception) {
+                    runOnUiThread { Toast.makeText(this, error.message ?: "Could not check for updates", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        })
+        root.addView(infoCard("Sideloaded early access", "Android may show an Install unknown apps warning because this beta is installed outside Google Play. Install Ana only from the official Ana download page and verify the published SHA-256 checksum when provided."))
+
         root.addView(section("Setup"))
         root.addView(actionCard("Enable Ana Keyboard") { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) })
         root.addView(actionCard("Choose Ana Keyboard") {

@@ -1,6 +1,7 @@
 import { domainPrompt, publicDomain, resolveDomain } from '../server/domain.js'
 import { validateDocumentUsage } from '../server/usageQuota.js'
 import { logAiUsage, realtimeUsageCost } from '../server/aiUsage.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -195,6 +196,8 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  const protection = await guardApiRequest(req, res, { feature: 'translate', requireAuth: false, authenticatedLimit: 120, anonymousLimit: 25, windowSeconds: 60 })
+  if (!protection) return
   const { text, instructions } = req.body || {}
   if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Missing text' })
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })

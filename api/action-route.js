@@ -1,3 +1,5 @@
+import { guardApiRequest } from '../server/apiSecurity.js'
+
 function bearerToken(req) {
   const auth = String(req.headers?.authorization || '')
   return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
@@ -213,6 +215,8 @@ async function saveReceipt(token, userId, actionId, provider, result, status = '
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'action_route', requireAuth: true, authenticatedLimit: 30, windowSeconds: 60 })
+  if (!protection) return
   const token = bearerToken(req)
   if (!token) return res.status(401).json({ error: 'Missing session' })
   const user = await verifyUser(token)
