@@ -110,7 +110,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     exportCurrentPage(){
       const canvas=staticRef.current
       if(!canvas)return ''
-      const out=document.createElement('canvas');out.width=canvas.width;out.height=canvas.height
+      const out=globalThis.document.createElement('canvas');out.width=canvas.width;out.height=canvas.height
       const ctx=out.getContext('2d')
       ctx.fillStyle=page.paperColor==='dark'?'#202124':page.paperColor==='white'?'#fff':'#fffaf0'
       ctx.fillRect(0,0,out.width,out.height);ctx.drawImage(canvas,0,0)
@@ -172,7 +172,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     if(tool==='type'){addText(p);return}
     const b=selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)
     if(tool==='lasso'&&b&&p.x>=b.minX&&p.x<=b.maxX&&p.y>=b.minY&&p.y<=b.maxY){
-      pointerRef.current=event.pointerId;dragSelectionRef.current={start:p,last:p};event.preventDefault();return
+      pointerRef.current=event.pointerId;dragSelectionRef.current={start:p,last:p,textBlocks:page.textBlocks||[]};event.preventDefault();return
     }
     pointerRef.current=event.pointerId;downAtRef.current=performance.now();event.preventDefault()
     try{event.currentTarget.setPointerCapture(event.pointerId)}catch{}
@@ -185,7 +185,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     if(!PEN_TOOLS.includes(tool))return
     const rect=liveRef.current.getBoundingClientRect()
     const points=eventPoints(event,rect)
-    activeRef.current={id:uid(),kind:tool,color:tool==='highlighter'?(color==='#171717'?'#E4C441':color):color,width:tool==='highlighter'?Math.max(10,width*4.5):width,points,startedAt:performance.now()}
+    activeRef.current={id:uid(),kind:tool,color:tool==='highlighter'?(color==='#171717'?'#E4C441':color):color,width:tool==='highlighter'?Math.max(10,width):width,points,startedAt:performance.now()}
     frameLive(predictedPoints(event,rect))
   }
   function pointerMove(event){
@@ -214,7 +214,9 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       dragSelectionRef.current.last=p
       const strokes=transformStrokes(strokesRef.current,selected.strokeIds,{dx,dy})
       const tids=new Set(selected.textIds)
-      const textBlocks=(page.textBlocks||[]).map(b=>tids.has(b.id)?{...b,x:b.x+dx,y:b.y+dy}:b)
+      const baseBlocks=dragSelectionRef.current.textBlocks||page.textBlocks||[]
+      const textBlocks=baseBlocks.map(b=>tids.has(b.id)?{...b,x:b.x+dx,y:b.y+dy}:b)
+      dragSelectionRef.current.textBlocks=textBlocks
       strokesRef.current=strokes
       const next={...doc,pages:doc.pages.map(pg=>pg.id===page.id?{...pg,strokes,textBlocks}:pg)}
       setDoc(next);renderStatic(staticRef.current,strokes,1);drawOverlay(strokes,textBlocks);return
@@ -236,8 +238,9 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     if(pointerRef.current!==event.pointerId)return
     pointerRef.current=null
     if(dragSelectionRef.current){
+      const movedBlocks=dragSelectionRef.current.textBlocks||page.textBlocks||[]
       dragSelectionRef.current=null;pushHistory()
-      const next={...doc,pages:doc.pages.map(pg=>pg.id===page.id?{...pg,strokes:strokesRef.current,textBlocks:page.textBlocks}:pg)}
+      const next={...doc,pages:doc.pages.map(pg=>pg.id===page.id?{...pg,strokes:strokesRef.current,textBlocks:movedBlocks}:pg)}
       emit(next);indexRef.current=makeStrokeIndex(strokesRef.current);return
     }
     if(tool==='eraser'){if(eraseChangedRef.current)commitStrokes(strokesRef.current,false);return}
@@ -443,6 +446,13 @@ function TextBlock({block,active,zoom,editing,onFocus,onChange,onDragStart}){
     }}/>}
   </div>
 }
+function formatList(text,type){
+  const lines=String(text||'').split('\n').map(line=>line.replace(/^\s*(?:[-•]|\d+[.)]|☐)\s*/,''))
+  if(type==='bullet')return lines.map(line=>line?`• ${line}`:'').join('\n')
+  if(type==='number')return lines.map((line,i)=>line?`${i+1}. ${line}`:'').join('\n')
+  if(type==='checkbox')return lines.map(line=>line?`☐ ${line}`:'').join('\n')
+  return lines.join('\n')
+}
 function TextToolbar({block,onChange}){
   const s=block.style||{}
   return <div className="ana-v2-textbar">
@@ -452,7 +462,7 @@ function TextToolbar({block,onChange}){
     <input type="color" value={s.color||'#171717'} onChange={e=>onChange({style:{color:e.target.value}})}/>
     <select value={s.fontSize||15} onChange={e=>onChange({style:{fontSize:Number(e.target.value)}})}>{[11,13,15,18,22,28,36].map(v=><option key={v}>{v}</option>)}</select>
     <select value={s.font||'Inter'} onChange={e=>onChange({style:{font:e.target.value}})}>{FONTS.map(v=><option key={v}>{v}</option>)}</select>
-    <select value={s.list||'none'} onChange={e=>onChange({style:{list:e.target.value}})}><option value="none">Text</option><option value="bullet">Bullets</option><option value="number">Numbered</option><option value="checkbox">Checkboxes</option></select>
+    <select value={s.list||'none'} onChange={e=>onChange({style:{list:e.target.value},text:formatList(block.text,e.target.value)})}><option value="none">Text</option><option value="bullet">Bullets</option><option value="number">Numbered</option><option value="checkbox">Checkboxes</option></select>
   </div>
 }
 function SelectionMenu({bounds,onDelete,onDuplicate,onCopy,onPaste,canPaste,onText,onMove,onScale,onRotate,onColor,onWidth}){
