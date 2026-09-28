@@ -187,6 +187,10 @@ begin
       where mr.user_id = ma.user_id and mr.client_id = ma.meeting_client_id
     );
 
+  delete from storage.objects
+  where bucket_id = 'ana-meeting-audio'
+    and coalesce(updated_at, created_at) < now() - interval '60 days';
+
   delete from private.ana_api_rate_limits where updated_at < now() - interval '2 days';
 end;
 $$;
