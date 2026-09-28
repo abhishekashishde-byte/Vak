@@ -1,3 +1,5 @@
+import { CONSENT_VERSIONS, recordConsentEvent } from './consentEvents.js'
+
 export const TALK_NOTICE_VERSION = 'talk-ai-disclosure-v1-2026-09-13'
 const RECEIPT_KEY = 'ana-talk-permission-receipts-v1'
 
@@ -52,5 +54,9 @@ export function recordTalkPermissionOutcome(session, outcome) {
     const receipts = Array.isArray(current) ? current : []
     localStorage.setItem(RECEIPT_KEY, JSON.stringify([...receipts, receipt].slice(-50)))
   } catch {}
+  void recordConsentEvent('talk_ai', outcome, CONSENT_VERSIONS.talkAi, {
+    sessionId: receipt.sessionId,
+    language: receipt.language,
+  })
   return receipt
 }
