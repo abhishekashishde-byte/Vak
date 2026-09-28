@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import { Turnstile } from '@marsidev/react-turnstile'
+import { CONSENT_VERSIONS, recordConsentEvent } from './consentEvents.js'
 import { authConfigured, supabase } from './lib/supabase'
 import AnaMark from './AnaMark.jsx'
 
 const AUTH_EVENT_KEY = 'ana-pending-admin-auth-event'
+const TURNSTILE_SITE_KEY = String(import.meta.env.VITE_TURNSTILE_SITE_KEY || '').trim()
+const BETA_VERSION = 'beta-18-plus-v1-2026-09-28'
 
 function markPendingAuthEvent(event) {
   try { sessionStorage.setItem(AUTH_EVENT_KEY, event) } catch {}
@@ -17,6 +21,9 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaKey, setCaptchaKey] = useState(0)
 
   const submit = async (e) => {
     e.preventDefault()
@@ -32,22 +39,34 @@ export default function AuthPage() {
     try {
       if (mode === 'signup') {
         if (!name.trim() || !location.trim()) throw new Error('Please enter your name and location.')
+        if (!ageConfirmed) throw new Error('Ana early access is currently for users aged 18 or older.')
+        if (TURNSTILE_SITE_KEY && !captchaToken) throw new Error('Please complete the security check.')
 
         markPendingAuthEvent('signup')
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
+            captchaToken: captchaToken || undefined,
             data: {
               name: name.trim(),
               location: location.trim(),
+              ana_beta_acceptance: {
+                version: BETA_VERSION,
+                age_18_plus: true,
+                accepted_at: new Date().toISOString(),
+              },
             },
           },
         })
 
         if (signUpError) throw signUpError
-
-        if (data?.session) return
+        setCaptchaToken('')
+        setCaptchaKey(value => value + 1)
+        if (data?.session) {
+          await recordConsentEvent('beta_18_plus', 'confirmed', CONSENT_VERSIONS.beta18, { earlyAccess: true })
+          return
+        }
 
         setSuccess('Account created. You can sign in with your email and password.')
         setMode('login')
@@ -88,6 +107,8 @@ export default function AuthPage() {
         {mode === 'signup' && <>
           <Field label="Name" value={name} onChange={setName} type="text" autoComplete="name" placeholder="Your name" />
           <Field label="Location" value={location} onChange={setLocation} type="text" autoComplete="address-level2" placeholder="City, country" />
+          <label style={s.acceptance}><input type="checkbox" checked={ageConfirmed} onChange={e => setAgeConfirmed(e.target.checked)}/><span><b>I am 18 or older.</b><small>Ana is an early-access beta with no guaranteed availability and is a communication aid, not a substitute for professional medical, legal or financial decisions.</small></span></label>
+          {TURNSTILE_SITE_KEY && <div style={s.turnstile}><Turnstile key={captchaKey} siteKey={TURNSTILE_SITE_KEY} onSuccess={setCaptchaToken} onExpire={() => setCaptchaToken('')} onError={() => setCaptchaToken('')}/></div>}
         </>}
 
         <Field label="Email" value={email} onChange={setEmail} type="email" autoComplete="email" placeholder="you@example.com" />
@@ -96,7 +117,7 @@ export default function AuthPage() {
         {error && <div style={s.error}>{error}</div>}
         {success && <div style={s.success}>{success}</div>}
 
-        <button type="submit" style={{...s.primary, ...(loading ? s.disabled : {})}} disabled={loading}>
+        <button type="submit" style={{...s.primary, ...(loading ? s.disabled : {})}} disabled={loading || (mode === 'signup' && (!ageConfirmed || (TURNSTILE_SITE_KEY && !captchaToken)))}>
           {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
         </button>
       </form>
@@ -123,6 +144,6 @@ const s = {
   title:{margin:0,textAlign:'center',fontSize:'clamp(30px,7vw,44px)',lineHeight:1,letterSpacing:'-.05em',fontWeight:650},subtitle:{margin:'13px auto 24px',maxWidth:360,textAlign:'center',color:'#7a7369',fontSize:13,lineHeight:1.55},
   tabs:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,padding:4,borderRadius:12,background:'rgba(79,69,55,.08)',marginBottom:20},tab:{border:0,borderRadius:9,padding:'10px 12px',background:'transparent',color:'#7c7469',cursor:'pointer',fontWeight:600},tabActive:{background:'#fffdfa',color:'#171717',boxShadow:'0 2px 9px rgba(57,48,37,.08)'},
   form:{display:'flex',flexDirection:'column',gap:14},field:{display:'flex',flexDirection:'column',gap:6},label:{fontSize:11,fontWeight:650,color:'#6f675d'},input:{width:'100%',height:48,border:'1px solid rgba(43,39,33,.15)',borderRadius:11,background:'rgba(255,253,250,.82)',padding:'0 13px',color:'#171717',outline:'none',fontSize:15},
-  primary:{width:'100%',minHeight:50,border:0,borderRadius:12,background:'#171717',color:'#fffdfa',fontWeight:700,cursor:'pointer',marginTop:2},disabled:{opacity:.6,cursor:'wait'},
+  acceptance:{display:'flex',gap:10,alignItems:'flex-start',padding:'11px 12px',border:'1px solid rgba(43,39,33,.12)',borderRadius:11,fontSize:13,lineHeight:1.4},turnstile:{display:'flex',justifyContent:'center',minHeight:64},primary:{width:'100%',minHeight:50,border:0,borderRadius:12,background:'#171717',color:'#fffdfa',fontWeight:700,cursor:'pointer',marginTop:2},disabled:{opacity:.6,cursor:'wait'},
   error:{padding:'10px 12px',borderRadius:10,border:'1px solid #dfbfc1',background:'#fff2f3',color:'#9a3f46',fontSize:12,lineHeight:1.45},success:{padding:'11px 12px',borderRadius:10,border:'1px solid #c9d9c3',background:'#f3faef',color:'#43663b',fontSize:12,lineHeight:1.45},note:{margin:'18px 0 0',textAlign:'center',color:'#938b80',fontSize:11}
 }
