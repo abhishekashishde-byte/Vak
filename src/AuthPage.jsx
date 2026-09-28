@@ -136,8 +136,8 @@ function Field({ label, value, onChange, ...props }) {
 
 const texture = 'linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)), repeating-radial-gradient(circle at 17% 22%,rgba(71,63,49,.045) 0 1px,transparent 1px 3px), repeating-linear-gradient(112deg,rgba(76,66,50,.03) 0 1px,transparent 1px 4px)'
 const s = {
-  page:{minHeight:'100dvh',display:'grid',placeItems:'center',padding:'28px 22px',backgroundColor:'#f4f1ea',backgroundImage:texture,color:'#171717'},
-  card:{width:'100%',maxWidth:460,padding:'38px 30px',border:'1px solid rgba(43,39,33,.12)',borderRadius:24,background:'rgba(255,255,255,.52)',backdropFilter:'blur(10px)',boxShadow:'0 24px 70px rgba(70,58,42,.08)'},
+  page:{height:'100dvh',minHeight:'100dvh',overflowY:'auto',overflowX:'hidden',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',padding:'clamp(18px,4vh,40px) 22px',backgroundColor:'#f4f1ea',backgroundImage:texture,color:'#171717',WebkitOverflowScrolling:'touch'},
+  card:{width:'100%',maxWidth:460,padding:'clamp(26px,4vh,38px) 30px',margin:'auto 0',flex:'0 0 auto',border:'1px solid rgba(43,39,33,.12)',borderRadius:24,background:'rgba(255,255,255,.52)',backdropFilter:'blur(10px)',boxShadow:'0 24px 70px rgba(70,58,42,.08)'},
   logo:{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,marginBottom:34,textAlign:'center'},
   logoTile:{width:48,height:48,borderRadius:12,background:'#fff',display:'grid',placeItems:'center',boxShadow:'0 4px 14px rgba(40,34,28,.10)',border:'1px solid rgba(43,39,33,.08)',overflow:'hidden',flex:'0 0 auto'},
   logoMark:{width:148,height:'auto'},wordmark:{fontSize:24,lineHeight:1},tagline:{fontSize:11,color:'#777169',marginTop:2},
