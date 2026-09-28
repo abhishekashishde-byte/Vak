@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
+import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, MessageSquareText, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
@@ -18,6 +18,7 @@ import EmergencyPhrasebook from './EmergencyPhrasebook.jsx'
 import PracticeMode from './PracticeMode.jsx'
 import DomainControl from './DomainControl.jsx'
 import UsageStatus from './UsageStatus.jsx'
+import FeedbackPanel from './FeedbackPanel.jsx'
 import { installDomainFetchInterceptor } from './domainEngine.js'
 import './live.css'
 import './talk.css'
@@ -67,6 +68,7 @@ export default function Workspace() {
   const [mode, setMode] = useState(initialWorkspaceMode)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [learnOpen, setLearnOpen] = useState(firstVisit)
   const [learnWelcome, setLearnWelcome] = useState(firstVisit)
   const parentMode = modeParent(mode)
@@ -96,6 +98,7 @@ export default function Workspace() {
       <div className="ana-mode-actions">
         <DomainControl/>
         <button className="ana-help-quick" type="button" onClick={openLearn} title="Learn how to use Ana" aria-label="Learn how to use Ana"><CircleHelp size={17}/><span>Learn</span></button>
+        <button className="ana-help-quick" type="button" onClick={() => setFeedbackOpen(true)} title="Send feedback" aria-label="Send feedback"><MessageSquareText size={17}/><span>Feedback</span></button>
         <button className="ana-privacy-quick" type="button" onClick={() => setSettingsOpen(true)} title="Privacy & memory" aria-label="Privacy and memory settings"><ShieldCheck size={17}/></button>
       </div>
     </nav>
@@ -130,6 +133,7 @@ export default function Workspace() {
 
     <LearnCenter open={learnOpen} welcome={learnWelcome} onClose={() => { setLearnOpen(false); setLearnWelcome(false) }} onChooseMode={chooseMode}/>
     <PrivacySettings open={settingsOpen} onClose={() => setSettingsOpen(false)}/>
+    <FeedbackPanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} mode={mode}/>
   </div>
 }
 
