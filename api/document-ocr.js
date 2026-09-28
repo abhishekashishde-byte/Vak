@@ -1,6 +1,7 @@
 import { profileLabel, publicDomain, resolveDomain } from '../server/domain.js'
 import { validateDocumentUsage } from '../server/usageQuota.js'
 import { logAiUsage } from '../server/aiUsage.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 function collectText(data) {
   return (data.output || [])
@@ -124,6 +125,8 @@ function promptForPurpose(purpose, target = '') {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'camera_document_ocr', requireAuth: true, authenticatedLimit: 24, windowSeconds: 60 })
+  if (!protection) return
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
   const { imageData, pageNumber, purpose, target } = req.body || {}
