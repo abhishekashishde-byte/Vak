@@ -7,6 +7,7 @@ import { supabase } from './lib/supabase.js'
 import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, startTimedUsage } from './usageQuota.js'
 import { CONSENT_VERSIONS, recordConsentEvent } from './consentEvents.js'
 import { cloneInk, drawInk, pointFromPointer, strokeHit, tidyStrokes } from './notesInk.js'
+import NotesCanvasV2, { normalizeNotesDocument } from './NotesCanvasV2.jsx'
 import './notes.css'
 
 const AUDIO_BUCKET = 'ana-meeting-audio'
@@ -88,6 +89,7 @@ export default function NotesMode() {
   const [textBlocks,setTextBlocks]=useState([])
   const [focusedTextId,setFocusedTextId]=useState('')
   const [typedText,setTypedText]=useState('')
+  const [noteDocument,setNoteDocument]=useState(null)
   const [recognizedText,setRecognizedText]=useState('')
   const [language,setLanguage]=useState('English')
   const [ai,setAi]=useState(emptyAi)
@@ -101,6 +103,7 @@ export default function NotesMode() {
   const [transcript,setTranscript]=useState('')
   const [meetingStatus,setMeetingStatus]=useState('')
   const [meetingBusy,setMeetingBusy]=useState(false)
+  const notesV2Ref=useRef(null)
   const paperRef=useRef(null)
   const canvasRef=useRef(null)
   const inputCanvasRef=useRef(null)
@@ -159,14 +162,18 @@ export default function NotesMode() {
 
   useEffect(()=>{
     if (!current) return
-    setInk(Array.isArray(current.ink)?current.ink:[])
     const metadata=current.metadata&&typeof current.metadata==='object'?current.metadata:{}
     const savedBlocks=Array.isArray(metadata.textBlocks)?metadata.textBlocks.filter(block=>block&&typeof block==='object'):[]
     const legacyText=String(current.typed_text||'')
     const initialBlocks=savedBlocks.length?savedBlocks:(legacyText?[{id:uuid(),x:.08,y:.08,w:.82,text:legacyText}]:[])
-    setTextBlocks(initialBlocks)
-    setPaperTemplate(PAPER_TEMPLATES.some(item=>item.id===metadata.paperTemplate)?metadata.paperTemplate:'ruled')
-    setTypedText(initialBlocks.map(block=>String(block.text||'').trim()).filter(Boolean).join('\n\n')||legacyText)
+    const normalized=normalizeNotesDocument(metadata.notesDocumentV2,{strokes:Array.isArray(current.ink)?current.ink:[],textBlocks:initialBlocks,paperTemplate:metadata.paperTemplate||'ruled'})
+    setNoteDocument(normalized)
+    const allStrokes=normalized.pages.flatMap(page=>Array.isArray(page.strokes)?page.strokes:[])
+    const allBlocks=normalized.pages.flatMap(page=>Array.isArray(page.textBlocks)?page.textBlocks:[])
+    setInk(allStrokes)
+    setTextBlocks(allBlocks)
+    setPaperTemplate(normalized.pages.find(page=>page.id===normalized.currentPageId)?.template||'ruled')
+    setTypedText(allBlocks.map(block=>String(block.text||'').trim()).filter(Boolean).join('\n\n')||legacyText)
     setRecognizedText(current.recognized_text||'')
     setLanguage(current.language||'English')
     setAi({...emptyAi,...(current.ai_note||{})})
@@ -208,7 +215,7 @@ export default function NotesMode() {
           ai_note:ai,
           language,
           meeting_transcript:transcript,
-          metadata:{...(current?.metadata||{}),paperTemplate,textBlocks},
+          metadata:{...(current?.metadata||{}),paperTemplate,textBlocks,notesDocumentV2:noteDocument},
           updated_at:new Date().toISOString(),
         }
         const { error:saveError }=await supabase.from('ana_notes').update(patch).eq('id',currentId)
@@ -218,7 +225,7 @@ export default function NotesMode() {
       finally { setSaving(false) }
     },800)
     return ()=>clearTimeout(saveTimerRef.current)
-  },[ink,typedText,recognizedText,ai,language,transcript,paperTemplate,textBlocks,currentId,loading])
+  },[ink,typedText,recognizedText,ai,language,transcript,paperTemplate,textBlocks,noteDocument,currentId,loading])
 
   useEffect(()=>{
     if (!recording || !recordingStarted) return
@@ -374,7 +381,7 @@ export default function NotesMode() {
     setInk(tidyStrokes(ink))
   }
 
-  const noteImage=()=>blobToWhitePng(canvasRef.current)
+  const noteImage=async()=>notesV2Ref.current?.exportCurrentPage?.()||blobToWhitePng(canvasRef.current)
   const aiAction=async(action)=>{
     if(!current) return
     setBusy(action); setError('')
@@ -395,10 +402,34 @@ export default function NotesMode() {
   const applyAiToTyped=()=>{
     const value=clean(ai.outputText||ai.summary)
     if(!value) return
+    if(notesV2Ref.current?.appendText){notesV2Ref.current.appendText(value);return}
     const id=uuid()
     setTextBlocks(prev=>[...prev,{id,x:.08,y:Math.min(.84,.08+prev.length*.09),w:.82,text:value}])
     setFocusedTextId(id)
     setTool('type')
+  }
+
+  const handleNotesV2Change=next=>{
+    setNoteDocument(next)
+    const pages=Array.isArray(next?.pages)?next.pages:[]
+    const allStrokes=pages.flatMap(page=>Array.isArray(page.strokes)?page.strokes:[])
+    const allBlocks=pages.flatMap(page=>Array.isArray(page.textBlocks)?page.textBlocks:[])
+    setInk(allStrokes)
+    setTextBlocks(allBlocks)
+    setTypedText(allBlocks.map(block=>String(block?.text||'').trim()).filter(Boolean).join('\n\n'))
+    const active=pages.find(page=>page.id===next?.currentPageId)||pages[0]
+    if(active?.template)setPaperTemplate(active.template)
+  }
+
+  const recognizeSelection=async imageData=>{
+    if(!imageData)return ''
+    try{
+      const headers=await authenticatedHeaders({'Content-Type':'application/json'})
+      const response=await fetch('/api/note-intelligence',{method:'POST',headers,body:JSON.stringify({action:'recognize',imageData,typedText:''})})
+      const data=await response.json()
+      if(!response.ok)throw new Error(data?.error||'Ana could not read this selection.')
+      return clean(data?.recognizedText)
+    }catch(err){setError(err?.message||'Ana could not convert this handwriting to text.');return ''}
   }
 
   const exportPng=async()=>{
@@ -600,50 +631,9 @@ export default function NotesMode() {
           {meetingStatus&&<div className="ana-notes-meeting-status">{meetingStatus}</div>}
         </section>}
 
-        <div className="ana-notes-toolbar">
-          <div className="ana-notes-toolgroup">
-            <button className={tool==='pencil'?'active':''} onClick={()=>{setTool('pencil');setPenOnly(true)}}><Pencil size={15}/>Pencil</button>
-            <button className={tool==='pen'?'active':''} onClick={()=>{setTool('pen');setPenOnly(true)}}><PenLine size={15}/>Pen</button>
-            <button className={tool==='type'?'active':''} onClick={()=>setTool('type')}><Type size={15}/>Type</button>
-            <button className={tool==='eraser'?'active':''} onClick={()=>setTool('eraser')}><Eraser size={15}/>Eraser</button>
-          </div>
-          {tool!=='type'&&<div className="ana-notes-brush-controls">
-            {tool!=='eraser'&&<div className="ana-notes-color-picker" aria-label="Ink colour">
-              {BRUSH_COLORS.map(color=><button key={color} type="button" className={inkColor.toLowerCase()===color.toLowerCase()?'active':''} style={{'--ana-ink-color':color}} onClick={()=>setInkColor(color)} aria-label={`Use ${color} ink`}/>)}
-              <label className="ana-notes-custom-color" title="Custom colour"><input type="color" value={inkColor} onChange={e=>setInkColor(e.target.value)}/><span style={{'--ana-ink-color':inkColor}}/></label>
-            </div>}
-            <div className="ana-notes-width-picker" aria-label={tool==='eraser'?'Eraser thickness':'Stroke thickness'}>
-              {BRUSH_WIDTHS.map(item=><button key={item.value} type="button" className={Number(inkWidth)===item.value?'active':''} onClick={()=>setInkWidth(item.value)} title={item.label}><span style={{'--ana-brush-size':`${Math.max(2,item.value*1.45)}px`}}/></button>)}
-            </div>
-          </div>}
-          <div className="ana-notes-paper-picker">
-            <span>Paper</span>
-            <select value={paperTemplate} onChange={e=>setPaperTemplate(e.target.value)}>
-              {PAPER_TEMPLATES.map(item=><option value={item.id} key={item.id}>{item.label}</option>)}
-            </select>
-          </div>
-          <div className="ana-notes-toolgroup">
-            <button onClick={undo}><Undo2 size={15}/></button><button onClick={redo}><Redo2 size={15}/></button>
-            <button onClick={tidyInk} disabled={!ink.length}><AlignJustify size={15}/>Tidy ink</button>
-          </div>
-          <label className="ana-notes-penonly"><input type="checkbox" checked={penOnly} onChange={e=>setPenOnly(e.target.checked)}/><span>Palm protection</span><small>{penOnly?'Finger / hand ignored':'Touch drawing allowed'}</small></label>
-        </div>
-
-        <div className="ana-notes-workarea">
-          <section className="ana-notes-paper">
-            <div className="ana-notes-paper-label"><span>{tool==='type'?'Typing on sheet':tool==='eraser'?'Eraser':tool==='pencil'?'Pencil':'Pen'}</span><small>{tool==='type'?'Click anywhere on the page and type':`${tool==='eraser'?'Erase':'Write'} · ${BRUSH_WIDTHS.find(item=>item.value===Number(inkWidth))?.label||'Custom'} · ${penOnly?'Palm/finger ignored':'Touch enabled'}`}</small></div>
-            <div ref={paperRef} className={`ana-notes-canvas-wrap paper-${paperTemplate}`}>
-              <canvas ref={canvasRef} className="ana-notes-canvas ana-notes-ink-layer" aria-hidden="true"/>
-              <canvas ref={inputCanvasRef} className={`ana-notes-canvas ana-notes-input-layer tool-${tool}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}/>
-              <div className={`ana-notes-text-layer ${tool==='type'?'active':''}`} onPointerDown={addTextBlockAt}>
-                {textBlocks.map(block=><div className={`ana-notes-text-block ${focusedTextId===block.id?'focused':''}`} key={block.id} style={{left:`${block.x*100}%`,top:`${block.y*100}%`,width:`${block.w*100}%`}}>
-                  <textarea value={block.text||''} autoFocus={focusedTextId===block.id} onFocus={()=>setFocusedTextId(block.id)} onChange={e=>updateTextBlock(block.id,e.target.value)} onPointerDown={e=>e.stopPropagation()} placeholder={paperTemplate==='bullets'?'Type a point…':'Type here…'}/>
-                  {tool==='type'&&focusedTextId===block.id&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={()=>removeTextBlock(block.id)} aria-label="Remove text block">×</button>}
-                </div>)}
-              </div>
-              {!ink.length&&!textBlocks.length&&tool!=='type'&&<div className="ana-notes-canvas-hint"><PenLine size={22}/><span>Write here with your pen.</span></div>}
-              {!textBlocks.length&&tool==='type'&&<div className="ana-notes-canvas-hint"><Type size={22}/><span>Click anywhere on the sheet and start typing.</span></div>}
-            </div>
+        <div className="ana-notes-workarea ana-notes-workarea-v2">
+          <section className="ana-notes-paper ana-notes-paper-v2">
+            {noteDocument&&<NotesCanvasV2 ref={notesV2Ref} document={noteDocument} onChange={handleNotesV2Change} onTextChange={setTypedText} onConvertSelection={recognizeSelection}/>}
           </section>
 
           <aside className="ana-notes-ai">
