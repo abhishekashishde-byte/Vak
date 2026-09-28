@@ -274,11 +274,72 @@ export default async function handler(req, res) {
       input: preserveLayout ? encodeTranslationLayout(text) : text,
       reasoning: { effort: reasoningEffort },
     }
+
+    if (isMeetingNotes) {
+      body.text = {
+        format: {
+          type: 'json_schema',
+          name: 'ana_meeting_notes',
+          description: 'Structured post-meeting MOM generated only from supplied meeting evidence.',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              summary: { type: 'string' },
+              keyPoints: { type: 'array', items: { type: 'string' } },
+              decisions: { type: 'array', items: { type: 'string' } },
+              actions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    task: { type: 'string' },
+                    owner: { type: 'string' },
+                    deadline: { type: 'string' },
+                  },
+                  required: ['task', 'owner', 'deadline'],
+                },
+              },
+              openQuestions: { type: 'array', items: { type: 'string' } },
+              labels: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  customer: { type: 'string' },
+                  topic: { type: 'string' },
+                  project: { type: 'string' },
+                  meetingType: { type: 'string' },
+                  tags: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['customer', 'topic', 'project', 'meetingType', 'tags'],
+              },
+              sections: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: 'string' },
+                    content: { type: 'string' },
+                    items: { type: 'array', items: { type: 'string' } },
+                  },
+                  required: ['title', 'content', 'items'],
+                },
+              },
+            },
+            required: ['title', 'summary', 'keyPoints', 'decisions', 'actions', 'openQuestions', 'labels', 'sections'],
+          },
+        },
+      }
+    }
     if (isAnaBriefing) body.max_output_tokens = 900
     if (isTalkDebrief) body.max_output_tokens = 700
     if (isLanguageDetection) body.max_output_tokens = 90
     if (isWordRefinement) body.max_output_tokens = 280
-    if (isMeetingNotes) body.max_output_tokens = 2200
+    if (isMeetingNotes) body.max_output_tokens = 4200
     if (isMeetingEnrichment) body.max_output_tokens = 3400
     if (isMeetingQa) body.max_output_tokens = 1000
     if (isMeetingOutput) body.max_output_tokens = 1800
