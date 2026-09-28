@@ -1,4 +1,5 @@
 import { domainKeywords, domainPrompt, publicDomain, resolveDomain, transcriptionDomainPrompt } from '../server/domain.js'
+import { guardApiRequest } from '../server/apiSecurity.js'
 
 function extensionFor(mime = '') {
   if (mime.includes('mp4') || mime.includes('m4a')) return 'm4a'
@@ -20,6 +21,8 @@ function collectText(data) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const protection = await guardApiRequest(req, res, { feature: 'meeting_segment', requireAuth: true, authenticatedLimit: 180, windowSeconds: 60 })
+  if (!protection) return
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
   const { audio, mimeType = 'audio/webm', target = 'English', previousContext = '' } = req.body || {}
