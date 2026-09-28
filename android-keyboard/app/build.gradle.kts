@@ -17,6 +17,10 @@ android {
     namespace = "com.ana.keyboard"
     compileSdk = 37
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.ana.keyboard"
         minSdk = 28
