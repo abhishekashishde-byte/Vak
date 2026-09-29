@@ -15,6 +15,7 @@ const GLOSSARY_KEY = 'ana-glossary-v1'
 const AUDIO_BUCKET = 'ana-meeting-audio'
 const MAX_FINAL_AUDIO_BYTES = 24 * 1024 * 1024
 const MOM_PREFS_KEY = 'ana-mom-template-prefs-v1'
+const SCRIBBLE_STORAGE_KEY = 'ana-meeting-scribble-v1'
 
 const MEETING_TYPES = ['Customer meeting', 'Project / status', 'Workshop / technical', 'Internal meeting', 'Other']
 const MOM_TEMPLATES = [
@@ -52,6 +53,7 @@ function readJson(key, fallback) {
 function readMeetingHistory() { const value = readJson(HISTORY_KEY, []); return Array.isArray(value) ? value : [] }
 function readSavedMeeting() { const value = readJson(STORAGE_KEY, {}); return value && typeof value === 'object' ? value : {} }
 function readMomPrefs() { const value = readJson(MOM_PREFS_KEY, {}); return value && typeof value === 'object' ? value : {} }
+function readMeetingScribble() { const value = readJson(SCRIBBLE_STORAGE_KEY, {}); return value && typeof value === 'object' ? value : {} }
 function cleanTags(value) {
   const input = Array.isArray(value) ? value : String(value || '').split(',')
   return [...new Set(input.map(item => clean(item)).filter(Boolean))].slice(0, 12)
@@ -548,6 +550,7 @@ export default function MeetingMode() {
       )
       stream.getTracks().forEach(track => track.addEventListener('ended', () => { if (activeRef.current) setError('Audio sharing ended. Press End meeting to prepare the transcript and notes from what was recorded.') }, { once: true }))
       startRecorder(stream); const now = Date.now(); startedAtRef.current = now; setStartedAt(now); setElapsed(0)
+      try { window.dispatchEvent(new CustomEvent('ana:meeting-started', { detail: { startedAt: now } })) } catch {}
       void recordConsentEvent('meeting_recording', 'confirmed', CONSENT_VERSIONS.meeting, { mode: meetingModeRef.current, keepAudio: Boolean(keepAudio) })
       if (keepAudio) void recordConsentEvent('meeting_audio_retention', 'confirmed', CONSENT_VERSIONS.audioRetention, { mode: meetingModeRef.current })
       if (meetingModeRef.current === 'mom') { setSessionState('listening'); return }
@@ -647,6 +650,7 @@ export default function MeetingMode() {
         }
       : currentTemplate
 
+    const scribbleNotes = clean(readMeetingScribble()?.text)
     const suppliedContext = [
       manualMetadata.customer ? `Customer: ${manualMetadata.customer}` : '',
       manualMetadata.topic ? `Topic: ${manualMetadata.topic}` : '',
@@ -655,13 +659,14 @@ export default function MeetingMode() {
       manualMetadata.attendees?.length ? `Attendees: ${manualMetadata.attendees.join(', ')}` : '',
       manualMetadata.tags?.length ? `Tags: ${manualMetadata.tags.join(', ')}` : '',
       meetingBookmarks?.length ? `User bookmarks: ${meetingBookmarks.map(item => formatSegmentTime(item.at || 0)).join(', ')}` : '',
+      scribbleNotes ? `User's own meeting notes: ${scribbleNotes}` : '',
     ].filter(Boolean).join('; ')
 
     const instructions = `ANA_MEETING_NOTES. Create post-meeting notes from the supplied meeting evidence. Write in ${outputLanguage}. Return JSON only with title, summary, keyPoints, decisions, actions, openQuestions, labels, sections. actions must be objects with task, owner and deadline. labels must be an object with customer, topic, project, meetingType and tags. Respect user-supplied labels and only infer missing labels when clearly supported; otherwise use empty values. sections must be an array of objects with title, content and items and MUST follow this MOM template: "${template.title}". Required/custom structure: ${template.instruction || 'Use the most useful concise meeting structure.'}. Keep the standard summary/keyPoints/decisions/actions/openQuestions fields populated too so Ana can search and route actions later. Never invent owners, deadlines, facts or decisions; use empty strings when owner or deadline was not stated. Derive the title from the actual meeting topic. User-supplied meeting context: ${suppliedContext || 'none'}. IMPORTANT SIGNAL FILTER: greetings, jokes, filler, repetitions, private chatter, side conversations and off-topic discussion must stay out of MOM sections unless they materially affect a decision, commitment, risk, requirement or important context. Understand natural code-switching between English, German, Hindi and Hinglish.`
 
     const normalizedSegments = normalizeSegments(segments)
     const evidenceTranscript = clean(normalizedSegments.length ? transcriptFromSegments(normalizedSegments, names) : transcript)
-    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath) }
+    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), manualNotes: scribbleNotes }
 
     const requestMeetingAi = async (text, aiInstructions) => {
       const response = await fetch('/api/translate', {
@@ -725,7 +730,7 @@ export default function MeetingMode() {
         meetingType: manualMetadata.meetingType || clean(suggested.meetingType),
         tags: cleanTags([...(manualMetadata.tags || []), ...cleanTags(suggested.tags)]),
       }
-      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath) } }
+      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), manualNotes: scribbleNotes } }
       const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(parsed?.title) || metadata.topic || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), notes, originalText: transcript, translatedText: translation }
       setMeetingNotes(record); saveMeetingRecord(record); setNotesStatus('ready')
     } catch (err) {
@@ -754,6 +759,7 @@ export default function MeetingMode() {
     setLiveOriginal(''); setLiveTranslation(''); originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setSessionState('ended')
     if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode, segments: finalSegments, names: {}, audioPath: retainedAudioPath, meetingBookmarks: bookmarks }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
     else { setNotesStatus('error'); setNotesError(finalTranscriptError || 'Not enough speech was captured to create meeting notes.') }
+    try { window.dispatchEvent(new CustomEvent('ana:meeting-ended', { detail: { endedAt: end } })) } catch {}
     setConsentVerified(false)
     setKeepAudio(false)
   }
