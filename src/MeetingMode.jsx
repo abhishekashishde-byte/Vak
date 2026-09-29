@@ -980,39 +980,20 @@ export default function MeetingMode() {
         <label><span>{meetingMode === 'translate' ? 'Translate to' : 'MOM language'}</span><select value={target} onChange={event => changeTarget(event.target.value)} disabled={processing}>{TARGETS.map(value => <option key={value}>{value}</option>)}</select></label>
       </div>
 
-      <section className="meeting-calendar">
-        <div className="meeting-calendar-head"><div><strong>Upcoming calendar</strong><span>Use an event to prefill the meeting topic and attendees.</span></div><button type="button" onClick={calendarState.reconnect || (!calendarEvents.length && !calendarState.loading) ? connectGoogleCalendar : loadCalendar}>{calendarState.loading ? 'Checking…' : calendarState.reconnect ? 'Reconnect Google' : calendarEvents.length ? 'Refresh' : 'Connect Google'}</button></div>
-        {calendarEvents.length > 0 && <div className="meeting-calendar-events">{calendarEvents.slice(0,5).map(event => <button type="button" key={event.id} onClick={() => useCalendarEvent(event)} disabled={active || processing}><strong>{event.title}</strong><span>{event.start ? new Date(event.start).toLocaleString() : ''}</span><small>{event.attendees?.length ? `${event.attendees.length} attendee${event.attendees.length === 1 ? '' : 's'}` : 'No attendee list'}</small></button>)}</div>}
-        {calendarState.message && <p>{calendarState.message}</p>}
-      </section>
-
-      <div className="meeting-meta-grid">
-        <label><span>Customer</span><input value={meetingMeta.customer} onChange={event => setMeetingMeta(value => ({ ...value, customer: event.target.value }))} placeholder="Customer / organisation" disabled={active || processing}/></label>
-        <label><span>Topic</span><input value={meetingMeta.topic} onChange={event => setMeetingMeta(value => ({ ...value, topic: event.target.value }))} placeholder="Main meeting topic" disabled={active || processing}/></label>
-        <label><span>Project</span><input value={meetingMeta.project} onChange={event => setMeetingMeta(value => ({ ...value, project: event.target.value }))} placeholder="Project (optional)" disabled={active || processing}/></label>
-        <label><span>Meeting type</span><select value={meetingMeta.meetingType} onChange={event => setMeetingMeta(value => ({ ...value, meetingType: event.target.value }))} disabled={active || processing}>{MEETING_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
-        <label className="meeting-meta-wide"><span>Attendees</span><input value={meetingMeta.attendees.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, attendees: event.target.value.split(',').map(clean).filter(Boolean).slice(0,25) }))} placeholder="Names or email addresses"/></label>
-        <label className="meeting-meta-wide"><span>Tags</span><input value={meetingMeta.tags.join(', ')} onChange={event => setMeetingMeta(value => ({ ...value, tags: event.target.value.split(',') }))} onBlur={() => setMeetingMeta(value => ({ ...value, tags: cleanTags(value.tags) }))} placeholder="e.g. SAP, MRP, capacity"/></label>
-      </div>
-
-      <section className="meeting-prebrief">
-        <div className="meeting-prebrief-head"><div><strong>Prepare me</strong><span>Bring forward previous decisions, actions, risks and open questions before this meeting starts.</span></div><button type="button" onClick={prepareMeetingBrief} disabled={active || processing || preMeetingLoading}>{preMeetingLoading ? 'Preparing…' : 'Prepare me'}</button></div>
-        {preMeetingBrief && <div className="meeting-prebrief-body">
-          {!preMeetingBrief.meetings.length ? <p>No earlier matching meetings were found yet.</p> : <>
-            <div className="meeting-prebrief-stat"><strong>{preMeetingBrief.meetings.length}</strong><span>matching previous meeting{preMeetingBrief.meetings.length === 1 ? '' : 's'}</span></div>
-            {preMeetingBrief.openActions.length > 0 && <div><b>Open actions</b>{preMeetingBrief.openActions.slice(0,6).map((item,index)=><p key={`a-${index}`}>{item.task}{item.owner ? ` · ${item.owner}` : ''}{item.deadline ? ` · ${item.deadline}` : ''}</p>)}</div>}
-            {preMeetingBrief.decisions.length > 0 && <div><b>Recent decisions</b>{preMeetingBrief.decisions.slice(0,5).map((item,index)=><p key={`d-${index}`}>{item}</p>)}</div>}
-            {preMeetingBrief.risks.length > 0 && <div><b>Risks</b>{preMeetingBrief.risks.slice(0,5).map((item,index)=><p key={`r-${index}`}>{item}</p>)}</div>}
-            {preMeetingBrief.questions.length > 0 && <div><b>Open questions</b>{preMeetingBrief.questions.slice(0,5).map((item,index)=><p key={`q-${index}`}>{item}</p>)}</div>}
-          </>}
-        </div>}
-      </section>
-
-      <section className="meeting-template-picker">
-        <div className="meeting-template-head"><div><strong>MOM template</strong><span>Choose a starting structure or tell Ana your own.</span></div><span>{activeMomTemplate.title}</span></div>
-        <div className="meeting-template-grid">{MOM_TEMPLATES.map(template => <button type="button" key={template.id} className={selectedMomTemplate === template.id ? 'active' : ''} onClick={() => setSelectedMomTemplate(template.id)} disabled={active || processing}><strong>{template.title}</strong><small>{template.description}</small>{template.sections.length ? <em>{template.sections.slice(0, 3).join(' · ')}{template.sections.length > 3 ? ' …' : ''}</em> : null}</button>)}</div>
-        {selectedMomTemplate === 'custom' && <div className="meeting-custom-template"><input value={customMomName} onChange={event => setCustomMomName(event.target.value)} placeholder="Template name"/><textarea value={customMomInstruction} onChange={event => setCustomMomInstruction(event.target.value)} placeholder="Example: Business requirement, SAP solution, gaps, decisions and follow-up actions."/></div>}
-      </section>
+      <details className="meeting-optional-context">
+        <summary>Optional meeting context</summary>
+        <div className="meeting-optional-context-body">
+          <label><span>Anything Ana should know?</span><input value={meetingMeta.topic} onChange={event => setMeetingMeta(value => ({ ...value, topic: event.target.value }))} placeholder="Optional: topic, customer, project or anything important" disabled={active || processing}/></label>
+          <button type="button" onClick={prepareMeetingBrief} disabled={active || processing || preMeetingLoading}>{preMeetingLoading ? 'Preparing…' : 'Prepare me'}</button>
+          {preMeetingBrief && <div className="meeting-prebrief-body">
+            {!preMeetingBrief.meetings.length ? <p>No earlier matching meetings were found yet.</p> : <>
+              {preMeetingBrief.openActions.length > 0 && <div><b>Open actions</b>{preMeetingBrief.openActions.slice(0,6).map((item,index)=><p key={`a-${index}`}>{item.task}{item.owner ? ` · ${item.owner}` : ''}{item.deadline ? ` · ${item.deadline}` : ''}</p>)}</div>}
+              {preMeetingBrief.decisions.length > 0 && <div><b>Recent decisions</b>{preMeetingBrief.decisions.slice(0,5).map((item,index)=><p key={`d-${index}`}>{item}</p>)}</div>}
+              {preMeetingBrief.questions.length > 0 && <div><b>Open questions</b>{preMeetingBrief.questions.slice(0,5).map((item,index)=><p key={`q-${index}`}>{item}</p>)}</div>}
+            </>}
+          </div>}
+        </div>
+      </details>
 
       <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Everyone has agreed</strong> I confirm that all participants have been informed and have agreed to this meeting being recorded, transcribed and processed by Ana.</span></label>
       <label className="meeting-consent meeting-keep-audio"><input type="checkbox" checked={keepAudio} onChange={event => setKeepAudio(event.target.checked)} disabled={active || processing}/><span><strong>Keep audio after transcription</strong> Off by default. Enable only if participants also agreed that Ana may retain the meeting audio; otherwise Ana deletes the temporary audio after transcription.</span></label>
