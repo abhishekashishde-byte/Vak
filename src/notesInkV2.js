@@ -159,6 +159,20 @@ export function renderStatic(canvas, strokes, scale=1) {
   for (const stroke of ink) drawStroke(ctx,stroke,rect.width,rect.height)
 }
 
+export function renderCommittedStroke(canvas, stroke, scale=1) {
+  if (!canvas || !stroke) return false
+  const rect = canvas.getBoundingClientRect()
+  const ratio = Math.max(1, window.devicePixelRatio || 1) * Math.max(.5, scale)
+  const expectedWidth = Math.max(1, Math.round(rect.width * ratio))
+  const expectedHeight = Math.max(1, Math.round(rect.height * ratio))
+  // Resizing a canvas clears it. If layout changed, let the caller do one full redraw.
+  if (canvas.width !== expectedWidth || canvas.height !== expectedHeight) return false
+  const ctx = canvas.getContext('2d')
+  ctx.setTransform(ratio,0,0,ratio,0,0)
+  drawStroke(ctx,stroke,rect.width,rect.height)
+  return true
+}
+
 export function renderLive(canvas, stroke, predicted=[], scale=1) {
   if (!canvas) return
   const rect=canvas.getBoundingClientRect()
