@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, MessageSquareText, Mic, MessagesSquare, NotebookPen, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
+import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, MessageSquareText, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
 import App from './App.jsx'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
@@ -7,7 +7,6 @@ import TalkPermissionBoundary from './TalkPermissionBoundary.jsx'
 import RoomMode from './RoomMode.jsx'
 import CaptionsMode from './CaptionsMode.jsx'
 import MeetingWorkspace from './MeetingWorkspace.jsx'
-import NotesMode from './NotesMode.jsx'
 import CameraMode from './CameraMode.jsx'
 import ScanMode from './ScanMode.jsx'
 import PrivacySettings from './PrivacySettings.jsx'
@@ -46,10 +45,9 @@ const MAIN_MODES = [
   { id: 'emergency', label: 'Offline emergency', description: 'Essential phrases that work without internet', icon: WifiOff },
   { id: 'live', label: 'Live', description: 'Interpreter, subtitles or a multi-person room', icon: Mic },
   { id: 'meeting', label: 'Meeting', description: 'Listen, translate and keep the transcript', icon: Headphones },
-  { id: 'notes', label: 'Notes', description: 'Write, handwrite, translate or combine notes with a meeting', icon: NotebookPen },
   { id: 'talk', label: 'Talk for me', description: 'Ana handles the conversation for you', icon: MessagesSquare },
 ]
-const MODE_PARENT = { translate:'translate', scan:'translate', camera:'translate', prepare:'prepare', practice:'practice', emergency:'emergency', live:'live', captions:'live', room:'live', meeting:'meeting', notes:'notes', talk:'talk' }
+const MODE_PARENT = { translate:'translate', scan:'translate', camera:'translate', prepare:'prepare', practice:'practice', emergency:'emergency', live:'live', captions:'live', room:'live', meeting:'meeting', talk:'talk' }
 const modeParent = mode => MODE_PARENT[mode] || 'translate'
 
 function isFirstVisit() {
@@ -120,7 +118,6 @@ export default function Workspace() {
       </div>}
       {mode === 'talk' && <main className="app-shell"><TalkPermissionBoundary><TalkForMe/></TalkPermissionBoundary></main>}
       {mode === 'meeting' && <main className="app-shell"><MeetingWorkspace/></main>}
-      {mode === 'notes' && <NotesMode/>}
     </div>
 
     {pickerOpen && <div className="ana-mode-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPickerOpen(false) }}>
