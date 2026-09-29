@@ -43,13 +43,6 @@
     },
     "api/v1/platform.js": {
       "maxDuration": 30
-    },
-    "api/note-intelligence.js": {
-      "maxDuration": 120
     }
-  },
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": [
-    "fra1"
-  ]
+  }
 }
