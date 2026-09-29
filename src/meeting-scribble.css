@@ -1,34 +1,19 @@
-.meeting-scribble{width:min(100%,1180px);margin:0 auto 18px;padding:18px;border:1px solid rgba(43,39,33,.14);border-radius:20px;background:rgba(255,253,248,.88);box-shadow:0 18px 45px rgba(72,61,45,.07)}
-.meeting-scribble-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
-.meeting-scribble-head h2{margin:7px 0 5px;font-size:22px;letter-spacing:-.025em}
-.meeting-scribble-head p{margin:0;color:#777066;font-size:12px;line-height:1.5;max-width:650px}
-.meeting-scribble-kicker{display:inline-flex;align-items:center;gap:6px;font-size:10px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;color:#5d574f}
-.meeting-scribble-layout{display:flex;gap:5px;padding:4px;border:1px solid rgba(43,39,33,.1);border-radius:11px;background:rgba(237,232,223,.72)}
-.meeting-scribble-layout button{height:34px;border:0;border-radius:8px;background:transparent;color:#665f56;padding:0 10px;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;cursor:pointer}
-.meeting-scribble-layout button.active{background:#171717;color:#fff}
-.meeting-scribble-options{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}
-.meeting-scribble-options>label{display:flex;align-items:flex-start;gap:9px;color:#4c463f}
-.meeting-scribble-options>label input{margin-top:3px}
-.meeting-scribble-options>label span{display:flex;flex-direction:column;gap:2px}
-.meeting-scribble-options strong{font-size:11px}
-.meeting-scribble-options small{font-size:9px;line-height:1.45;color:#8a8277;max-width:560px}
-.meeting-scribble-actions{display:flex;gap:6px;flex-wrap:wrap}
-.meeting-scribble-actions button{height:34px;border:1px solid rgba(43,39,33,.12);border-radius:999px;background:rgba(255,255,255,.76);color:#514c45;padding:0 11px;display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;cursor:pointer}
-.meeting-scribble-actions button:disabled{opacity:.35;cursor:default}
-.meeting-scribble-pad{position:relative;border:1px solid rgba(43,39,33,.13);border-radius:15px;overflow:hidden;background:#fffdf8;box-shadow:inset 0 1px 0 rgba(255,255,255,.55)}
-.meeting-scribble-pad textarea{display:block;width:100%;border:0;outline:0;resize:vertical;background:transparent;color:#1d1a17;font:18px/32px Inter,system-ui,sans-serif;letter-spacing:.005em;caret-color:#171717;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default;touch-action:auto}
-.meeting-scribble-pad.sentence textarea{min-height:180px;padding:26px 28px;font-size:22px;line-height:1.6}
-.meeting-scribble-pad.lined{background-color:#fffaf0;background-image:linear-gradient(rgba(91,111,137,.13) 1px,transparent 1px);background-size:100% 32px;background-position:0 25px}
-.meeting-scribble-pad.lined textarea{min-height:430px;padding:20px 24px;line-height:32px}
-.meeting-scribble-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;color:#8a8277;font-size:9px}
-.meeting-scribble-foot span:first-child{display:inline-flex;align-items:center;gap:5px}
-.meeting-scribble-error{margin-top:9px;padding:9px 11px;border:1px solid #deb9bc;border-radius:9px;background:#fff0f1;color:#963e45;font-size:10px}
-@media(max-width:760px){.meeting-scribble{padding:12px;border-radius:15px}.meeting-scribble-head{flex-direction:column}.meeting-scribble-layout{width:100%}.meeting-scribble-layout button{flex:1;justify-content:center}.meeting-scribble-options{align-items:stretch;flex-direction:column}.meeting-scribble-actions button{flex:1;justify-content:center}.meeting-scribble-pad.sentence textarea{min-height:160px;padding:20px 18px;font-size:20px}.meeting-scribble-pad.lined textarea{min-height:360px;padding:18px}.meeting-scribble-foot{align-items:flex-start;flex-direction:column}}
-
-.meeting-scribble.active-meeting{border-color:rgba(47,107,69,.28);box-shadow:0 18px 45px rgba(47,107,69,.08)}
-.meeting-scribble-enter{background:#171717!important;color:#fff!important;border-color:#171717!important}
-.meeting-scribble-pad.todo{background-color:#fffaf0;background-image:linear-gradient(rgba(91,111,137,.13) 1px,transparent 1px);background-size:100% 36px;background-position:0 29px}
-.meeting-scribble-pad.todo textarea{min-height:430px;padding:21px 24px 21px 58px;line-height:36px;position:relative;z-index:2}
-.meeting-scribble-todo-gutter{position:absolute;left:22px;top:23px;z-index:1;display:flex;flex-direction:column;gap:22px;pointer-events:none}
-.meeting-scribble-todo-gutter span{width:13px;height:13px;border:1.5px solid rgba(66,72,78,.55);border-radius:3px;background:rgba(255,255,255,.45)}
-@media(max-width:760px){.meeting-scribble-pad.todo textarea{min-height:360px;padding-left:52px}.meeting-scribble-todo-gutter{left:19px}}
+.meeting-scribble{width:min(100%,1180px);margin:14px auto;border:1px solid rgba(43,39,33,.14);border-radius:16px;background:rgba(255,253,248,.9);overflow:hidden}
+.meeting-scribble.active-meeting{border-color:rgba(47,107,69,.3)}
+.meeting-notes-toggle{width:100%;min-height:52px;padding:0 16px;border:0;background:transparent;display:flex;align-items:center;justify-content:space-between;color:#28241f;cursor:pointer}
+.meeting-notes-toggle>span{display:flex;align-items:center;gap:8px}.meeting-notes-toggle strong{font-size:13px}.meeting-notes-toggle em{font-style:normal;font-size:9px;font-weight:800;text-transform:uppercase;color:#2f6b45;background:#e8f3eb;padding:3px 6px;border-radius:999px}.meeting-notes-toggle small{font-size:9px;color:#8a8277}
+.meeting-notes-inner{padding:0 14px 14px}.meeting-notes-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.meeting-scribble-layout,.meeting-scribble-actions,.meeting-selection-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.meeting-scribble-layout{padding:3px;border:1px solid rgba(43,39,33,.1);border-radius:10px;background:#eee9df}
+.meeting-scribble-layout button,.meeting-scribble-actions button,.meeting-selection-actions button{height:31px;border:0;border-radius:8px;background:transparent;color:#625b52;padding:0 9px;display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;cursor:pointer}
+.meeting-scribble-layout button.active{background:#171717;color:#fff}.meeting-scribble-actions button{border:1px solid rgba(43,39,33,.12);background:#fff}.meeting-scribble-actions button:disabled{opacity:.35}
+.meeting-autofix{height:31px;padding:0 9px;border:1px solid rgba(43,39,33,.12);border-radius:8px;background:#fff;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#625b52}
+.meeting-selection-actions{margin:7px 0}.meeting-selection-actions span{font-size:9px;color:#8a8277;margin-right:2px}.meeting-selection-actions button{height:27px;background:#f3efe7}
+.meeting-scribble-pad{position:relative;border:1px solid rgba(43,39,33,.13);border-radius:12px;overflow:hidden;background:#fffdf8}
+.meeting-scribble-pad textarea{position:relative;z-index:2;display:block;width:100%;min-height:220px;padding:20px;border:0;outline:0;resize:vertical;background:transparent;color:#1d1a17;font:18px/32px Inter,system-ui,sans-serif;caret-color:#171717;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default;touch-action:auto}
+.meeting-scribble-pad.sentence textarea{font-size:20px;line-height:1.6}
+.meeting-scribble-pad.lined,.meeting-scribble-pad.todo{background-color:#fffaf0;background-image:linear-gradient(rgba(91,111,137,.13) 1px,transparent 1px);background-size:100% 32px;background-position:0 25px}
+.meeting-scribble-pad.lined textarea{line-height:32px}.meeting-scribble-pad.todo textarea{padding-left:52px;line-height:32px}
+.meeting-scribble-todo-gutter{position:absolute;left:19px;top:27px;z-index:1;display:flex;flex-direction:column;gap:19px;pointer-events:none}.meeting-scribble-todo-gutter span{width:12px;height:12px;border:1.5px solid rgba(66,72,78,.55);border-radius:3px}
+.meeting-scribble-status{margin-top:7px;display:flex;align-items:center;gap:5px;color:#55705d;font-size:9px}.meeting-scribble-error{margin-top:7px;padding:7px 9px;border-radius:8px;background:#fff0f1;color:#963e45;font-size:9px}
+@media(max-width:760px){.meeting-notes-toolbar{align-items:stretch;flex-direction:column}.meeting-scribble-layout,.meeting-scribble-actions{width:100%}.meeting-scribble-layout button{flex:1;justify-content:center}.meeting-scribble-actions button,.meeting-autofix{flex:1;justify-content:center}.meeting-scribble-pad textarea{min-height:260px;padding:16px}.meeting-scribble-pad.todo textarea{padding-left:48px}}
