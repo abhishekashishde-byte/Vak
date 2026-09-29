@@ -525,6 +525,22 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     const block={id:uid(),x:clamp(p.x,.02,.78),y:clamp(p.y,.02,.92),w:.32,h:.08,text:'',style:{fontSize:15,font:'Inter',color:page.paperColor==='dark'?'#f5f5f5':'#171717',bold:false,italic:false,underline:false,list:'none'}}
     updatePage({textBlocks:[...(page.textBlocks||[]),block]},false);setActiveTextId(block.id)
   }
+  function enterScribbleMode(){
+    const existing=(page.textBlocks||[]).find(block=>block.scribblePage)
+    setTool('scribble')
+    setSelected({strokeIds:[],textIds:[]})
+    if(existing){
+      setActiveTextId(existing.id)
+      return
+    }
+    pushHistory()
+    const block={
+      id:uid(),scribblePage:true,x:.035,y:.025,w:.93,h:.94,text:'',
+      style:{fontSize:18,font:'Inter',color:page.paperColor==='dark'?'#f5f5f5':'#171717',bold:false,italic:false,underline:false,list:'none'}
+    }
+    updatePage({textBlocks:[...(page.textBlocks||[]),block]},false)
+    setActiveTextId(block.id)
+  }
   function updateText(id,patch){
     const blocks=(page.textBlocks||[]).map(b=>b.id===id?{...b,...patch,style:{...(b.style||{}),...(patch.style||{})}}:b)
     updatePage({textBlocks:blocks},false)
@@ -581,7 +597,8 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
           <button className={tool==='highlighter'?'active':''} onClick={()=>{setTool('highlighter');setWidth(PEN_PRESETS.highlighter.size)}} title="Highlighter"><Highlighter size={15}/></button>
           <button className={tool==='eraser'?'active':''} onClick={()=>setTool('eraser')}><Eraser size={15}/></button>
           <button className={tool==='lasso'?'active':''} onClick={()=>setTool('lasso')}><Lasso size={15}/></button>
-          <button className={tool==='type'?'active':''} onClick={()=>setTool('type')}><Type size={15}/></button>
+          <button className={tool==='type'?'active':''} onClick={()=>setTool('type')} title="Position a normal text box"><Type size={15}/></button>
+          <button className={tool==='scribble'?'active':''} onClick={enterScribbleMode} title="Apple Scribble — handwriting becomes text"><Pencil size={15}/><span className="ana-v2-tool-label">Scribble</span></button>
         </div>
         {PEN_TOOLS.includes(tool)&&<div className="ana-v2-palette">{COLORS.map(c=><button key={c} className={color===c?'active':''} style={{'--c':c}} onClick={()=>setColor(c)}/>)}<input type="color" value={color} onChange={e=>setColor(e.target.value)}/>{WIDTHS.map(v=><button className={Math.abs(width-v)<.05?'active':''} key={v} onClick={()=>setWidth(v)}><span style={{height:Math.min(8,Math.max(2,v))}}/></button>)}</div>}
         {tool==='eraser'&&<div className="ana-v2-options"><select value={eraserMode} onChange={e=>setEraserMode(e.target.value)}><option value="stroke">Stroke eraser</option><option value="precise">Precise eraser</option></select><label><input type="checkbox" checked={highlighterOnly} onChange={e=>setHighlighterOnly(e.target.checked)}/> Highlights only</label></div>}
@@ -603,26 +620,41 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       <div ref={viewportRef} className="ana-v2-viewport" onDoubleClick={fitPage}>
         <div ref={pageRef} className={`ana-v2-page paper-${page.template} paper-color-${page.paperColor}`} style={{width:displayW,height:displayH,'--paper':paperHex,'--inkText':textColor}}>
           <canvas ref={staticRef} className="ana-v2-canvas static"/>
-          <div className={`ana-v2-text-layer ${tool==='type'?'editing':''}`}>
-            {(page.textBlocks||[]).map(block=><TextBlock key={block.id} block={block} active={activeTextId===block.id} zoom={zoom} editing={tool==='type'} onFocus={()=>setActiveTextId(block.id)} onChange={patch=>updateText(block.id,patch)} onDragStart={e=>startTextDrag(e,block)}/>)}
+          <div className={`ana-v2-text-layer ${tool==='type'||tool==='scribble'?'editing':''} ${tool==='scribble'?'scribble-mode':''}`}>
+            {(page.textBlocks||[]).map(block=><TextBlock key={block.id} block={block} active={activeTextId===block.id} zoom={zoom} editing={tool==='type'||tool==='scribble'} scribbleMode={tool==='scribble'} onFocus={()=>setActiveTextId(block.id)} onChange={patch=>updateText(block.id,patch)} onDragStart={e=>startTextDrag(e,block)}/>)}
           </div>
-          <canvas ref={liveRef} className="ana-v2-canvas live" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel} onLostPointerCapture={pointerCancel}/>
+          <canvas ref={liveRef} className={`ana-v2-canvas live ${tool==='type'||tool==='scribble'?'text-input-mode':''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel} onLostPointerCapture={pointerCancel}/>
           <canvas ref={overlayRef} className="ana-v2-canvas overlay"/>
           {rulerOn&&<div className="ana-v2-ruler" style={{transform:`translate(-50%,-50%) rotate(${rulerAngle}deg)`}}><span>0</span><i/><span>20</span></div>}
           {!!(selected.strokeIds.length||selected.textIds.length)&&<SelectionMenu bounds={selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)} onDelete={deleteSelection} onDuplicate={duplicateSelection} onCopy={copySelection} onPaste={pasteSelection} canPaste={!!clipboard} onText={convertSelectionToText} onAsk={askSelection} onMove={(x,y)=>transformSelection({dx:x,dy:y})} onScale={s=>transformSelection({scaleX:s,scaleY:s,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onRotate={r=>transformSelection({rotation:r,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onColor={c=>transformSelection({color:c})} onWidth={s=>transformSelection({widthScale:s})}/>}
         </div>
       </div>
-      {activeText&&tool==='type'&&<TextToolbar block={activeText} onChange={patch=>updateText(activeText.id,patch)}/>}
+      {activeText&&(tool==='type'||tool==='scribble')&&<TextToolbar block={activeText} onChange={patch=>updateText(activeText.id,patch)}/>}
     </section>
   </div>
 })
 
-function TextBlock({block,active,zoom,editing,onFocus,onChange,onDragStart}){
+function TextBlock({block,active,zoom,editing,scribbleMode,onFocus,onChange,onDragStart}){
   const st=block.style||{}
-  return <div className={`ana-v2-text ${active?'active':''}`} style={{left:`${block.x*100}%`,top:`${block.y*100}%`,width:`${(block.w||.3)*100}%`,height:`${(block.h||.08)*100}%`}}>
-    {editing&&<button className="ana-v2-text-drag" onPointerDown={onDragStart}><Move size={11}/></button>}
-    <textarea value={block.text||''} onFocus={onFocus} readOnly={!editing} onChange={e=>onChange({text:e.target.value})} onPointerDown={e=>{if(editing)e.stopPropagation()}} placeholder={block.needsRecognition?'Use “Convert to text” from Ana AI to recognise this selection…':'Type…'} style={{fontFamily:st.font||'Inter',fontSize:`${(st.fontSize||15)*zoom}px`,fontWeight:st.bold?700:400,fontStyle:st.italic?'italic':'normal',textDecoration:st.underline?'underline':'none',color:st.color||'var(--inkText)',lineHeight:1.45,transform:`rotate(${st.rotation||0}rad)`,transformOrigin:'center'}}/>
-    {editing&&<span className="ana-v2-resize" onPointerDown={e=>{
+  const isScribble=Boolean(block.scribblePage)
+  return <div className={`ana-v2-text ${active?'active':''} ${isScribble?'scribble-page':''}`} style={{left:`${block.x*100}%`,top:`${block.y*100}%`,width:`${(block.w||.3)*100}%`,height:`${(block.h||.08)*100}%`}}>
+    {editing&&!isScribble&&<button className="ana-v2-text-drag" onPointerDown={onDragStart}><Move size={11}/></button>}
+    <textarea
+      value={block.text||''}
+      autoFocus={editing&&isScribble&&scribbleMode}
+      inputMode="text"
+      enterKeyHint="enter"
+      autoCapitalize="sentences"
+      autoCorrect="on"
+      spellCheck={true}
+      onFocus={onFocus}
+      readOnly={!editing}
+      onChange={e=>onChange({text:e.target.value})}
+      onPointerDown={e=>{if(editing)e.stopPropagation()}}
+      placeholder={block.needsRecognition?'Use “Convert to text” from Ana AI to recognise this selection…':isScribble?'Write anywhere here with Apple Pencil — iPad converts it to text':'Type…'}
+      style={{fontFamily:st.font||'Inter',fontSize:`${isScribble?(st.fontSize||18):((st.fontSize||15)*zoom)}px`,fontWeight:st.bold?700:400,fontStyle:st.italic?'italic':'normal',textDecoration:st.underline?'underline':'none',color:st.color||'var(--inkText)',lineHeight:isScribble?'30px':1.45,transform:`rotate(${st.rotation||0}rad)`,transformOrigin:'center'}}
+    />
+    {editing&&!isScribble&&<span className="ana-v2-resize" onPointerDown={e=>{
       e.preventDefault();e.stopPropagation();const pageRect=e.currentTarget.closest('.ana-v2-page')?.getBoundingClientRect();const start={x:e.clientX,y:e.clientY,w:block.w||.3,h:block.h||.08}
       const move=ev=>{if(!pageRect)return;onChange({w:clamp(start.w+(ev.clientX-start.x)/pageRect.width,.12,.9),h:clamp(start.h+(ev.clientY-start.y)/pageRect.height,.04,.7)})}
       const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}
