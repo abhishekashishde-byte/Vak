@@ -218,7 +218,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   function finishInkStroke(event,{cancelled=false}={}){
     const stroke=activeRef.current
     if(!stroke)return
-    appendSamples(stroke,event)
+    if(!cancelled)appendSamples(stroke,event)
     activeRef.current=null
     renderLive(liveRef.current,null,[],1)
     if(!stroke.points?.length)return
