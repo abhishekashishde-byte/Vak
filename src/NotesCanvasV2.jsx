@@ -381,16 +381,17 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     }
     if(pointerRef.current!==event.pointerId)return
     event.preventDefault()
-    try{event.currentTarget.releasePointerCapture?.(event.pointerId)}catch{}
-    pointerRef.current=null
-    activePointerTypeRef.current=''
     if(dragSelectionRef.current){
       const movedBlocks=dragSelectionRef.current.textBlocks||page.textBlocks||[]
       dragSelectionRef.current=null
       const next={...doc,pages:doc.pages.map(pg=>pg.id===page.id?{...pg,strokes:strokesRef.current,textBlocks:movedBlocks}:pg)}
-      emit(next);indexRef.current=makeStrokeIndex(strokesRef.current);return
+      emit(next);indexRef.current=makeStrokeIndex(strokesRef.current);pointerRef.current=null;activePointerTypeRef.current='';return
     }
-    if(tool==='eraser'){if(eraseChangedRef.current)commitStrokes(strokesRef.current,false);return}
+    if(tool==='eraser'){
+      if(eraseChangedRef.current)commitStrokes(strokesRef.current,false)
+      pointerRef.current=null;activePointerTypeRef.current=''
+      return
+    }
     if(tool==='lasso'){
       const poly=lassoRef.current;lassoRef.current=[]
       let strokeIds=[]
@@ -402,15 +403,22 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         const center={x:b.x+(b.w||.3)/2,y:b.y+(b.h||.08)/2}
         return lassoMode==='rect'&&poly.length>1?center.x>=Math.min(poly[0].x,poly.at(-1).x)&&center.x<=Math.max(poly[0].x,poly.at(-1).x)&&center.y>=Math.min(poly[0].y,poly.at(-1).y)&&center.y<=Math.max(poly[0].y,poly.at(-1).y):pointInPolygon(center,poly)
       }).map(b=>b.id)
-      setSelected({strokeIds,textIds});drawOverlay(strokesRef.current,page.textBlocks);return
+      setSelected({strokeIds,textIds});drawOverlay(strokesRef.current,page.textBlocks)
+      pointerRef.current=null;activePointerTypeRef.current=''
+      return
     }
+    // Finalize the ink before clearing the pointer. Do not manually release
+    // capture here: Safari releases it automatically after pointerup, and a
+    // delayed lostpointercapture from the previous stroke must never cancel
+    // the next Pencil stroke.
     finishInkStroke(event)
+    pointerRef.current=null
+    activePointerTypeRef.current=''
   }
   function pointerCancel(event){
     if(event.pointerType==='touch')touchesRef.current.delete(event.pointerId)
     if(pointerRef.current!==event.pointerId)return
     event.preventDefault?.()
-    try{event.currentTarget.releasePointerCapture?.(event.pointerId)}catch{}
     pointerRef.current=null
     activePointerTypeRef.current=''
     gestureRef.current=null
@@ -623,7 +631,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
           <div className={`ana-v2-text-layer ${tool==='type'||tool==='scribble'?'editing':''} ${tool==='scribble'?'scribble-mode':''}`}>
             {(page.textBlocks||[]).map(block=><TextBlock key={block.id} block={block} active={activeTextId===block.id} zoom={zoom} editing={tool==='type'||tool==='scribble'} scribbleMode={tool==='scribble'} onFocus={()=>setActiveTextId(block.id)} onChange={patch=>updateText(block.id,patch)} onDragStart={e=>startTextDrag(e,block)}/>)}
           </div>
-          <canvas ref={liveRef} className={`ana-v2-canvas live ${tool==='type'||tool==='scribble'?'text-input-mode':''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel} onLostPointerCapture={pointerCancel}/>
+          <canvas ref={liveRef} className={`ana-v2-canvas live ${tool==='type'||tool==='scribble'?'text-input-mode':''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}/>
           <canvas ref={overlayRef} className="ana-v2-canvas overlay"/>
           {rulerOn&&<div className="ana-v2-ruler" style={{transform:`translate(-50%,-50%) rotate(${rulerAngle}deg)`}}><span>0</span><i/><span>20</span></div>}
           {!!(selected.strokeIds.length||selected.textIds.length)&&<SelectionMenu bounds={selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)} onDelete={deleteSelection} onDuplicate={duplicateSelection} onCopy={copySelection} onPaste={pasteSelection} canPaste={!!clipboard} onText={convertSelectionToText} onAsk={askSelection} onMove={(x,y)=>transformSelection({dx:x,dy:y})} onScale={s=>transformSelection({scaleX:s,scaleY:s,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onRotate={r=>transformSelection({rotation:r,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onColor={c=>transformSelection({color:c})} onWidth={s=>transformSelection({widthScale:s})}/>}
