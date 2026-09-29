@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   PEN_PRESETS, cloneStrokes, erasePrecise, eraseWholeStroke, eventPoints, makeStrokeIndex,
-  predictedPoints, recognizeHeldShape, renderLive, renderStatic, straightenStroke,
+  predictedPoints, recognizeHeldShape, renderCommittedStroke, renderLive, renderStatic, straightenStroke,
   straightenWriting, strokeBounds, strokesInLasso, strokesInRect, transformStrokes,
 } from './notesInkV2.js'
 import './notesCanvasV2.css'
@@ -99,6 +99,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const touchesRef=useRef(new Map()),gestureRef=useRef(null),stylusUntilRef=useRef(0)
   const activePointerTypeRef=useRef(''),lastPenAtRef=useRef(0)
   const dragSelectionRef=useRef(null),textDragRef=useRef(null)
+  const docRef=useRef(doc),inkFlushTimerRef=useRef(null),inkBurstBaseRef=useRef(null),inkDirtyRef=useRef(false)
 
   useEffect(()=>{
     const root=viewportRef.current
@@ -134,7 +135,20 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     }
   },[isFullscreen])
 
-  useEffect(()=>{setDoc(normalizeNotesDocument(document))},[document?.currentPageId,document?.pages?.length])
+  useEffect(()=>{
+    const next=normalizeNotesDocument(document)
+    setDoc(next)
+    docRef.current=next
+  },[document?.currentPageId,document?.pages?.length])
+  useEffect(()=>{docRef.current=doc},[doc])
+  useEffect(()=>()=>{
+    clearTimeout(inkFlushTimerRef.current)
+    if(inkDirtyRef.current){
+      const next=docRef.current
+      onChange?.(next)
+      onTextChange?.(next.pages.flatMap(p=>p.textBlocks||[]).map(b=>String(b.text||'').trim()).filter(Boolean).join('\n\n'))
+    }
+  },[])
   const page=useMemo(()=>doc.pages.find(p=>p.id===doc.currentPageId)||doc.pages[0],[doc])
   const dims=pageDims(page)
   const displayW=dims.w*zoom,displayH=dims.h*zoom
@@ -152,7 +166,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       ctx.fillRect(0,0,out.width,out.height);ctx.drawImage(canvas,0,0)
       return out.toDataURL('image/png',.94)
     },
-    getDocument(){return doc},
+    getDocument(){return docRef.current},
     getAllText(){return doc.pages.flatMap(p=>p.textBlocks||[]).map(b=>b.text||'').filter(Boolean).join('\n\n')},
     getAllStrokes(){return doc.pages.flatMap(p=>p.strokes||[])},
     appendText(text){
@@ -162,29 +176,72 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     },
   }),[doc,page])
 
-  function emit(next){
-    setDoc(next);onChange?.(next)
+  function notifyDocument(next){
+    onChange?.(next)
     onTextChange?.(next.pages.flatMap(p=>p.textBlocks||[]).map(b=>String(b.text||'').trim()).filter(Boolean).join('\n\n'))
   }
+  function flushInkBurst(){
+    clearTimeout(inkFlushTimerRef.current)
+    inkFlushTimerRef.current=null
+    if(!inkDirtyRef.current)return
+    const next=docRef.current
+    if(inkBurstBaseRef.current){
+      const snapshot=inkBurstBaseRef.current
+      setHistory(prev=>[...prev.slice(-39),snapshot])
+      setFuture([])
+    }
+    inkBurstBaseRef.current=null
+    inkDirtyRef.current=false
+    setDoc(next)
+    indexRef.current=makeStrokeIndex(strokesRef.current)
+    notifyDocument(next)
+  }
+  function queueInkCommit(strokes,patch={}){
+    if(!inkBurstBaseRef.current)inkBurstBaseRef.current=docRef.current
+    const current=docRef.current
+    const next={...current,pages:current.pages.map(p=>p.id===page.id?{...p,...patch,strokes}:p)}
+    docRef.current=next
+    strokesRef.current=strokes
+    inkDirtyRef.current=true
+    clearTimeout(inkFlushTimerRef.current)
+    inkFlushTimerRef.current=setTimeout(flushInkBurst,140)
+  }
+  function emit(next){
+    flushInkBurst()
+    docRef.current=next
+    setDoc(next);notifyDocument(next)
+  }
   function updatePage(patch,record=true){
+    flushInkBurst()
     if(record)pushHistory()
-    const next={...doc,pages:doc.pages.map(p=>p.id===page.id?{...p,...patch}:p)}
+    const current=docRef.current
+    const next={...current,pages:current.pages.map(p=>p.id===page.id?{...p,...patch}:p)}
     emit(next)
   }
-  function pushHistory(){
-    setHistory(prev=>[...prev.slice(-39),JSON.parse(JSON.stringify(doc))]);setFuture([])
+  function pushHistory(snapshot=docRef.current){
+    setHistory(prev=>[...prev.slice(-39),snapshot]);setFuture([])
   }
   function undo(){
+    flushInkBurst()
     const prev=history[history.length-1];if(!prev)return
-    setFuture(f=>[JSON.parse(JSON.stringify(doc)),...f].slice(0,40));setHistory(h=>h.slice(0,-1));emit(prev);setSelected({strokeIds:[],textIds:[]})
+    setFuture(f=>[docRef.current,...f].slice(0,40));setHistory(h=>h.slice(0,-1));emit(prev);setSelected({strokeIds:[],textIds:[]})
   }
   function redo(){
+    flushInkBurst()
     const next=future[0];if(!next)return
-    setHistory(h=>[...h,JSON.parse(JSON.stringify(doc))].slice(-40));setFuture(f=>f.slice(1));emit(next);setSelected({strokeIds:[],textIds:[]})
+    setHistory(h=>[...h,docRef.current].slice(-40));setFuture(f=>f.slice(1));emit(next);setSelected({strokeIds:[],textIds:[]})
   }
   function commitStrokes(strokes,record=true){
-    updatePage({strokes},record)
-    strokesRef.current=strokes;indexRef.current=makeStrokeIndex(strokes)
+    if(record)queueInkCommit(strokes)
+    else{
+      const current=docRef.current
+      const next={...current,pages:current.pages.map(p=>p.id===page.id?{...p,strokes}:p)}
+      docRef.current=next
+      strokesRef.current=strokes
+      setDoc(next)
+      indexRef.current=makeStrokeIndex(strokes)
+      notifyDocument(next)
+    }
   }
   function frameLive(pred=[]){
     if(rafRef.current)cancelAnimationFrame(rafRef.current)
@@ -236,14 +293,16 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       if(shape)finalStroke={...stroke,...shape,points:shape.points}
     }
     const strokes=[...strokesRef.current,finalStroke]
+    // Keep Pencil latency out of React. Paint the completed stroke directly
+    // onto the static ink layer, then batch document/index/save work until
+    // the user pauses briefly between strokes.
+    const appended=finalStroke.kind!=='highlighter'&&renderCommittedStroke(staticRef.current,finalStroke,1)
+    if(!appended)renderStatic(staticRef.current,strokes,1)
     if(page.size==='endless'){
       const b=strokeBounds(finalStroke)
-      if(b.maxY>.9){
-        updatePage({strokes,endlessHeight:(page.endlessHeight||1800)+700},true)
-        strokesRef.current=strokes
-        indexRef.current=makeStrokeIndex(strokes)
-      }else commitStrokes(strokes,true)
-    }else commitStrokes(strokes,true)
+      if(b.maxY>.9)queueInkCommit(strokes,{endlessHeight:(page.endlessHeight||1800)+700})
+      else queueInkCommit(strokes)
+    }else queueInkCommit(strokes)
   }
   function pointerDown(event){
     const drawingTool=PEN_TOOLS.includes(tool)||tool==='eraser'
