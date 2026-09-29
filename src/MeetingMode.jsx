@@ -6,6 +6,7 @@ import { authenticatedHeaders, endTimedUsage, heartbeatTimedUsage, refundFixedTi
 import { CONSENT_VERSIONS, recordConsentEvent } from './consentEvents.js'
 import './meeting-notes.css'
 import './meeting-modes.css'
+import MeetingScribble from './MeetingScribble.jsx'
 
 const TARGETS = ['English', 'German', 'Swabian German (Schwäbisch)', 'Bavarian German (Bairisch)', 'Low German (Plattdeutsch)', 'Hindi', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Malayalam', 'Kannada', 'Urdu', 'French', 'Spanish', 'Italian']
 const STORAGE_KEY = 'ana-meeting-transcript-v2'
@@ -1033,6 +1034,8 @@ export default function MeetingMode() {
         </div>
       </div>
     </section>
+
+    <MeetingScribble />
 
     {(notesStatus !== 'idle' || meetingNotes) && <section className="meeting-notes-card">
       <div className="meeting-notes-head"><div><Sparkles size={16}/><h2>After the meeting</h2></div><span>High-quality final pass</span></div>
