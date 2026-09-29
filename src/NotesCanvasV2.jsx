@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowUp, BookOpen, Brush, CheckSquare, Circle, Copy, Eraser, FilePlus2, Grid3X3,
-  Highlighter, Languages, Lasso, ListTodo, Mail, Maximize2, Minus, MousePointer2, Move, Palette, PenLine, Pencil,
+  Highlighter, Languages, Lasso, ListTodo, Mail, Maximize2, Minimize2, Minus, MousePointer2, Move, Palette, PenLine, Pencil,
   Plus, Redo2, RotateCw, Ruler, ScanLine, Sparkles, Square, Trash2, Type, Undo2, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import {
@@ -88,6 +88,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const [rulerOn,setRulerOn]=useState(false)
   const [rulerAngle,setRulerAngle]=useState(0)
   const [zoom,setZoom]=useState(1)
+  const [isFullscreen,setIsFullscreen]=useState(false)
   const [history,setHistory]=useState([])
   const [future,setFuture]=useState([])
   const [clipboard,setClipboard]=useState(null)
@@ -97,6 +98,38 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const downAtRef=useRef(0),lassoRef=useRef([]),eraseChangedRef=useRef(false),indexRef=useRef(null)
   const touchesRef=useRef(new Map()),gestureRef=useRef(null),stylusUntilRef=useRef(0)
   const dragSelectionRef=useRef(null),textDragRef=useRef(null)
+
+  useEffect(()=>{
+    const root=viewportRef.current
+    if(!root)return
+    const stopNativeCallout=event=>{
+      const target=event.target
+      if(target?.closest?.('textarea,input,select,[contenteditable="true"]'))return
+      event.preventDefault()
+    }
+    root.addEventListener('contextmenu',stopNativeCallout,{passive:false})
+    root.addEventListener('selectstart',stopNativeCallout,{passive:false})
+    return()=>{
+      root.removeEventListener('contextmenu',stopNativeCallout)
+      root.removeEventListener('selectstart',stopNativeCallout)
+    }
+  },[])
+
+  useEffect(()=>{
+    if(!isFullscreen)return
+    const htmlOverflow=document.documentElement.style.overflow
+    const bodyOverflow=document.body.style.overflow
+    document.documentElement.style.overflow='hidden'
+    document.body.style.overflow='hidden'
+    const onKeyDown=event=>{if(event.key==='Escape')setIsFullscreen(false)}
+    window.addEventListener('keydown',onKeyDown)
+    requestAnimationFrame(()=>requestAnimationFrame(()=>fitPage()))
+    return()=>{
+      document.documentElement.style.overflow=htmlOverflow
+      document.body.style.overflow=bodyOverflow
+      window.removeEventListener('keydown',onKeyDown)
+    }
+  },[isFullscreen])
 
   useEffect(()=>{setDoc(normalizeNotesDocument(document))},[document?.currentPageId,document?.pages?.length])
   const page=useMemo(()=>doc.pages.find(p=>p.id===doc.currentPageId)||doc.pages[0],[doc])
@@ -419,7 +452,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const paperHex=PAPER_COLORS.find(([id])=>id===page.paperColor)?.[1]||'#fffaf0'
   const textColor=page.paperColor==='dark'?'#f4f4f4':'#222'
 
-  return <div className="ana-v2">
+  return <div className={`ana-v2 ${isFullscreen?'is-fullscreen':''}`}>
     <aside className="ana-v2-pages">
       <div className="ana-v2-pages-head"><strong>Pages</strong><button onClick={addPage}><Plus size={14}/></button></div>
       <div className="ana-v2-thumbs">{doc.pages.map((p,i)=><button className={p.id===page.id?'active':''} key={p.id} onClick={()=>emit({...doc,currentPageId:p.id})}>
@@ -451,7 +484,10 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         <select value={page.orientation} disabled={page.size==='endless'} onChange={e=>updatePage({orientation:e.target.value})}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
         <select value={page.template} onChange={e=>updatePage({template:e.target.value})}>{PAPER_TEMPLATES.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select>
         <select value={page.paperColor} onChange={e=>updatePage({paperColor:e.target.value})}>{PAPER_COLORS.map(([id])=><option key={id} value={id}>{id[0].toUpperCase()+id.slice(1)}</option>)}</select>
-        <div className="ana-v2-zoom"><button onClick={()=>setZoom(z=>clamp(z-.1,.45,3.5))}><ZoomOut size={13}/></button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(z=>clamp(z+.1,.45,3.5))}><ZoomIn size={13}/></button><button onClick={fitPage}><Maximize2 size={13}/></button></div>
+        <div className="ana-v2-zoom"><button onClick={()=>setZoom(z=>clamp(z-.1,.45,3.5))}><ZoomOut size={13}/></button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(z=>clamp(z+.1,.45,3.5))}><ZoomIn size={13}/></button><button onClick={fitPage} title="Fit page"><Maximize2 size={13}/></button></div>
+        <button className="ana-v2-screen-toggle" type="button" onClick={()=>setIsFullscreen(v=>!v)} aria-label={isFullscreen?'Exit full screen':'Open note full screen'} title={isFullscreen?'Exit full screen':'Full screen'}>
+          {isFullscreen?<Minimize2 size={14}/>:<Maximize2 size={14}/>}<span>{isFullscreen?'Exit full screen':'Full screen'}</span>
+        </button>
       </div>
 
       <div ref={viewportRef} className="ana-v2-viewport" onDoubleClick={fitPage}>
