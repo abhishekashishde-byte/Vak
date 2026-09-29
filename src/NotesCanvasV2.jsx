@@ -97,6 +97,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const strokesRef=useRef([]),activeRef=useRef(null),rafRef=useRef(null),pointerRef=useRef(null)
   const downAtRef=useRef(0),lassoRef=useRef([]),eraseChangedRef=useRef(false),indexRef=useRef(null)
   const touchesRef=useRef(new Map()),gestureRef=useRef(null),stylusUntilRef=useRef(0)
+  const activePointerTypeRef=useRef(''),lastPenAtRef=useRef(0)
   const dragSelectionRef=useRef(null),textDragRef=useRef(null)
 
   useEffect(()=>{
@@ -192,29 +193,114 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     const pts=eventPoints(event,rect)
     return pts[pts.length-1]
   }
+  function markStylusActive(){
+    const now=Date.now()
+    lastPenAtRef.current=now
+    stylusUntilRef.current=now+5000
+    touchesRef.current.clear()
+    gestureRef.current=null
+  }
+  function isPalmTouch(event){
+    return Number(event.width)>28||Number(event.height)>28
+  }
+  function appendSamples(stroke,event){
+    if(!stroke||!liveRef.current)return
+    const rect=liveRef.current.getBoundingClientRect()
+    const samples=eventPoints(event,rect)
+    let last=stroke.points?.[stroke.points.length-1]
+    for(const sample of samples){
+      if(!last||Math.hypot(sample.x-last.x,sample.y-last.y)>.00012||Math.abs((sample.time||0)-(last.time||0))>3){
+        stroke.points.push(sample)
+        last=sample
+      }
+    }
+  }
+  function finishInkStroke(event,{cancelled=false}={}){
+    const stroke=activeRef.current
+    if(!stroke)return
+    appendSamples(stroke,event)
+    activeRef.current=null
+    renderLive(liveRef.current,null,[],1)
+    if(!stroke.points?.length)return
+    const held=performance.now()-downAtRef.current
+    let finalStroke=stroke
+    if(!cancelled&&rulerOn){
+      const first=stroke.points[0],rad=rulerAngle*Math.PI/180
+      const last=stroke.points.at(-1),len=(last.x-first.x)*Math.cos(rad)+(last.y-first.y)*Math.sin(rad)
+      finalStroke={...stroke,points:[first,{...last,x:first.x+Math.cos(rad)*len,y:first.y+Math.sin(rad)*len}],shape:'ruler-line'}
+    }else if(!cancelled&&stroke.kind==='highlighter'&&held>350)finalStroke=straightenStroke(stroke)
+    else if(!cancelled&&shapeSnap){
+      const shape=recognizeHeldShape(stroke,held)
+      if(shape)finalStroke={...stroke,...shape,points:shape.points}
+    }
+    const strokes=[...strokesRef.current,finalStroke]
+    if(page.size==='endless'){
+      const b=strokeBounds(finalStroke)
+      if(b.maxY>.9){
+        updatePage({strokes,endlessHeight:(page.endlessHeight||1800)+700},true)
+        strokesRef.current=strokes
+        indexRef.current=makeStrokeIndex(strokes)
+      }else commitStrokes(strokes,true)
+    }else commitStrokes(strokes,true)
+  }
   function pointerDown(event){
-    if(event.pointerType==='pen')stylusUntilRef.current=Date.now()+1400
+    const drawingTool=PEN_TOOLS.includes(tool)||tool==='eraser'
+    if(event.pointerType==='pen'){
+      markStylusActive()
+      event.preventDefault()
+      event.stopPropagation()
+      // Apple Pencil always wins over an accidental palm/finger pointer.
+      if(pointerRef.current!==null&&activePointerTypeRef.current==='touch'){
+        activeRef.current=null
+        pointerRef.current=null
+        activePointerTypeRef.current=''
+        renderLive(liveRef.current,null,[],1)
+      }
+    }
     if(event.pointerType==='touch'){
-      if(Date.now()<stylusUntilRef.current||Number(event.width)>34||Number(event.height)>34)return
-      touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY,w:event.width||0,h:event.height||0})
-      if(touchesRef.current.size>=2){
-        const vals=[...touchesRef.current.values()]
-        const dist=Math.hypot(vals[1].x-vals[0].x,vals[1].y-vals[0].y)
-        const mid={x:(vals[0].x+vals[1].x)/2,y:(vals[0].y+vals[1].y)/2}
-        gestureRef.current={dist,zoom,mid,scrollLeft:viewportRef.current?.scrollLeft||0,scrollTop:viewportRef.current?.scrollTop||0,angle:Math.atan2(vals[1].y-vals[0].y,vals[1].x-vals[0].x),rulerAngle}
+      const stylusOwnsInput=activePointerTypeRef.current==='pen'||Date.now()<stylusUntilRef.current
+      if(stylusOwnsInput||isPalmTouch(event)){
+        event.preventDefault()
+        touchesRef.current.delete(event.pointerId)
         return
       }
-      if(PEN_TOOLS.includes(tool)||tool==='eraser'||tool==='lasso')return
+      // Lasso/selection never starts from a finger. This prevents palm contacts
+      // from selecting or moving several objects while handwriting.
+      if(tool==='lasso'){
+        event.preventDefault()
+        return
+      }
+      // With a drawing tool selected, one clean finger can still write/erase
+      // when no Pencil has been used recently. Touch gestures are disabled for
+      // that stroke so they cannot steal it midway through a word.
+      if(!drawingTool){
+        touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY,w:event.width||0,h:event.height||0})
+        if(touchesRef.current.size>=2){
+          const vals=[...touchesRef.current.values()]
+          const dist=Math.hypot(vals[1].x-vals[0].x,vals[1].y-vals[0].y)
+          const mid={x:(vals[0].x+vals[1].x)/2,y:(vals[0].y+vals[1].y)/2}
+          gestureRef.current={dist,zoom,mid,scrollLeft:viewportRef.current?.scrollLeft||0,scrollTop:viewportRef.current?.scrollTop||0,angle:Math.atan2(vals[1].y-vals[0].y,vals[1].x-vals[0].x),rulerAngle}
+          event.preventDefault()
+          return
+        }
+      }
     }
     if(pointerRef.current!==null)return
     const p=normalizedPoint(event)
     if(tool==='type'){addText(p);return}
-    const b=selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)
+    const b=selectionBounds(strokesRef.current,selected.strokeIds,page.textBlocks,selected.textIds)
     if(tool==='lasso'&&b&&p.x>=b.minX&&p.x<=b.maxX&&p.y>=b.minY&&p.y<=b.maxY){
-      pushHistory();pointerRef.current=event.pointerId;dragSelectionRef.current={start:p,last:p,textBlocks:page.textBlocks||[]};event.preventDefault();return
+      pushHistory();pointerRef.current=event.pointerId;activePointerTypeRef.current=event.pointerType;dragSelectionRef.current={start:p,last:p,textBlocks:page.textBlocks||[]};event.preventDefault();return
     }
-    pointerRef.current=event.pointerId;downAtRef.current=performance.now();event.preventDefault()
+    pointerRef.current=event.pointerId
+    activePointerTypeRef.current=event.pointerType
+    downAtRef.current=performance.now()
+    event.preventDefault()
     try{event.currentTarget.setPointerCapture(event.pointerId)}catch{}
+    if(drawingTool&&(selected.strokeIds.length||selected.textIds.length)){
+      setSelected({strokeIds:[],textIds:[]})
+      lassoRef.current=[]
+    }
     if(tool==='eraser'){
       pushHistory();eraseChangedRef.current=false;eraseAt(p);return
     }
@@ -228,11 +314,19 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
     frameLive(predictedPoints(event,rect))
   }
   function pointerMove(event){
-    if(event.pointerType==='pen')stylusUntilRef.current=Date.now()+1400
+    if(event.pointerType==='pen'){
+      markStylusActive()
+      event.preventDefault()
+    }
     if(event.pointerType==='touch'){
-      if(Date.now()<stylusUntilRef.current||Number(event.width)>34||Number(event.height)>34){touchesRef.current.delete(event.pointerId);return}
+      const stylusOwnsInput=activePointerTypeRef.current==='pen'||Date.now()<stylusUntilRef.current
+      if(stylusOwnsInput||isPalmTouch(event)){
+        touchesRef.current.delete(event.pointerId)
+        event.preventDefault()
+        return
+      }
       if(touchesRef.current.has(event.pointerId))touchesRef.current.set(event.pointerId,{x:event.clientX,y:event.clientY,w:event.width||0,h:event.height||0})
-      if(gestureRef.current&&touchesRef.current.size>=2){
+      if(gestureRef.current&&touchesRef.current.size>=2&&activePointerTypeRef.current!=='touch'){
         const vals=[...touchesRef.current.values()],g=gestureRef.current
         const dist=Math.hypot(vals[1].x-vals[0].x,vals[1].y-vals[0].y)
         const mid={x:(vals[0].x+vals[1].x)/2,y:(vals[0].y+vals[1].y)/2}
@@ -245,9 +339,9 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         }
         event.preventDefault();return
       }
-      if(Date.now()<stylusUntilRef.current||PEN_TOOLS.includes(tool)||tool==='eraser'||tool==='lasso')return
     }
     if(pointerRef.current!==event.pointerId)return
+    event.preventDefault()
     const p=normalizedPoint(event)
     if(dragSelectionRef.current){
       const last=dragSelectionRef.current.last,dx=p.x-last.x,dy=p.y-last.y
@@ -266,17 +360,21 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       lassoRef.current.push(p);drawOverlay();return
     }
     if(!activeRef.current)return
+    appendSamples(activeRef.current,event)
     const rect=liveRef.current.getBoundingClientRect()
-    activeRef.current.points.push(...eventPoints(event,rect))
     frameLive(predictedPoints(event,rect))
   }
   function pointerUp(event){
+    if(event.pointerType==='pen')markStylusActive()
     if(event.pointerType==='touch'){
       touchesRef.current.delete(event.pointerId)
       if(touchesRef.current.size<2)gestureRef.current=null
     }
     if(pointerRef.current!==event.pointerId)return
+    event.preventDefault()
+    try{event.currentTarget.releasePointerCapture?.(event.pointerId)}catch{}
     pointerRef.current=null
+    activePointerTypeRef.current=''
     if(dragSelectionRef.current){
       const movedBlocks=dragSelectionRef.current.textBlocks||page.textBlocks||[]
       dragSelectionRef.current=null
@@ -289,35 +387,38 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
       let strokeIds=[]
       if(lassoMode==='rect'&&poly.length>1){
         const a=poly[0],b=poly[poly.length-1],r={minX:Math.min(a.x,b.x),minY:Math.min(a.y,b.y),maxX:Math.max(a.x,b.x),maxY:Math.max(a.y,b.y)}
-        strokeIds=strokesInRect(page.strokes,r)
-      }else strokeIds=strokesInLasso(page.strokes,poly)
+        strokeIds=strokesInRect(strokesRef.current,r)
+      }else strokeIds=strokesInLasso(strokesRef.current,poly)
       const textIds=(page.textBlocks||[]).filter(b=>{
         const center={x:b.x+(b.w||.3)/2,y:b.y+(b.h||.08)/2}
         return lassoMode==='rect'&&poly.length>1?center.x>=Math.min(poly[0].x,poly.at(-1).x)&&center.x<=Math.max(poly[0].x,poly.at(-1).x)&&center.y>=Math.min(poly[0].y,poly.at(-1).y)&&center.y<=Math.max(poly[0].y,poly.at(-1).y):pointInPolygon(center,poly)
       }).map(b=>b.id)
-      setSelected({strokeIds,textIds});drawOverlay();return
+      setSelected({strokeIds,textIds});drawOverlay(strokesRef.current,page.textBlocks);return
     }
-    const stroke=activeRef.current;activeRef.current=null;renderLive(liveRef.current,null,[],1)
-    if(!stroke?.points?.length)return
-    const held=performance.now()-downAtRef.current
-    let finalStroke=stroke
-    if(rulerOn){
-      const first=stroke.points[0],rad=rulerAngle*Math.PI/180
-      const last=stroke.points.at(-1),len=(last.x-first.x)*Math.cos(rad)+(last.y-first.y)*Math.sin(rad)
-      finalStroke={...stroke,points:[first,{...last,x:first.x+Math.cos(rad)*len,y:first.y+Math.sin(rad)*len}],shape:'ruler-line'}
-    }else if(stroke.kind==='highlighter'&&held>350)finalStroke=straightenStroke(stroke)
-    else if(shapeSnap){
-      const shape=recognizeHeldShape(stroke,held)
-      if(shape)finalStroke={...stroke,...shape,points:shape.points}
-    }
-    const strokes=[...strokesRef.current,finalStroke]
-    if(page.size==='endless'){
-      const b=strokeBounds(finalStroke)
-      if(b.maxY>.9)updatePage({strokes,endlessHeight:(page.endlessHeight||1800)+700},true)
-      else commitStrokes(strokes,true)
-    }else commitStrokes(strokes,true)
+    finishInkStroke(event)
   }
-  function pointerCancel(event){if(pointerRef.current===event.pointerId){activeRef.current=null;pointerRef.current=null;renderLive(liveRef.current,null,[],1)}if(event.pointerType==='touch')touchesRef.current.delete(event.pointerId)}
+  function pointerCancel(event){
+    if(event.pointerType==='touch')touchesRef.current.delete(event.pointerId)
+    if(pointerRef.current!==event.pointerId)return
+    event.preventDefault?.()
+    try{event.currentTarget.releasePointerCapture?.(event.pointerId)}catch{}
+    pointerRef.current=null
+    activePointerTypeRef.current=''
+    gestureRef.current=null
+    if(dragSelectionRef.current){dragSelectionRef.current=null;return}
+    if(tool==='eraser'){
+      if(eraseChangedRef.current)commitStrokes(strokesRef.current,false)
+      return
+    }
+    if(tool==='lasso'){
+      lassoRef.current=[]
+      drawOverlay()
+      return
+    }
+    // Safari/iPad can cancel a valid Pencil pointer when the OS briefly
+    // intervenes. Keep the captured ink instead of dropping the rest of a word.
+    finishInkStroke(event,{cancelled:true})
+  }
   function eraseAt(p){
     const radius=clamp(.006+width/300,.009,.04)
     const before=strokesRef.current
@@ -496,7 +597,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
           <div className={`ana-v2-text-layer ${tool==='type'?'editing':''}`}>
             {(page.textBlocks||[]).map(block=><TextBlock key={block.id} block={block} active={activeTextId===block.id} zoom={zoom} editing={tool==='type'} onFocus={()=>setActiveTextId(block.id)} onChange={patch=>updateText(block.id,patch)} onDragStart={e=>startTextDrag(e,block)}/>)}
           </div>
-          <canvas ref={liveRef} className="ana-v2-canvas live" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}/>
+          <canvas ref={liveRef} className="ana-v2-canvas live" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel} onLostPointerCapture={pointerCancel}/>
           <canvas ref={overlayRef} className="ana-v2-canvas overlay"/>
           {rulerOn&&<div className="ana-v2-ruler" style={{transform:`translate(-50%,-50%) rotate(${rulerAngle}deg)`}}><span>0</span><i/><span>20</span></div>}
           {!!(selected.strokeIds.length||selected.textIds.length)&&<SelectionMenu bounds={selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)} onDelete={deleteSelection} onDuplicate={duplicateSelection} onCopy={copySelection} onPaste={pasteSelection} canPaste={!!clipboard} onText={convertSelectionToText} onAsk={askSelection} onMove={(x,y)=>transformSelection({dx:x,dy:y})} onScale={s=>transformSelection({scaleX:s,scaleY:s,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onRotate={r=>transformSelection({rotation:r,cx:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cx,cy:selectionBounds(page.strokes,selected.strokeIds,page.textBlocks,selected.textIds)?.cy})} onColor={c=>transformSelection({color:c})} onWidth={s=>transformSelection({widthScale:s})}/>}
