@@ -84,7 +84,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
   const [highlighterOnly,setHighlighterOnly]=useState(false)
   const [lassoMode,setLassoMode]=useState('free')
   const [selected,setSelected]=useState({strokeIds:[],textIds:[]})
-  const [shapeSnap,setShapeSnap]=useState(true)
+  const [shapeSnap,setShapeSnap]=useState(false)
   const [rulerOn,setRulerOn]=useState(false)
   const [rulerAngle,setRulerAngle]=useState(0)
   const [zoom,setZoom]=useState(1)
@@ -118,16 +118,18 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
 
   useEffect(()=>{
     if(!isFullscreen)return
-    const htmlOverflow=document.documentElement.style.overflow
-    const bodyOverflow=document.body.style.overflow
-    document.documentElement.style.overflow='hidden'
-    document.body.style.overflow='hidden'
+    const browserDocument=globalThis.document
+    if(!browserDocument)return
+    const htmlOverflow=browserDocument.documentElement.style.overflow
+    const bodyOverflow=browserDocument.body.style.overflow
+    browserDocument.documentElement.style.overflow='hidden'
+    browserDocument.body.style.overflow='hidden'
     const onKeyDown=event=>{if(event.key==='Escape')setIsFullscreen(false)}
     window.addEventListener('keydown',onKeyDown)
     requestAnimationFrame(()=>requestAnimationFrame(()=>fitPage()))
     return()=>{
-      document.documentElement.style.overflow=htmlOverflow
-      document.body.style.overflow=bodyOverflow
+      browserDocument.documentElement.style.overflow=htmlOverflow
+      browserDocument.body.style.overflow=bodyOverflow
       window.removeEventListener('keydown',onKeyDown)
     }
   },[isFullscreen])
@@ -255,6 +257,13 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         pointerRef.current=null
         activePointerTypeRef.current=''
         renderLive(liveRef.current,null,[],1)
+      }else if(pointerRef.current!==null&&activePointerTypeRef.current==='pen'&&pointerRef.current!==event.pointerId){
+        // Safari can occasionally lose the previous pen-up. Preserve that
+        // stroke, clear the stale pointer, and immediately accept the next
+        // letter instead of silently dropping it.
+        finishInkStroke(event,{cancelled:true})
+        pointerRef.current=null
+        activePointerTypeRef.current=''
       }
     }
     if(event.pointerType==='touch'){
@@ -577,7 +586,7 @@ const NotesCanvasV2=forwardRef(function NotesCanvasV2({document,onChange,onTextC
         {PEN_TOOLS.includes(tool)&&<div className="ana-v2-palette">{COLORS.map(c=><button key={c} className={color===c?'active':''} style={{'--c':c}} onClick={()=>setColor(c)}/>)}<input type="color" value={color} onChange={e=>setColor(e.target.value)}/>{WIDTHS.map(v=><button className={Math.abs(width-v)<.05?'active':''} key={v} onClick={()=>setWidth(v)}><span style={{height:Math.min(8,Math.max(2,v))}}/></button>)}</div>}
         {tool==='eraser'&&<div className="ana-v2-options"><select value={eraserMode} onChange={e=>setEraserMode(e.target.value)}><option value="stroke">Stroke eraser</option><option value="precise">Precise eraser</option></select><label><input type="checkbox" checked={highlighterOnly} onChange={e=>setHighlighterOnly(e.target.checked)}/> Highlights only</label></div>}
         {tool==='lasso'&&<div className="ana-v2-options"><button className={lassoMode==='free'?'active':''} onClick={()=>setLassoMode('free')}>Freeform</button><button className={lassoMode==='rect'?'active':''} onClick={()=>setLassoMode('rect')}>Rectangle</button></div>}
-        <div className="ana-v2-tools secondary"><button onClick={undo}><Undo2 size={14}/></button><button onClick={redo}><Redo2 size={14}/></button><button className={shapeSnap?'active':''} onClick={()=>setShapeSnap(v=>!v)} title="Hold to perfect shapes"><Circle size={14}/></button><button className={rulerOn?'active':''} onClick={()=>setRulerOn(v=>!v)} title="Ruler"><Ruler size={14}/></button><button onClick={straightenAll} title="Straighten handwriting"><ScanLine size={14}/></button></div>
+        <div className="ana-v2-tools secondary"><button onClick={undo}><Undo2 size={14}/></button><button onClick={redo}><Redo2 size={14}/></button><button className={shapeSnap?'active':''} onClick={()=>setShapeSnap(v=>!v)} title="Shape assist — turn on only when drawing shapes"><Circle size={14}/></button><button className={rulerOn?'active':''} onClick={()=>setRulerOn(v=>!v)} title="Ruler"><Ruler size={14}/></button><button onClick={straightenAll} title="Straighten handwriting"><ScanLine size={14}/></button></div>
       </div>
 
       <div className="ana-v2-pagebar">
