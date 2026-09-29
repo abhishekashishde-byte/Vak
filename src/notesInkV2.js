@@ -33,13 +33,21 @@ export function pointerPoint(event, rect) {
 }
 
 export function eventPoints(event, rect) {
-  const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event]
-  return samples.length ? samples.map(sample => pointerPoint(sample, rect)) : [pointerPoint(event, rect)]
+  const source = event?.nativeEvent || event
+  let samples = [source]
+  try {
+    if (typeof source?.getCoalescedEvents === 'function') {
+      const coalesced = source.getCoalescedEvents()
+      if (coalesced?.length) samples = coalesced
+    }
+  } catch {}
+  return samples.map(sample => pointerPoint(sample, rect))
 }
 
 export function predictedPoints(event, rect) {
-  if (typeof event.getPredictedEvents !== 'function') return []
-  try { return event.getPredictedEvents().map(sample => pointerPoint(sample, rect)) } catch { return [] }
+  const source = event?.nativeEvent || event
+  if (typeof source?.getPredictedEvents !== 'function') return []
+  try { return source.getPredictedEvents().map(sample => pointerPoint(sample, rect)) } catch { return [] }
 }
 
 function tiltPressure(point, kind) {
