@@ -51,14 +51,14 @@ const modeParent = mode => MODE_PARENT[mode] || 'translate'
 
 function isFirstVisit() {
   if (typeof window === 'undefined') return false
-  try { return localStorage.getItem('ana-onboarding-v2') !== 'seen' } catch { return false }
+  try { return localStorage.getItem('ana-onboarding-v3') !== 'seen' } catch { return false }
 }
 
 function initialWorkspaceMode() {
   if (typeof window === 'undefined') return 'translate'
   try {
     const requested = new URLSearchParams(window.location.search).get('mode')
-    return MODE_PARENT[requested] ? requested : 'translate'
+    return requested === 'conversation' ? 'prepare' : MODE_PARENT[requested] ? requested : 'translate'
   } catch { return 'translate' }
 }
 
@@ -126,15 +126,15 @@ export default function Workspace() {
       {mode === 'meeting' && <main className="app-shell"><MeetingWorkspace/></main>}
     </div>
 
-    {pickerOpen && <div className="ana-mode-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setPickerOpen(false) }}>
+    {pickerOpen && <div className="ana-mode-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) { setPickerOpen(false); setConversationChoicesOpen(false) } }}>
       <section className="ana-mode-sheet" role="dialog" aria-modal="true" aria-label="Choose what Ana should do">
         <div className="ana-mode-sheet-head">
           <div><strong>What do you want Ana to do?</strong><span>Choose the job — Ana figures out the input method.</span></div>
           <button type="button" onClick={() => { setPickerOpen(false); setConversationChoicesOpen(false) }} aria-label="Close mode picker"><X size={19}/></button>
         </div>
-        {conversationChoicesOpen && <div className="ana-mode-group ana-mode-group-main"><button type="button" className="ana-mode-option" onClick={() => setConversationChoicesOpen(false)}>← All features</button><div className="ana-mode-grid"><button type="button" className="ana-mode-option" onClick={() => chooseMode("prepare")}><span className="ana-mode-option-icon"><Sparkles size={17}/></span><div><strong>Prepare</strong><small>Get ready for a real conversation and find the right words</small></div></button><button type="button" className="ana-mode-option" onClick={() => chooseMode("practice")}><span className="ana-mode-option-icon"><GraduationCap size={17}/></span><div><strong>Practice</strong><small>Rehearse with Ana and get feedback on your language</small></div></button></div></div>}
+        {conversationChoicesOpen && <div className="ana-mode-group ana-mode-group-main"><button type="button" className="ana-conversation-back" onClick={() => setConversationChoicesOpen(false)}>← All features</button><div className="ana-mode-grid"><button type="button" className="ana-mode-option" onClick={() => chooseMode("prepare")}><span className="ana-mode-option-icon"><Sparkles size={17}/></span><div><strong>Prepare</strong><small>Get ready for a real conversation and find the right words</small></div></button><button type="button" className="ana-mode-option" onClick={() => chooseMode("practice")}><span className="ana-mode-option-icon"><GraduationCap size={17}/></span><div><strong>Practice</strong><small>Rehearse with Ana and get feedback on your language</small></div></button></div></div>}
         {!conversationChoicesOpen && <div className="ana-mode-group ana-mode-group-main"><div className="ana-mode-grid">{MAIN_MODES.map(item => { const Icon = item.icon; const selected = item.id === parentMode; return <button type="button" className={`ana-mode-option ${selected ? 'active' : ''}`} onClick={() => chooseMode(item.id)} key={item.id}><span className="ana-mode-option-icon"><Icon size={17}/></span><div><strong>{item.label}</strong><small>{item.description}</small></div>{selected && <span className="ana-mode-check"><Check size={14}/></span>}</button> })}</div></div>}
-        <button className="ana-mode-help" type="button" onClick={() => { setPickerOpen(false); openLearn() }}><CircleHelp size={15}/><span><b>Not sure which one?</b> Tell Ana what you are trying to do.</span><ArrowRightFallback/></button>
+        <button className="ana-mode-help" type="button" onClick={() => { setPickerOpen(false); setConversationChoicesOpen(false); openLearn() }}><CircleHelp size={15}/><span><b>Not sure which one?</b> Tell Ana what you are trying to do.</span><ArrowRightFallback/></button>
       </section>
     </div>}
 
