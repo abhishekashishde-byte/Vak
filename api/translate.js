@@ -255,6 +255,15 @@ export default async function handler(req, res) {
   if (domainInstructions) finalInstructions += `\n\n${domainInstructions}`
   if (isAnaBriefing) finalInstructions += BRIEFING_PROTOCOL
   if (isTalkTurn) finalInstructions += TALK_COMPLETION_PROTOCOL
+  if (isAnaTranslation) {
+    finalInstructions += `\n\nNATURAL TRANSLATION QUALITY — mandatory:
+- Translate the intended meaning into idiomatic, grammatically complete language, not a word-for-word rendering.
+- For German, choose natural professional wording when the source refers to a work meeting. Prefer "Besprechung" for a meeting in a professional context unless "Meeting" is explicitly the established term.
+- When the speaker says they must leave to attend another meeting, use a complete, natural construction such as "ich muss zu einer anderen Besprechung gehen" or, when context warrants, "ich muss in die nächste Besprechung". Do not omit "gehen" when the destination construction would otherwise sound abrupt.
+- Preserve the source's meaning, level of politeness and intent. Do not introduce "leider" or other sentiment unless it fits the original tone; do not invent details.
+- Use correct punctuation and finish complete sentences, including closing thanks.
+- These are general language-quality guidelines, not a fixed translation: adapt to each sentence, context, and language.`
+  }
   if (isWordRefinement) {
     finalInstructions += `\n\nGLOSSARY MAPPING — mandatory:\nThe JSON field sourceTerm MUST be a non-empty exact source-language word or shortest source phrase from SOURCE TEXT that corresponds to SELECTED TARGET WORD. Never return an empty sourceTerm. This mapping is required because the user may save the alternative as an Always preference.`
   }
