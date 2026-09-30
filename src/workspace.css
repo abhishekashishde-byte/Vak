@@ -63,3 +63,12 @@ body{overscroll-behavior:none}
     grid-template-rows:150px 150px;
   }
 }
+
+/* Readable mode picker and compact conversation sub-navigation. */
+.ana-conversation-back{border:0;background:transparent;color:#514b44;font:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer;padding:8px 10px;margin-bottom:6px;border-radius:9px}
+.ana-conversation-back:hover,.ana-conversation-back:focus-visible{background:#eee7dc}
+.ana-mode-option:focus-visible,.ana-mode-trigger:focus-visible,.ana-mode-help:focus-visible{outline:2px solid #514b44;outline-offset:2px}
+.ana-mode-option small{font-size:12px;line-height:1.4}
+.ana-mode-help{font-size:12px}
+.ana-mode-sheet-head span{font-size:12px}
+@media(max-width:760px){.ana-mode-option small{font-size:12px}.ana-mode-sheet{overscroll-behavior:contain}.ana-mode-option{min-height:62px}.ana-mode-sheet-head strong{font-size:19px}}
