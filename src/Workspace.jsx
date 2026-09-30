@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, MessageSquareText, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X } from 'lucide-react'
+import { Captions, Check, ChevronDown, CircleHelp, GraduationCap, Headphones, Languages, MessageSquareText, Mic, MessagesSquare, ShieldCheck, Sparkles, UsersRound, WifiOff, X, LogOut } from 'lucide-react'
 import App from './App.jsx'
+import { supabase } from './lib/supabase.js'
 import LiveMode from './LiveMode.jsx'
 import TalkForMe from './TalkForMeRealtime.jsx'
 import TalkPermissionBoundary from './TalkPermissionBoundary.jsx'
@@ -103,6 +104,7 @@ export default function Workspace() {
       </button>
       <div className="ana-mode-actions">
         <DomainControl/>
+        <button className="ana-help-quick ana-signout-quick" type="button" onClick={() => supabase?.auth.signOut()} title="Sign out" aria-label="Sign out"><LogOut size={17}/><span>Log out</span></button>
         <button className="ana-help-quick" type="button" onClick={openLearn} title="Learn how to use Ana" aria-label="Learn how to use Ana"><CircleHelp size={17}/><span>Learn</span></button>
         <button className="ana-help-quick" type="button" onClick={() => setFeedbackOpen(true)} title="Send feedback" aria-label="Send feedback"><MessageSquareText size={17}/><span>Feedback</span></button>
         <button className="ana-privacy-quick" type="button" onClick={() => setSettingsOpen(true)} title="Privacy & memory" aria-label="Privacy and memory settings"><ShieldCheck size={17}/></button>
