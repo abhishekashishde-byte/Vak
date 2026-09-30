@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRight, Camera, Check, Clipboard, FileText, Languages, LoaderCircle, LogOut, Mic, Plus, RotateCcw, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { ArrowLeftRight, Camera, Check, Clipboard, FileText, Languages, LoaderCircle, Mic, Plus, RotateCcw, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { useTranslateDictation } from './useTranslateDictation.js'
 import { supabase } from './lib/supabase'
 import { markAccountPreferencesChanged } from './accountPreferences.js'
@@ -686,7 +686,7 @@ export default function App({ onOpenCamera, onOpenDocuments }) {
   return <main className="app-shell">
     <header className="topbar">
       <div className="brand ana-product-brand"><img className="ana-brand-icon" src="/ana-app-icon.svg" alt="" aria-hidden="true"/><span className="ana-brand-name">Ana</span></div>
-      <div className="header-actions"><button className="ghost" onClick={() => setGlossaryOpen(true)}>Glossary <span className="badge">{glossary.length}</span></button><button className="ghost icon-only" title="Sign out" onClick={() => supabase?.auth.signOut()}><LogOut size={16}/></button></div>
+      <div className="header-actions"><button className="ghost" onClick={() => setGlossaryOpen(true)}>Glossary <span className="badge">{glossary.length}</span></button></div>
     </header>
 
     <section className="translator-card">
