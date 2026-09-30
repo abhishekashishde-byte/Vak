@@ -211,7 +211,6 @@ export default function ScanMode() {
   const processPdf = async (selected, language) => {
     let layout = await extractPdfLayout(selected)
     const pageCount = Math.max(1, Number(layout.pages?.length || 1))
-    if (pageCount > 10) throw new Error('Tester document translation is limited to 10 pages per document.')
     const reservation = await startDocumentUsage(pageCount, selected.name)
     const quotaUsageId = reservation.usageId
     const scanSignals = []
@@ -279,7 +278,6 @@ export default function ScanMode() {
 
     const sourceText = docxLayoutToPlainText(layout)
     const pageCount = Math.max(1, Number(layout.pageCount || 1))
-    if (pageCount > 10) throw new Error('Tester document translation is limited to 10 pages per document.')
     const reservation = await startDocumentUsage(pageCount, selected.name)
     const quotaUsageId = reservation.usageId
     let completed = false
