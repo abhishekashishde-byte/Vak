@@ -117,11 +117,11 @@ Focus on how wording may be perceived, formality, directness, politeness and nat
 
   return <section className="ana-prepare-shell">
     <header className="ana-prepare-head">
-      <div className="ana-prepare-title"><span><Sparkles size={18}/></span><div><h1>Prepare & coach</h1><p>Get ready before a conversation, or check how your wording may land.</p></div></div>
+      <div className="ana-prepare-title"><span><Sparkles size={18}/></span><div><h1>Prepare</h1><p>Get ready before a conversation, or check how your wording may land.</p></div></div>
       <button type="button" className="ana-prepare-clear" onClick={clear}><RotateCcw size={14}/>Clear</button>
     </header>
 
-    <div className="ana-prepare-tabs" role="tablist" aria-label="Prepare and coach tools">
+    <div className="ana-prepare-tabs" role="tablist" aria-label="Conversation preparation tools">
       <button type="button" className={tool === 'prepare' ? 'active' : ''} onClick={() => changeTool('prepare')}><MessagesSquare size={15}/>Conversation prep</button>
       <button type="button" className={tool === 'coach' ? 'active' : ''} onClick={() => changeTool('coach')}><Sparkles size={15}/>Tone & culture check</button>
     </div>
