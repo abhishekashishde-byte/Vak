@@ -81,7 +81,7 @@ class LocalSuggestionEngine(
         worker.execute {
             val learned = KeyboardPrefs.nextWordSuggestions(context, clean, requestBadge, 3)
             val builtIn = CoreLexicon.nextWords(clean, requestBadge, 3)
-            val combined = (learned + builtIn)
+            val combined = (builtIn + learned)
                 .distinctBy { it.lowercase() }
                 .take(3)
             if (requestBadge == badge) onNextResult(clean, combined)
