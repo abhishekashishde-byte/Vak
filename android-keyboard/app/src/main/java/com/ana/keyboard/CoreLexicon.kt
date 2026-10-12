@@ -192,6 +192,39 @@ object CoreLexicon {
         return Result(suggestions, confident)
     }
 
+    /**
+     * Sentence-aware local prediction. Phrase matches outrank generic one-word
+     * transitions; no text is sent to a server.
+     */
+    fun nextWordsContext(history: String, badge: String, max: Int = 3): List<String> {
+        val words = Regex("[\\p{L}']+").findAll(history.lowercase())
+            .map { it.value }.toList().takeLast(5)
+        if (words.isEmpty()) return emptyList()
+        val tail = words.joinToString(" ")
+        val phrase = when (badge) {
+            "DE" -> when {
+                tail.endsWith("alles gute zum") -> listOf("Geburtstag", "neuen", "Jubiläum")
+                tail.endsWith("alles gute") -> listOf("zum", "für", "und")
+                tail.endsWith("ich wünsche dir") -> listOf("alles", "einen", "viel")
+                tail.endsWith("vielen dank für") -> listOf("deine", "die", "alles")
+                else -> emptyList()
+            }
+            else -> when {
+                tail.endsWith("happy returns of the") -> listOf("day", "year")
+                tail.endsWith("happy returns of") -> listOf("the", "your")
+                tail.endsWith("happy returns") -> listOf("of", "to")
+                tail.endsWith("happy birthday to") -> listOf("you", "your")
+                tail.endsWith("happy birthday") -> listOf("to", "wishes", "and")
+                tail.endsWith("many happy returns") -> listOf("of", "to")
+                tail.endsWith("wishing you a") -> listOf("wonderful", "happy", "great")
+                tail.endsWith("thank you for") -> listOf("your", "the", "everything")
+                tail.endsWith("i hope you") -> listOf("have", "are", "enjoy")
+                else -> emptyList()
+            }
+        }
+        return (phrase + nextWords(words.last(), badge, max)).distinctBy { it.lowercase() }.take(max)
+    }
+
     fun nextWords(previous: String, badge: String, max: Int = 3): List<String> {
         val clean = previous.trim().lowercase()
         if (clean.isBlank()) return emptyList()
