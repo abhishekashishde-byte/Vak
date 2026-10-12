@@ -219,7 +219,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             return@Runnable
         }
         val previous = lastCompletedWord()
-        if (!previous.isNullOrBlank()) suggestionEngine.requestNext(previous)
+        if (!previous.isNullOrBlank()) suggestionEngine.requestNext(previous, currentInputConnection?.getTextBeforeCursor(220, 0)?.toString().orEmpty())
         else showEntries(listOfNotNull(clipboardQuickEntry()))
     }
 
