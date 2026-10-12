@@ -215,7 +215,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val word = currentWord()
         suggestionEngine.setLanguage(cachedInputBadge)
         if (!word.isNullOrBlank()) {
-            suggestionEngine.request(word)
+            // When the current word is complete and familiar, show next-word
+            // choices immediately; users should not need to type a space first.
+            val history = currentInputConnection?.getTextBeforeCursor(220, 0)?.toString().orEmpty()
+            if (CoreLexicon.nextWordsContext(history, cachedInputBadge).isNotEmpty()) {
+                suggestionEngine.requestNext(word, history)
+            } else {
+                suggestionEngine.request(word)
+            }
             return@Runnable
         }
         val previous = lastCompletedWord()
@@ -1355,8 +1362,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun handleNextWordResult(previous: String, suggestions: List<String>) {
         if (currentEmailPrefix() != null) return
-        if (isSensitiveField() || !cachedWordSuggestionsEnabled || currentWord() != null) return
-        val currentPrevious = lastCompletedWord()
+        if (isSensitiveField() || !cachedWordSuggestionsEnabled) return
+        val currentPrevious = currentWord() ?: lastCompletedWord()
         if (!previous.equals(currentPrevious, ignoreCase = true)) return
         val clipboard = clipboardQuickEntry()
         val limit = if (clipboard != null) 2 else 3
