@@ -71,7 +71,7 @@ class LocalSuggestionEngine(
         }
     }
 
-    fun requestNext(previous: String) {
+    fun requestNext(previous: String, history: String = previous) {
         val clean = previous.trim().lowercase()
         if (clean.length < 2) {
             onNextResult(clean, emptyList())
@@ -80,7 +80,7 @@ class LocalSuggestionEngine(
         val requestBadge = badge.ifBlank { "EN" }
         worker.execute {
             val learned = KeyboardPrefs.nextWordSuggestions(context, clean, requestBadge, 3)
-            val builtIn = CoreLexicon.nextWords(clean, requestBadge, 3)
+            val builtIn = CoreLexicon.nextWordsContext(history, requestBadge, 3)
             val combined = (builtIn + learned)
                 .distinctBy { it.lowercase() }
                 .take(3)
