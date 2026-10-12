@@ -79,9 +79,15 @@ class LocalSuggestionEngine(
         }
         val requestBadge = badge.ifBlank { "EN" }
         worker.execute {
+            val recent = Regex("[\\\\p{L}']+").findAll(history.lowercase())
+                .map { it.value }.toList().takeLast(3)
+            val phraseKey = recent.takeLast(2).joinToString(" ")
+            val phraseLearned = if (recent.size >= 2)
+                KeyboardPrefs.nextWordSuggestions(context, phraseKey, requestBadge, 3)
+            else emptyList()
             val learned = KeyboardPrefs.nextWordSuggestions(context, clean, requestBadge, 3)
             val builtIn = CoreLexicon.nextWordsContext(history, requestBadge, 3)
-            val combined = (builtIn + learned)
+            val combined = (phraseLearned + builtIn + learned)
                 .distinctBy { it.lowercase() }
                 .take(3)
             if (requestBadge == badge) onNextResult(clean, combined)
