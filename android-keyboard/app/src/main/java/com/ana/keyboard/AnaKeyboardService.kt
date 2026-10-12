@@ -1000,7 +1000,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
     private fun learnTransitionFromContext() {
         val words = recentWordsBeforeCursor()
-        if (words.size == 2) suggestionEngine.learnTransition(words[0], words[1])
+        if (words.size == 2 && !isSensitiveField() && !KeyboardPrefs.incognitoEnabled(this)) {
+            suggestionEngine.learnTransition(words[0], words[1])
+            val context = currentInputConnection?.getTextBeforeCursor(220, 0)?.toString().orEmpty()
+            val recent = Regex("[\\\\p{L}']{2,}").findAll(context).map { it.value }.toList().takeLast(3)
+            if (recent.size == 3) suggestionEngine.learnTransition(recent[0] + " " + recent[1], recent[2])
+        }
     }
 
     private fun refreshQuickClipboard() {
