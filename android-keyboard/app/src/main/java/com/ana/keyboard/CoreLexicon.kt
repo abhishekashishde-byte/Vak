@@ -78,6 +78,8 @@ object CoreLexicon {
     }
     private val englishNext = mapOf(
         "thank" to listOf("you", "you!", "you."),
+        "and" to listOf("I", "the", "we"),
+        "totally" to listOf("agree", "understand", "love"),
         "thanks" to listOf("for", "a", "so"),
         "how" to listOf("are", "is", "was"),
         "are" to listOf("you", "we", "there"),
@@ -210,6 +212,8 @@ object CoreLexicon {
                 else -> emptyList()
             }
             else -> when {
+                tail.endsWith("i totally and") -> listOf("I", "we", "the")
+                tail.endsWith("i totally") -> listOf("agree", "understand", "love")
                 tail.endsWith("happy returns of the") -> listOf("day", "year")
                 tail.endsWith("happy returns of") -> listOf("the", "your")
                 tail.endsWith("happy returns") -> listOf("of", "to")
