@@ -24,6 +24,17 @@ class CoreLexiconPredictionTest {
     }
 
     @Test
+    fun birthdayPhraseUsesFullContext() {
+        assertEquals("you", CoreLexicon.nextWordsContext("Happy birthday to ", "EN").first())
+        assertEquals("day", CoreLexicon.nextWordsContext("Many happy returns of the ", "EN").first())
+    }
+
+    @Test
+    fun germanBirthdayPhraseUsesFullContext() {
+        assertEquals("Geburtstag", CoreLexicon.nextWordsContext("Alles Gute zum ", "DE").first())
+    }
+
+    @Test
     fun emojiSuggestionsFollowSelectedLanguage() {
         assertEquals("🎂", CoreLexicon.emojiForWord("birthday", "EN"))
         assertEquals("🎂", CoreLexicon.emojiForWord("geburtstag", "DE"))
