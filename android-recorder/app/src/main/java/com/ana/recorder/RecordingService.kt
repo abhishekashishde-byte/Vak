@@ -16,11 +16,14 @@ class RecordingService : Service() {
         const val ACTION_STATUS = "com.ana.recorder.STATUS"
         const val EXTRA_ACTIVE = "active"
         const val EXTRA_PATH = "path"
+        const val EXTRA_ERROR = "error"
+        const val PREFS = "recording_state"
         const val CHANNEL = "ana_recorder_active"
         const val MAX_DURATION_MS = 120 * 60 * 1000L
     }
     private var recorder: MediaRecorder? = null
     private var outputPath: String? = null
+    private var startingRecorder: MediaRecorder? = null
     private val handler = Handler(Looper.getMainLooper())
     private val stopTask = Runnable { stopRecording() }
 
@@ -54,6 +57,7 @@ class RecordingService : Service() {
             val file = File(directory, name)
             @Suppress("DEPRECATION")
             val next = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+            startingRecorder = next
             next.setAudioSource(MediaRecorder.AudioSource.MIC)
             next.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             next.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -63,26 +67,39 @@ class RecordingService : Service() {
             next.prepare()
             next.start()
             recorder = next
+            startingRecorder = null
             outputPath = file.absolutePath
             handler.postDelayed(stopTask, MAX_DURATION_MS)
             sendStatus(true)
         } catch (e: Exception) {
+            try { startingRecorder?.release() } catch (_: Exception) {}
             try { recorder?.release() } catch (_: Exception) {}
+            startingRecorder = null
             recorder = null
+            outputPath = null
+            sendStatus(false, "Recording failed: ${e.localizedMessage ?: e.javaClass.simpleName}")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
-    private fun sendStatus(active: Boolean) {
-        sendBroadcast(Intent(ACTION_STATUS).setPackage(packageName).putExtra(EXTRA_ACTIVE, active).putExtra(EXTRA_PATH, outputPath))
+    private fun sendStatus(active: Boolean, error: String = "") {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(EXTRA_ACTIVE, active)
+            .putString(EXTRA_ERROR, error).apply()
+        sendBroadcast(Intent(ACTION_STATUS).setPackage(packageName).putExtra(EXTRA_ACTIVE, active)
+            .putExtra(EXTRA_PATH, outputPath).putExtra(EXTRA_ERROR, error))
     }
     private fun stopRecording() {
         handler.removeCallbacks(stopTask)
         val current = recorder
         recorder = null
-        try { current?.stop() } catch (_: Exception) { outputPath?.let { File(it).delete() } }
+        var error = ""
+        try { current?.stop() } catch (e: Exception) {
+            outputPath?.let { File(it).delete() }
+            error = "Could not save recording: ${e.localizedMessage ?: "recording too short"}"
+        }
         try { current?.release() } catch (_: Exception) {}
-        sendStatus(false)
+        outputPath = null
+        sendStatus(false, error)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
