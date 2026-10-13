@@ -18,6 +18,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14.3'
+      - name: Install official Ana launcher icon
+        run: |
+          mkdir -p android-recorder/app/src/main/res/drawable-nodpi
+          cp public/ana-app-icon.png android-recorder/app/src/main/res/drawable-nodpi/ana_recorder_icon.png
       - name: Build Ana Recorder
         working-directory: android-recorder
         run: gradle :app:assembleDebug --stacktrace
