@@ -26,13 +26,13 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var filesList: LinearLayout
     private lateinit var startButton: Button
+    private lateinit var stopButton: Button
     private var player: MediaPlayer? = null
     private var playingFile: String? = null
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val active = intent?.getBooleanExtra(RecordingService.EXTRA_ACTIVE, false) == true
-            status.text = if (active) "Recording in progress · screen can be locked" else "Ready · recordings saved on this device"
-            startButton.isEnabled = !active
+            refreshState()
             showFiles()
         }
     }
@@ -91,9 +91,13 @@ class MainActivity : Activity() {
         panel.addView(status)
         startButton = action("●  Start recording", true) { startWithPermission() }
         panel.addView(startButton, LinearLayout.LayoutParams(-1, dp(52)))
-        panel.addView(action("■  Stop & save") {
+        stopButton = action("■  Stop & save") {
+            status.text = "Saving recording…"
+            stopButton.isEnabled = false
             startService(Intent(this, RecordingService::class.java).setAction(RecordingService.ACTION_STOP))
-        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+            status.postDelayed({ refreshState(); showFiles() }, 600)
+        }
+        panel.addView(stopButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
         panel.addView(text("Maximum 2 hours · AAC audio · Works with screen locked", 12f, muted).apply {
             setPadding(0, dp(15), 0, 0)
         })
@@ -119,6 +123,19 @@ class MainActivity : Activity() {
         })
         setContentView(scroll)
         showFiles()
+        refreshState()
+    }
+    private fun refreshState() {
+        val prefs = getSharedPreferences(RecordingService.PREFS, MODE_PRIVATE)
+        val active = prefs.getBoolean(RecordingService.EXTRA_ACTIVE, false)
+        val error = prefs.getString(RecordingService.EXTRA_ERROR, "") ?: ""
+        status.text = when {
+            error.isNotBlank() -> error
+            active -> "● Recording in progress · screen can be locked"
+            else -> "Ready to record · saved locally"
+        }
+        startButton.isEnabled = !active
+        stopButton.isEnabled = active
     }
     private fun startWithPermission() {
         val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
@@ -190,6 +207,7 @@ class MainActivity : Activity() {
         val filter = IntentFilter(RecordingService.ACTION_STATUS)
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         else registerReceiver(receiver, filter)
+        refreshState()
         showFiles()
     }
     override fun onStop() { unregisterReceiver(receiver); super.onStop() }
