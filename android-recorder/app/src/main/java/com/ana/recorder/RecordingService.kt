@@ -52,7 +52,8 @@ class RecordingService : Service() {
             val directory = File(getExternalFilesDir(null), "Meetings").apply { mkdirs() }
             val name = "Ana_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".m4a"
             val file = File(directory, name)
-            val next = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
+            @Suppress("DEPRECATION")
+            val next = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
             next.setAudioSource(MediaRecorder.AudioSource.MIC)
             next.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             next.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
