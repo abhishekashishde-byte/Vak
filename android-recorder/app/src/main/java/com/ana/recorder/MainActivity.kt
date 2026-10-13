@@ -87,7 +87,7 @@ class MainActivity : Activity() {
         super.onStart()
         val filter = IntentFilter(RecordingService.ACTION_STATUS)
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(statusReceiver, filter, RECEIVER_NOT_EXPORTED)
-        else @Suppress("DEPRECATION") registerReceiver(statusReceiver, filter)
+        else registerReceiver(statusReceiver, filter)
         showFiles()
     }
     override fun onStop() { unregisterReceiver(statusReceiver); super.onStop() }
