@@ -58,7 +58,7 @@ class MainActivity : Activity() {
         window.statusBarColor = Color.rgb(248, 249, 253)
         window.navigationBarColor = Color.rgb(248, 249, 253)
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        val scroll = ScrollView(this).apply { fillViewport = true; setBackgroundColor(Color.rgb(248, 249, 253)) }
+        val scroll = ScrollView(this).apply { isFillViewport = true; setBackgroundColor(Color.rgb(248, 249, 253)) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(28), dp(22), dp(32))
