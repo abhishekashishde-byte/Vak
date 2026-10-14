@@ -76,6 +76,8 @@ object CoreLexicon {
         "HIN" -> hinglish + english.take(180)
         else -> english
     }
+    fun decodingWords(badge: String): List<String> = listFor(badge)
+
     private val englishNext = mapOf(
         "thank" to listOf("you", "you!", "you."),
         "and" to listOf("I", "the", "we"),
