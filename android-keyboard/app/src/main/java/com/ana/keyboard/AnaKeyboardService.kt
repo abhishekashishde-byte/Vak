@@ -115,6 +115,26 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     private var cachedLearnedCorrections: Map<String, String> = emptyMap()
     private var cachedKnownPrefixes: Set<String> = emptySet()
     private val composingBuffer = ComposingWordBuffer()
+    private var spatialWordDecoder = SpatialWordDecoder(CoreLexicon.decodingWords("EN"))
+    private var spatialTapCount = 0
+    private var forwardingSpatialTap = false
+    private fun resetSpatialWord() {
+        spatialWordDecoder.reset()
+        spatialTapCount = 0
+    }
+    private fun spatialWordCorrection(raw: String): String? {
+        if (!cachedAutoCorrectionEnabled || isSensitiveField() ||
+            KeyboardPrefs.incognitoEnabled(this) || isEmailField() ||
+            raw.length < 4 || raw.firstOrNull()?.isUpperCase() == true ||
+            raw.lowercase() in cachedPersonalWords || spatialTapCount != raw.length) return null
+        val best = spatialWordDecoder.completedWords(2)
+        val top = best.firstOrNull() ?: return null
+        if (top.text == raw.lowercase() || top.text.length != raw.length) return null
+        if (top.text.zip(raw.lowercase()).count { it.first != it.second } != 1) return null
+        if (best.size > 1 && top.score - best[1].score < 0.55) return null
+        return top.text
+    }
+
     private var localCompositionActive = false
     private var typingIdleSawLetter = false
     private var typingIdleSawPunctuation = false
@@ -242,7 +262,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         cachedHapticEnabled = KeyboardPrefs.hapticEnabled(this)
         cachedHapticStrengthMs = KeyboardPrefs.hapticStrengthMs(this)
         cachedSoundEnabled = KeyboardPrefs.soundEnabled(this)
+        val previousBadge = cachedInputBadge
         cachedInputBadge = KeyboardPrefs.inputBadge(this)
+        if (previousBadge != cachedInputBadge) {
+            spatialWordDecoder = SpatialWordDecoder(CoreLexicon.decodingWords(cachedInputBadge))
+            spatialTapCount = 0
+        }
         cachedPersonalWords = KeyboardPrefs.personalDictionary(this, cachedInputBadge)
             .map { it.lowercase() }.toSet()
         cachedLearnedCorrections = KeyboardPrefs.learnedCorrections(this, cachedInputBadge)
@@ -790,7 +815,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             languageBadge = cachedInputBadge,
             knownPrefixes = cachedKnownPrefixes
         ) ?: return
-        onKey(chosen)
+        if (!isSensitiveField() && !KeyboardPrefs.incognitoEnabled(this) &&
+            chosen.length == 1 && chosen[0].isLetter()) {
+            spatialWordDecoder.append(candidates)
+            spatialTapCount++
+            forwardingSpatialTap = true
+        }
+        try { onKey(chosen) } finally { forwardingSpatialTap = false }
     }
 
     override fun onReplaceLastKey(text: String) {
@@ -907,6 +938,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             "EMOJI" -> showEmojiPanel()
             "CLIPBOARD" -> showClipboardPanel()
             "BACKSPACE" -> {
+                resetSpatialWord()
                 if (undoLastSentenceCorrection()) return
                 if (undoLastAutoCorrection()) return
                 if (backspaceLocalComposition(connection)) return
@@ -932,8 +964,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     (typed[0].isLetter() || (typed == "'" && !composingBuffer.isEmpty))
 
                 if (composingCharacter) {
+                    if (!forwardingSpatialTap && typed.length == 1 && typed[0].isLetter()) {
+                        spatialWordDecoder.append(listOf(SpatialTouchDecoder.Candidate(typed, 1f, 0f, true)))
+                        spatialTapCount++
+                    }
                     appendComposingCharacter(connection, typed)
                 } else {
+                    resetSpatialWord()
                     finishLocalComposition(connection)
                     if (punctuation && typed != "." && emailPrefixBeforeKey?.contains('@') == true) {
                         rememberEmailAtCursor(connection)
@@ -1521,6 +1558,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (word.firstOrNull()?.isUpperCase() == true) return null
 
         cachedLearnedCorrections[word.lowercase()]?.let { return it }
+        spatialWordCorrection(word)?.let { return it }
         if (word.lowercase() in cachedPersonalWords) return null
 
         // Never run dictionary ranking synchronously on Space. If the current
@@ -1561,6 +1599,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             }
         }
 
+        resetSpatialWord()
         if (!wordBeforeSpace.isNullOrBlank()) learnTransitionFromContext()
 
         val now = SystemClock.elapsedRealtime()
