@@ -1103,7 +1103,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         smartSentenceToken++
         mainHandler.removeCallbacks(smartSentenceRunnable)
         if (explicitAiActionInFlight || !cachedSmartSentenceEnabled || isSensitiveField() || isEmailField() || KeyboardPrefs.incognitoEnabled(this) || !isAppAiAllowed()) return
-        mainHandler.postDelayed(smartSentenceRunnable, 950)
+        mainHandler.postDelayed(smartSentenceRunnable, 700)
     }
 
     private fun currentParagraphCandidate(): SentenceCandidate? {
@@ -1116,7 +1116,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         val trailing = Regex("\\s*$").find(before)?.value.orEmpty()
         val content = if (trailing.isEmpty()) before else before.dropLast(trailing.length)
-        if (content.length < 14) return null
+        if (content.length < 10) return null
 
         val lastLineBreak = content.lastIndexOf('\n')
         var start = if (lastLineBreak >= 0) lastLineBreak + 1 else 0
@@ -1125,7 +1125,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
 
         val paragraph = content.substring(start)
         val wordCount = Regex("[\\p{L}']+").findAll(paragraph).count()
-        if (wordCount < 4 || paragraph.length < 14) return null
+        if (wordCount < 3 || paragraph.length < 10) return null
         val suffix = before.substring(start)
         return SentenceCandidate(paragraph, suffix, trailing)
     }
@@ -1150,7 +1150,12 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 val corrected = cloudResult.text.trim()
                 mainHandler.post {
                     if (token != smartSentenceToken || currentInputConnection !== connection) {
-                        if (currentInputConnection === connection) showStatus(defaultStatus())
+                        if (currentInputConnection === connection) {
+                            showStatus(defaultStatus())
+                            if (token != smartSentenceToken) {
+                                mainHandler.postDelayed(smartSentenceRunnable, 900)
+                            }
+                        }
                         return@post
                     }
                     if (!KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService) || isSensitiveField() || KeyboardPrefs.incognitoEnabled(this@AnaKeyboardService) || !isAppAiAllowed()) {
@@ -1196,7 +1201,8 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     // If the user continued typing while an older request was in
                     // flight, schedule one fresh check for the latest sentence.
                     if (token != smartSentenceToken && !explicitAiActionInFlight && KeyboardPrefs.smartSentenceCorrectionEnabled(this@AnaKeyboardService)) {
-                        scheduleSmartSentenceCorrection()
+                        mainHandler.removeCallbacks(smartSentenceRunnable)
+                        mainHandler.postDelayed(smartSentenceRunnable, 850)
                     }
                 }
             }
