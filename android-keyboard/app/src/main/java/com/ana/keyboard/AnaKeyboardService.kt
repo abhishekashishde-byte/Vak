@@ -228,7 +228,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val formEntries = formSuggestionEntries()
         if (formEntries.isNotEmpty()) {
             showEntries(formEntries)
-            return
+            return@Runnable
         }
         val emailPrefix = currentEmailPrefix()
         if (emailPrefix != null) {
@@ -997,7 +997,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return emptyList()
         val category = FormMemory.category(currentInputEditorInfo) ?: return emptyList()
         val prefix = currentInputConnection?.getTextBeforeCursor(160, 0)?.toString().orEmpty()
-        if (prefix.length > 120 || '\\n' in prefix) return emptyList()
+        if (prefix.length > 120 || '\n' in prefix) return emptyList()
         return FormMemory.suggestions(this, category, prefix)
             .map { SuggestionEntry(it, it, SuggestionKind.FORM) }
     }
@@ -1006,7 +1006,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
         val category = FormMemory.category(currentInputEditorInfo) ?: return
         val before = connection.getTextBeforeCursor(160, 0)?.toString().orEmpty()
-        if ('\\n' !in before) FormMemory.remember(this, category, before)
+        if ('\n' !in before) FormMemory.remember(this, category, before)
     }
 
     private fun currentEmailPrefix(): String? {
