@@ -2477,6 +2477,14 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         }
 
         val draft = currentDraftLine(connection)
+        // Only on explicit Reply: read the foreground app's visible non-editable text.
+        // Password fields, incognito and app-level AI blocks are checked by runReplyAction.
+        val screenText = if (AnaScreenContextService.isConnected() && isAppAiAllowed()) {
+            AnaScreenContextService.visibleText(currentAppPackage())
+        } else null
+        if (!screenText.isNullOrBlank()) {
+            return ReplyRequestSource(screenText, draft.take(1200), draft, false, draft.isBlank())
+        }
         val clipboard = primaryClipboardText()
         val freshClipboard = clipboard.isNotBlank() && clipboardWasRecentlyCopied(clipboard)
 
