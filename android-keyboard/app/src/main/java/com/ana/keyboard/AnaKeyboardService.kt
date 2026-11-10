@@ -1610,7 +1610,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val emailContext = currentEmailPrefix() != null
         val bufferedWord = finishLocalComposition(connection)
         if (emailContext) rememberEmailAtCursor(connection)
-        rememberFormField(connection)
         if (expandTextShortcut(connection)) {
             connection.commitText(" ", 1)
             lastSpaceTap = SystemClock.elapsedRealtime()
