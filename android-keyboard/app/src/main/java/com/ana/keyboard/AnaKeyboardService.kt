@@ -230,11 +230,6 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             showEntries(formEntries)
             return
         }
-        val formEntries = formSuggestionEntries()
-        if (formEntries.isNotEmpty()) {
-            showEntries(formEntries)
-            return
-        }
         val emailPrefix = currentEmailPrefix()
         if (emailPrefix != null) {
             val entries = emailSuggestionEntries(emailPrefix)
