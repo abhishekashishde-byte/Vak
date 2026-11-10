@@ -976,7 +976,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                         rememberEmailAtCursor(connection)
                     }
                     if (emailDot) connection.commitText(typed, 1)
-                    else if (punctuation && cachedAutoSpacePunctuation) connection.commitText("$typed ", 1)
+                    else if (punctuation && cachedAutoSpacePunctuation && (typed != "." || SmartPeriodPolicy.shouldAutoSpace(connection.getTextBeforeCursor(100, 0)?.toString().orEmpty(), emailField = isEmailField()))) connection.commitText("$typed ", 1)
                     else connection.commitText(typed, 1)
                 }
                 if (!capsLock && keyboard.isShifted() && typed.any { it.isLetter() }) keyboard.setShifted(false)
