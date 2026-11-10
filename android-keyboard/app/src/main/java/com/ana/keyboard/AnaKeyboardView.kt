@@ -225,8 +225,10 @@ class AnaKeyboardView @JvmOverloads constructor(
 
     private fun rows(): List<List<KeySpec>> {
         if (symbols) {
+            // Keep ABC in the exact same bottom-left slot as ?123 on letters.
             val commonBottom = listOf(
-                KeySpec("", "EMOJI", 0.86f),
+                KeySpec("ABC", "ABC", 1.42f),
+                KeySpec("", "EMOJI", 0.82f),
                 KeySpec(KeyboardPrefs.inputDisplayBadge(context), "LANGUAGE", 1.05f),
                 KeySpec("", "SPACE", 5.10f * (KeyboardPrefs.spacebarScalePercent(context) / 100f)),
                 KeySpec(".", ".", 0.72f),
@@ -237,7 +239,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                     "1234567890".map { KeySpec(it.toString()) },
                     listOf("@", "#", "€", "_", "%", "&", "-", "+", "(", ")").map { KeySpec(it) },
                     listOf(
-                        KeySpec("ABC", "ABC", 1.35f), KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
+                        KeySpec("!"), KeySpec("?"), KeySpec(":"), KeySpec(";"),
                         KeySpec("/"), KeySpec("'"), KeySpec("\""), KeySpec("2/2", "SYMBOL_PAGE", 1.10f),
                         KeySpec("⌫", "BACKSPACE", 1.48f)
                     ),
@@ -248,7 +250,7 @@ class AnaKeyboardView @JvmOverloads constructor(
                     listOf("[", "]", "{", "}", "<", ">", "=", "×", "÷", "±").map { KeySpec(it) },
                     listOf("£", "$", "¥", "₹", "¢", "©", "®", "™", "°", "•").map { KeySpec(it) },
                     listOf(
-                        KeySpec("ABC", "ABC", 1.35f), KeySpec("\\"), KeySpec("|"), KeySpec("~"), KeySpec("^"),
+                        KeySpec("\\"), KeySpec("|"), KeySpec("~"), KeySpec("^"),
                         KeySpec("§"), KeySpec("¶"), KeySpec("…"), KeySpec("1/2", "SYMBOL_PAGE", 1.10f),
                         KeySpec("⌫", "BACKSPACE", 1.48f)
                     ),
