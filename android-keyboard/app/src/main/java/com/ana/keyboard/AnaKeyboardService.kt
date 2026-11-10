@@ -157,7 +157,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         completeVoiceRecognition("", fromTimeout = true)
     }
 
-    private enum class SuggestionKind { WORD, NEXT_WORD, EMAIL, IMAGE, EMOJI, CLIPBOARD }
+    private enum class SuggestionKind { WORD, NEXT_WORD, EMAIL, FORM, IMAGE, EMOJI, CLIPBOARD }
     private data class SuggestionEntry(
         val label: String,
         val value: String,
@@ -225,6 +225,16 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
             return@Runnable
         }
 
+        val formEntries = formSuggestionEntries()
+        if (formEntries.isNotEmpty()) {
+            showEntries(formEntries)
+            return
+        }
+        val formEntries = formSuggestionEntries()
+        if (formEntries.isNotEmpty()) {
+            showEntries(formEntries)
+            return
+        }
         val emailPrefix = currentEmailPrefix()
         if (emailPrefix != null) {
             val entries = emailSuggestionEntries(emailPrefix)
@@ -619,7 +629,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
     }
 
     override fun onFinishInput() {
-        currentInputConnection?.let { rememberEmailAtCursor(it) }
+        currentInputConnection?.let { rememberEmailAtCursor(it); rememberFormField(it) }
         super.onFinishInput()
     }
 
@@ -986,6 +996,22 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 scheduleTypingIdleUpdate(typed.any { it.isLetter() }, punctuation && !emailDot)
             }
         }
+    }
+
+    private fun formSuggestionEntries(): List<SuggestionEntry> {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return emptyList()
+        val category = FormMemory.category(currentInputEditorInfo) ?: return emptyList()
+        val prefix = currentInputConnection?.getTextBeforeCursor(160, 0)?.toString().orEmpty()
+        if (prefix.length > 120 || '\\n' in prefix) return emptyList()
+        return FormMemory.suggestions(this, category, prefix)
+            .map { SuggestionEntry(it, it, SuggestionKind.FORM) }
+    }
+
+    private fun rememberFormField(connection: InputConnection) {
+        if (isSensitiveField() || KeyboardPrefs.incognitoEnabled(this)) return
+        val category = FormMemory.category(currentInputEditorInfo) ?: return
+        val before = connection.getTextBeforeCursor(160, 0)?.toString().orEmpty()
+        if ('\\n' !in before) FormMemory.remember(this, category, before)
     }
 
     private fun currentEmailPrefix(): String? {
@@ -1430,6 +1456,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                     SuggestionKind.CLIPBOARD -> "Paste " + it.value.take(40)
                     SuggestionKind.IMAGE -> "Paste image from clipboard"
                     SuggestionKind.EMAIL -> "Email suggestion " + it.value
+                    SuggestionKind.FORM -> "Saved form value " + it.value
                     SuggestionKind.EMOJI -> "Insert emoji " + it.value
                     SuggestionKind.NEXT_WORD -> "Next word " + it.value
                     SuggestionKind.WORD -> "Word suggestion " + it.value
@@ -1455,6 +1482,13 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
                 clearSuggestions()
                 refreshShiftFromEditor()
                 if (cachedAutoSpaceSuggestion) requestSuggestionsSoon()
+            }
+            SuggestionKind.FORM -> {
+                val existing = connection.getTextBeforeCursor(160, 0)?.toString().orEmpty()
+                finishLocalComposition(connection)
+                if (existing.isNotEmpty()) connection.deleteSurroundingText(existing.length, 0)
+                connection.commitText(entry.value, 1)
+                clearSuggestions()
             }
             SuggestionKind.EMAIL -> {
                 val prefix = currentEmailPrefix().orEmpty()
@@ -1581,6 +1615,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val emailContext = currentEmailPrefix() != null
         val bufferedWord = finishLocalComposition(connection)
         if (emailContext) rememberEmailAtCursor(connection)
+        rememberFormField(connection)
         if (expandTextShortcut(connection)) {
             connection.commitText(" ", 1)
             lastSpaceTap = SystemClock.elapsedRealtime()
@@ -1773,6 +1808,7 @@ class AnaKeyboardService : InputMethodService(), AnaKeyboardView.Listener {
         val info = currentInputEditorInfo
         finishLocalComposition(connection)
         rememberEmailAtCursor(connection)
+        rememberFormField(connection)
 
         val action = editorAction(info)
         if (action != null) {
