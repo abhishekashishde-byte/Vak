@@ -410,6 +410,15 @@ class MainActivity : Activity() {
     private fun renderTyping() {
         currentScreen = "typing"
         val root = page("Typing")
+        root.addView(section("Saved form suggestions"))
+        root.addView(switchRow("Remember address fields", "Optional, local-only: remember street, city and postal code values you enter in recognized form fields. Never learn from passwords or private fields.", FormMemory.enabled(this)) {
+            FormMemory.setEnabled(this, it)
+        })
+        root.addView(actionCard("Clear saved form values") {
+            FormMemory.clear(this)
+            Toast.makeText(this, "Saved form values cleared; learning is off", Toast.LENGTH_SHORT).show()
+            renderTyping()
+        })
         root.addView(section("Corrections"))
         root.addView(switchRow("Auto-correction", "Correct confident spelling mistakes when you press Space", KeyboardPrefs.autoCorrectionEnabled(this)) {
             KeyboardPrefs.setAutoCorrectionEnabled(this, it)
