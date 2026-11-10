@@ -11,9 +11,9 @@ object FormMemory {
         val hint = listOfNotNull(info.hintText?.toString(), info.label?.toString(), info.fieldName)
             .joinToString(" ").lowercase()
         return when {
-            Regex("""\\b(postleitzahl|plz|postal[ -]?code|zip[ -]?code)\\b""").containsMatchIn(hint) -> "postcode"
-            Regex("""\\b(straße|strasse|street|address[ -]?line|anschrift)\\b""").containsMatchIn(hint) -> "street"
-            Regex("""\\b(stadt|city|ort|wohnort|town)\\b""").containsMatchIn(hint) -> "city"
+            Regex("""\b(postleitzahl|plz|postal[ -]?code|zip[ -]?code)\b""").containsMatchIn(hint) -> "postcode"
+            Regex("""\b(straße|strasse|street|address[ -]?line|anschrift)\b""").containsMatchIn(hint) -> "street"
+            Regex("""\b(stadt|city|ort|wohnort|town)\b""").containsMatchIn(hint) -> "city"
             else -> null
         }
     }
@@ -47,7 +47,7 @@ object FormMemory {
 
     fun remember(context: Context, category: String, value: String) {
         if (!enabled(context)) return
-        val clean = value.trim().replace(Regex("""\\s+"""), " ")
+        val clean = value.trim().replace(Regex("""\s+"""), " ")
         if (clean.length !in 2..120 || clean.contains('@') || clean.contains('\n')) return
         if (category == "postcode" && !clean.matches(Regex("""[A-Za-z0-9 -]{3,12}"""))) return
         val next = (listOf(clean) + values(context, category))
