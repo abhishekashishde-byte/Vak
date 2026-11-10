@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ana Keyboard</string>
+    <string name="ana_screen_context_description">Optional: Ana reads visible text only when you tap Reply. No continuous recording or screen logging.</string>
 </resources>
