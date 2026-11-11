@@ -730,11 +730,6 @@ class MainActivity : Activity() {
     private fun renderPrivacy() {
         currentScreen = "privacy"
         val root = page("Privacy & Ana")
-        root.addView(section("Screen-aware replies"))
-        root.addView(summary("Optional. Enable Ana screen-aware replies in Android Accessibility settings. When you tap Reply, Ana can read visible message text from the current app. It does not continuously record the screen. Avoid enabling this on devices shared with others."))
-        root.addView(actionCard("Open Accessibility settings") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        })
         root.addView(section("Ana connection"))
         val baseUrl = EditText(this).apply {
             hint = "https://your-ana-domain.com"
