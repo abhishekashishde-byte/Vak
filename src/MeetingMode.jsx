@@ -203,6 +203,7 @@ export default function MeetingMode() {
   const [preMeetingLoading, setPreMeetingLoading] = useState(false)
 
   const peerRef = useRef(null), dataChannelRef = useRef(null), streamRef = useRef(null), recorderRef = useRef(null)
+  const mixSourcesRef = useRef({ tracks: [], context: null }), wakeLockRef = useRef(null)
   const recordedChunksRef = useRef([]), recordingMimeRef = useRef(''), activeRef = useRef(false), pausedRef = useRef(false)
   const quotaSessionRef = useRef(null), quotaTimerRef = useRef(null), quotaDeadlineRef = useRef(null), quotaExpiredRef = useRef(false)
   const targetRef = useRef(target), meetingModeRef = useRef(meetingMode), startedAtRef = useRef(Number(saved.startedAt) || 0)
@@ -368,6 +369,30 @@ export default function MeetingMode() {
   useEffect(() => { const node = translationPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [translatedText, liveTranslation])
   useEffect(() => { const node = hearingPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [originalText, liveOriginal])
   useEffect(() => () => discardActiveMeeting(), [])
+  // Phones pause browser microphones when the screen locks. Keep the screen awake while a meeting
+  // runs; the browser drops the lock whenever the page is hidden, so take it again on return.
+  useEffect(() => {
+    if (!active || typeof navigator === 'undefined' || !navigator.wakeLock?.request) return
+    let cancelled = false
+    const acquire = async () => {
+      if (cancelled || document.visibilityState !== 'visible' || wakeLockRef.current) return
+      try {
+        const lock = await navigator.wakeLock.request('screen')
+        if (cancelled) { lock.release().catch(() => {}); return }
+        wakeLockRef.current = lock
+        lock.addEventListener('release', () => { if (wakeLockRef.current === lock) wakeLockRef.current = null })
+      } catch {}
+    }
+    const onVisibility = () => { if (document.visibilityState === 'visible') void acquire() }
+    void acquire()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
+      const lock = wakeLockRef.current; wakeLockRef.current = null
+      if (lock) lock.release().catch(() => {})
+    }
+  }, [active])
 
   const setTrackEnabled = enabled => streamRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
   const sendRealtime = event => { const channel = dataChannelRef.current; if (channel?.readyState === 'open') channel.send(JSON.stringify(event)) }
@@ -419,14 +444,34 @@ export default function MeetingMode() {
     if (type === 'error' || type === 'session.error') setError(event.error?.message || 'Live transcription was interrupted.')
   }
 
+  // Meeting capture never plays audio back, so the microphone is opened without echo cancellation
+  // and auto gain. With them on, macOS voice processing lowers the meeting's own playback volume,
+  // and echo cancellation tries to remove the very speaker audio Ana is meant to hear.
+  const MEETING_MIC = { echoCancellation: false, noiseSuppression: true, autoGainControl: false }
   const getMeetingStream = async () => {
     if (source === 'screen') {
       if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Computer audio sharing is not supported in this browser.')
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }), audioTrack = stream.getAudioTracks?.()[0]
-      if (!audioTrack) { stream.getTracks().forEach(track => track.stop()); throw new Error('No computer audio was shared. Choose a tab/window/screen with audio enabled, or use Microphone / speakers.') }
-      return stream
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }), displayAudio = display.getAudioTracks?.()[0]
+      if (!displayAudio) { display.getTracks().forEach(track => track.stop()); throw new Error('No computer audio was shared. Choose a tab/window/screen with audio enabled, or use Microphone / speakers.') }
+      display.getVideoTracks?.().forEach(track => track.stop())
+      // Shared tab audio holds only the other participants. Mix in the user's microphone so their own
+      // voice is transcribed too. Echo cancellation stays on here: it removes the tab's playback that
+      // the mic would otherwise pick up from the speakers, which would double every remote sentence.
+      let mic = null
+      try { mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } }) } catch {}
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!mic || !AudioCtx) { mixSourcesRef.current = { tracks: [], context: null }; return new MediaStream([displayAudio]) }
+      const context = new AudioCtx(), destination = context.createMediaStreamDestination()
+      context.createMediaStreamSource(new MediaStream([displayAudio])).connect(destination)
+      context.createMediaStreamSource(mic).connect(destination)
+      if (context.state === 'suspended') { try { await context.resume() } catch {} }
+      const mixed = destination.stream.getAudioTracks()[0]
+      // Stopping the browser's "Stop sharing" bar ends only the source track; forward that to the mixed track.
+      displayAudio.addEventListener('ended', () => { try { mixed.dispatchEvent(new Event('ended')) } catch {} }, { once: true })
+      mixSourcesRef.current = { tracks: [displayAudio, ...mic.getTracks()], context }
+      return new MediaStream([mixed])
     }
-    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+    return navigator.mediaDevices.getUserMedia({ audio: MEETING_MIC })
   }
   const startRecorder = stream => {
     if (typeof MediaRecorder === 'undefined') throw new Error('Meeting recording is not supported in this browser.')
@@ -448,7 +493,13 @@ export default function MeetingMode() {
     try { dataChannelRef.current?.close() } catch {}; dataChannelRef.current = null
     try { peerRef.current?.close() } catch {}; peerRef.current = null
   }
-  const stopTracks = () => { streamRef.current?.getTracks?.().forEach(track => track.stop()); streamRef.current = null }
+  const stopTracks = () => {
+    streamRef.current?.getTracks?.().forEach(track => track.stop()); streamRef.current = null
+    const { tracks = [], context = null } = mixSourcesRef.current || {}
+    tracks.forEach(track => { try { track.stop() } catch {} })
+    if (context) { try { context.close() } catch {} }
+    mixSourcesRef.current = { tracks: [], context: null }
+  }
   const stopQuotaClock = () => {
     if (quotaTimerRef.current) clearInterval(quotaTimerRef.current)
     if (quotaDeadlineRef.current) clearTimeout(quotaDeadlineRef.current)
@@ -976,7 +1027,7 @@ export default function MeetingMode() {
 
     <section className="meeting-setup">
       <div className="meeting-toolbar">
-        <label><span>Listen to</span><select value={source} onChange={event => setSource(event.target.value)} disabled={active || processing}><option value="microphone">Microphone / speakers</option>{screenSupported && <option value="screen">Computer / tab audio</option>}</select></label>
+        <label><span>Listen to</span><select value={source} onChange={event => setSource(event.target.value)} disabled={active || processing}><option value="microphone">Microphone / speakers</option>{screenSupported && <option value="screen">Computer / tab audio + my mic</option>}</select></label>
         <label><span>{meetingMode === 'translate' ? 'Translate to' : 'MOM language'}</span><select value={target} onChange={event => changeTarget(event.target.value)} disabled={processing}>{TARGETS.map(value => <option key={value}>{value}</option>)}</select></label>
       </div>
 
