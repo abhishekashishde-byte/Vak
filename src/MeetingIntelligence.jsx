@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Check, Circle, Clipboard, Download, FileText, ListTodo, Mail, MessageSquare, Printer, Search, Send, Sparkles, TriangleAlert } from 'lucide-react'
 import { supabase } from './lib/supabase.js'
 import './meeting-intelligence.css'
+import SendToWani from './SendToWani.jsx'
 
 const HISTORY_KEY = 'ana-meeting-history-v1'
 const LABELS = new Set(['Decision', 'Action', 'Risk', 'Important', 'Question', 'Chatter'])
@@ -578,6 +579,8 @@ export default function MeetingIntelligence() {
       </div>
       {output?.text && <div className="mi-output-result"><div><strong>Generated</strong><span><button onClick={copyOutput}><Clipboard size={13}/>{copied ? 'Copied' : 'Copy'}</button>{output.kind === 'email' && <button onClick={() => openMailComposer(true)}><Mail size={13}/>Use in Gmail</button>}</span></div><pre>{output.text}</pre></div>}
     </section>
+
+    {selected && <SendToWani meeting={selected} />}
 
     <section className="mi-card mi-gmail">
       <div className="mi-card-head mi-between"><div><Mail size={16}/><span><strong>Gmail</strong><small>{gmail.connected ? `Connected as ${gmail.email || 'Google account'}` : 'Send the MOM directly after review.'}</small></span></div>{gmail.connected ? <button className="mi-link-button" onClick={disconnectGmail}>Disconnect</button> : <button className="mi-connect" onClick={connectGmail} disabled={gmail.loading}>{gmail.loading ? 'Checking…' : 'Connect Gmail'}</button>}</div>

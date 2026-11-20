@@ -213,6 +213,126 @@ async function saveReceipt(token, userId, actionId, provider, result, status = '
   return Array.isArray(data) ? data[0] : null
 }
 
+// ── Wani ─────────────────────────────────────────────────────────────────────
+// Sends a finished meeting transcript to the user's own Wani account, only when the user clicks
+// "Send to Wani". Wani saves it in the chosen workshop; the analysis starts in Wani.
+const WANI_KEY_PREFIX = 'wani_ak_'
+const MEETING_CONSENT_TEXT = 'All participants agreed to the meeting being recorded, transcribed and processed (confirmed in Ana before the meeting started).'
+
+function waniBase() {
+  return safeUrl(process.env.WANI_BASE_URL || 'https://ask-wani.com')
+}
+
+async function waniCall(key, path, options = {}) {
+  const base = waniBase()
+  if (!base) throw new Error('WANI_BASE_URL is not a valid https address.')
+  const response = await fetch(new URL(path, base), {
+    ...options,
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(data?.error || `Wani request failed (${response.status})`)
+    error.status = response.status
+    throw error
+  }
+  return data
+}
+
+async function waniConnection(token, userId) {
+  const rows = await rest(token, `ana_wani_connections?user_id=eq.${encodeURIComponent(userId)}&select=wani_key,key_hint,updated_at`)
+  return Array.isArray(rows) ? rows[0] || null : null
+}
+
+function workshopLabel(w) {
+  return [w?.client_name, w?.project_name || w?.title].map(value => clean(value, 120)).filter(Boolean).join(' · ') || 'Workshop'
+}
+
+function meetingTranscript(meeting) {
+  // Prefer speaker-labelled segments when Ana has them; fall back to the plain transcript.
+  const segments = Array.isArray(meeting?.notes?._ana?.transcriptSegments) ? meeting.notes._ana.transcriptSegments : []
+  const names = meeting?.notes?._ana?.speakerNames || {}
+  const stamp = seconds => { const s = Math.max(0, Math.floor(Number(seconds) || 0)); return `[${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}]` }
+  const labelled = segments
+    .filter(segment => clean(segment?.text, 20000))
+    .map(segment => `${stamp(segment.start)} ${clean(names?.[segment.speaker] || segment.speaker || 'Speaker', 80)}: ${clean(segment.text, 20000)}`)
+    .join('\n')
+  return labelled.length >= 40 ? labelled : String(meeting?.original_text || '').trim()
+}
+
+async function meetingConsent(token, userId, startedAt) {
+  // The meeting can only start after the user confirms participant consent, which Ana logs.
+  // Find that confirmation for this meeting (logged within minutes of the start).
+  const start = Date.parse(startedAt || '')
+  if (Number.isNaN(start)) return null
+  const from = new Date(start - 15 * 60000).toISOString(), to = new Date(start + 15 * 60000).toISOString()
+  const rows = await rest(token, `ana_consent_events?user_id=eq.${encodeURIComponent(userId)}&consent_type=eq.meeting_recording&outcome=eq.confirmed&created_at=gte.${encodeURIComponent(from)}&created_at=lte.${encodeURIComponent(to)}&select=created_at,notice_version&order=created_at.asc&limit=1`)
+  const event = Array.isArray(rows) ? rows[0] : null
+  return event ? { at: event.created_at, text: `${MEETING_CONSENT_TEXT} Notice ${clean(event.notice_version, 80)}.` } : null
+}
+
+async function handleWani(operation, req, res, token, userId) {
+  if (operation === 'wani-status') {
+    const connection = await waniConnection(token, userId)
+    return res.status(200).json({ connected: Boolean(connection), keyHint: connection?.key_hint || '' })
+  }
+  if (operation === 'wani-connect') {
+    const key = clean(req.body?.key, 200)
+    if (!key.startsWith(WANI_KEY_PREFIX) || key.length < 40) return res.status(400).json({ error: 'This does not look like a Wani connection key.' })
+    const data = await waniCall(key, '/api/integration-workshops')
+    const keyHint = `${key.slice(0, WANI_KEY_PREFIX.length + 6)}…`
+    await rest(token, 'ana_wani_connections?on_conflict=user_id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([{ user_id: userId, wani_key: key, key_hint: keyHint, updated_at: new Date().toISOString() }]),
+    })
+    return res.status(200).json({ connected: true, keyHint, workshops: (data.workshops || []).map(w => ({ id: w.id, label: workshopLabel(w) })) })
+  }
+  if (operation === 'wani-disconnect') {
+    await rest(token, `ana_wani_connections?user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } })
+    return res.status(200).json({ connected: false })
+  }
+
+  const connection = await waniConnection(token, userId)
+  if (!connection) return res.status(409).json({ error: 'Connect Wani first: create a connection key in Wani and paste it here.', needsConnection: true })
+
+  if (operation === 'wani-workshops') {
+    const data = await waniCall(connection.wani_key, '/api/integration-workshops')
+    return res.status(200).json({ workshops: (data.workshops || []).map(w => ({ id: w.id, label: workshopLabel(w) })) })
+  }
+
+  if (operation === 'wani-send') {
+    const meetingId = clean(req.body?.meetingId, 180)
+    const workshopId = clean(req.body?.workshopId, 80)
+    const workshop = clean(req.body?.workshopLabel, 240)
+    const retentionDays = [7, 30, 90].includes(Number(req.body?.retentionDays)) ? Number(req.body.retentionDays) : null
+    if (!meetingId || !workshopId) return res.status(400).json({ error: 'Choose a meeting and a Wani workshop.' })
+    const rows = await rest(token, `meeting_records?client_id=eq.${encodeURIComponent(meetingId)}&user_id=eq.${encodeURIComponent(userId)}&select=client_id,title,started_at,original_text,notes`)
+    const meeting = Array.isArray(rows) ? rows[0] : null
+    if (!meeting) return res.status(404).json({ error: 'Meeting was not found in this Ana account.' })
+    const text = meetingTranscript(meeting)
+    if (text.length < 40) return res.status(400).json({ error: 'This meeting has no transcript to send.' })
+
+    let consent = await meetingConsent(token, userId, meeting.started_at)
+    if (!consent && req.body?.consentConfirmed === true) consent = { at: new Date().toISOString(), text: 'All participants agreed to recording / transcription (confirmed in Ana when sending to Wani).' }
+    if (!consent) return res.status(409).json({ error: 'Ana has no consent record for this meeting. Confirm that all participants agreed, then send again.', needsConsent: true })
+
+    const metadata = meeting?.notes?._ana?.metadata || {}
+    const title = clean(meeting.title || metadata.topic || 'Meeting', 200)
+    const data = await waniCall(connection.wani_key, '/api/integration-ingest', {
+      method: 'POST',
+      body: JSON.stringify({ workshopId, title, startedAt: meeting.started_at, text, consent, source: 'ana', sourceRef: meeting.client_id, retentionDays }),
+    })
+    await rest(token, 'ana_wani_sends?on_conflict=user_id,meeting_client_id,workshop_id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([{ user_id: userId, meeting_client_id: meeting.client_id, workshop_id: workshopId, workshop_label: workshop, wani_transcript_id: clean(data.transcriptId, 80) }]),
+    }).catch(() => null)
+    return res.status(200).json({ ok: true, duplicate: Boolean(data.duplicate), transcriptId: data.transcriptId, waniUrl: waniBase()?.toString() || '' })
+  }
+  return res.status(400).json({ error: 'Unsupported Wani operation.' })
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const protection = await guardApiRequest(req, res, { feature: 'action_route', requireAuth: true, authenticatedLimit: 30, windowSeconds: 60 })
@@ -224,6 +344,14 @@ export default async function handler(req, res) {
 
   const operation = clean(req.body?.operation || 'status', 40)
   if (operation === 'status') return res.status(200).json({ integrations: integrationStatus() })
+  if (operation.startsWith('wani-')) {
+    try { return await handleWani(operation, req, res, token, user.id) } catch (error) {
+      const message = error?.message || 'Wani could not be reached.'
+      console.error('[action-route] wani', operation, message)
+      const status = error?.status === 401 || error?.status === 403 ? 409 : 502
+      return res.status(status).json({ error: status === 409 ? 'Wani did not accept the connection key. Create a new one in Wani and connect again.' : message })
+    }
+  }
   if (operation !== 'route') return res.status(400).json({ error: 'Unsupported action-route operation.' })
 
   const provider = clean(req.body?.provider, 20).toLowerCase()
