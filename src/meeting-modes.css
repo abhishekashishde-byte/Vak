@@ -20,3 +20,9 @@
 /* v0.20 pre-meeting continuity */
 .meeting-prebrief{border:1px solid rgba(43,39,33,.11);background:rgba(255,253,248,.74);border-radius:14px;padding:12px;margin:12px 0}.meeting-prebrief-head{display:flex;justify-content:space-between;gap:14px;align-items:center}.meeting-prebrief-head>div{display:grid;gap:3px}.meeting-prebrief-head strong{font-size:12px;color:#393530}.meeting-prebrief-head span{font-size:9px;line-height:1.4;color:#8b8378}.meeting-prebrief-head button{border:1px solid rgba(43,39,33,.12);background:#171717;color:#fff;border-radius:999px;padding:8px 11px;font-size:9px;cursor:pointer}.meeting-prebrief-head button:disabled{opacity:.48;cursor:not-allowed}.meeting-prebrief-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-top:11px}.meeting-prebrief-body>div{border-top:1px solid rgba(43,39,33,.08);padding-top:8px}.meeting-prebrief-body b{font-size:8px;text-transform:uppercase;letter-spacing:.06em;color:#756e65}.meeting-prebrief-body p{margin:4px 0;font-size:10px;line-height:1.4;color:#393530}.meeting-prebrief-stat{display:flex!important;align-items:baseline;gap:7px}.meeting-prebrief-stat strong{font-size:22px}.meeting-prebrief-stat span{font-size:9px;color:#8b8378}
 @media(max-width:760px){.meeting-prebrief-head{align-items:flex-start;flex-direction:column}.meeting-prebrief-head button{width:100%}}
+
+/* Distinguish provisional streaming captions from committed transcript text. */
+.meeting-interim-caption { opacity: .72; font-style: italic; border-left: 2px solid currentColor; padding-left: .7rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.meeting-terms-list { display: grid; gap: .5rem; max-height: 12rem; overflow-y: auto; }
+.meeting-terms-list > div { display: flex; justify-content: space-between; align-items: center; gap: .75rem; font-size: .85rem; }
+.meeting-terms-list > div span { overflow-wrap: anywhere; }
