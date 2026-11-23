@@ -196,6 +196,7 @@ export default function MeetingMode() {
   const [transcriptSegments, setTranscriptSegments] = useState(() => normalizeSegments(saved.transcriptSegments || saved?.notes?._ana?.transcriptSegments))
   const [speakerNames, setSpeakerNames] = useState(() => saved.speakerNames || saved?.notes?._ana?.speakerNames || {})
   const [transcriptDirty, setTranscriptDirty] = useState(false)
+  const [audioPlayback, setAudioPlayback] = useState({ status: 'idle', at: 0, duration: 0 })
   const [importingAudio, setImportingAudio] = useState(false)
   const [calendarEvents, setCalendarEvents] = useState([])
   const [calendarState, setCalendarState] = useState({ loading: true, message: '', reconnect: false })
@@ -809,6 +810,11 @@ export default function MeetingMode() {
     })
   }
 
+  const reassignSegmentSpeaker = (index, speaker) => {
+    setTranscriptSegments(previous => previous.map((segment, i) => i === index ? { ...segment, speaker } : segment))
+    setTranscriptDirty(true)
+  }
+
   const renameSpeaker = (speaker, value) => {
     setSpeakerNames(previous => ({ ...previous, [speaker]: value }))
     setTranscriptDirty(true)
@@ -925,14 +931,39 @@ export default function MeetingMode() {
     const path = clean(meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath)
     if (!path || !supabase) return
     try {
+      setNotesError('')
+      const existing = audioPlayerRef.current
+      if (existing?.dataset?.audioPath === path && existing.src) {
+        existing.currentTime = Math.max(0, Number(startSeconds) || 0)
+        await existing.play()
+        return
+      }
+      setAudioPlayback({ status: 'loading', at: 0, duration: 0 })
       const { data, error: signedError } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600)
       if (signedError || !data?.signedUrl) throw new Error(signedError?.message || 'Could not open retained audio.')
-      try { audioPlayerRef.current?.pause?.() } catch {}
+      try { existing?.pause?.() } catch {}
       const audio = new Audio(data.signedUrl)
+      audio.dataset.audioPath = path
       audioPlayerRef.current = audio
-      audio.addEventListener('loadedmetadata', () => { audio.currentTime = Math.max(0, Number(startSeconds) || 0); void audio.play() }, { once: true })
-      audio.addEventListener('error', () => setNotesError('Retained audio could not be played.'), { once: true })
-    } catch (error) { setNotesError(error?.message || 'Retained audio could not be played.') }
+      audio.addEventListener('timeupdate', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, at: audio.currentTime })) })
+      audio.addEventListener('durationchange', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, duration: Number.isFinite(audio.duration) ? audio.duration : 0 })) })
+      audio.addEventListener('play', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, status: 'playing' })) })
+      audio.addEventListener('pause', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, status: 'paused' })) })
+      audio.addEventListener('ended', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, status: 'ended' })) })
+      audio.addEventListener('error', () => { if (audioPlayerRef.current === audio) { setNotesError('Retained audio could not be played.'); setAudioPlayback(value => ({ ...value, status: 'error' })) } })
+      audio.addEventListener('loadedmetadata', () => { audio.currentTime = Math.max(0, Number(startSeconds) || 0); void audio.play().catch(error => setNotesError(error?.message || 'Playback was blocked.')) }, { once: true })
+      audio.load()
+    } catch (error) { setAudioPlayback(value => ({ ...value, status: 'error' })); setNotesError(error?.message || 'Retained audio could not be played.') }
+  }
+  const toggleAudioPlayback = () => {
+    const audio = audioPlayerRef.current
+    if (!audio) return
+    if (audio.paused) void audio.play().catch(error => setNotesError(error?.message || 'Playback was blocked.'))
+    else audio.pause()
+  }
+  const seekAudioPlayback = seconds => {
+    const audio = audioPlayerRef.current
+    if (audio && Number.isFinite(audio.duration)) audio.currentTime = Math.min(audio.duration, Math.max(0, Number(seconds) || 0))
   }
 
   const deleteRetainedAudio = async () => {
@@ -947,6 +978,8 @@ export default function MeetingMode() {
       setMeetingNotes(updated)
       saveMeetingRecord(updated)
       try { audioPlayerRef.current?.pause?.() } catch {}
+      audioPlayerRef.current = null
+      setAudioPlayback({ status: 'idle', at: 0, duration: 0 })
       setNotesError('')
     } catch (error) { setNotesError(error?.message || 'Could not delete retained audio.') }
   }
@@ -1072,7 +1105,8 @@ export default function MeetingMode() {
         {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item === 'string' ? item : item?.task}</strong>{typeof item !== 'string' && (item?.owner || item?.deadline) && <small>{item?.owner ? `Owner: ${item.owner}` : 'Owner: not specified'}{item?.deadline ? ` · Deadline: ${item.deadline}` : ''}</small>}</div>)}</div></section>}
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
         {(transcriptSegments.length > 0 || originalText) && <section className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button>{transcriptSegments.length > 0 && <button type="button" onClick={downloadSrt}><Download size={14}/> Subtitles .srt</button>}{retainedAudioPath && <button onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button>}<button className={transcriptDirty || notesStatus === 'error' ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={processing || notesStatus === 'preparing' || (notesStatus !== 'error' && !transcriptDirty)}><RefreshCw size={14}/> {notesStatus === 'error' ? 'Retry MOM' : 'Regenerate MOM'}</button></div></div>
-          {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article className="meeting-segment-row" key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><strong>{speakerNames[segment.speaker] || segment.speaker}</strong>{retainedAudioPath && <button type="button" className="meeting-play-segment" onClick={() => playRetainedAudio(segment.start)}><Play size={11}/> Replay</button>}</div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
+          {retainedAudioPath && <div className="meeting-audio-controls"><button type="button" onClick={toggleAudioPlayback} disabled={!audioPlayerRef.current}>{audioPlayback.status === 'playing' ? <Pause size={14}/> : <Play size={14}/>} {audioPlayback.status === 'playing' ? 'Pause audio' : 'Play audio'}</button><span>{formatSegmentTime(audioPlayback.at)} / {formatSegmentTime(audioPlayback.duration)}</span><input type="range" aria-label="Seek meeting audio" min="0" max={Math.max(1, audioPlayback.duration)} step="0.5" value={Math.min(audioPlayback.at, Math.max(1, audioPlayback.duration))} onChange={event => seekAudioPlayback(event.target.value)} disabled={!audioPlayerRef.current || !audioPlayback.duration}/></div>}
+          {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article className="meeting-segment-row" key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><label className="meeting-segment-speaker"><span className="sr-only">Speaker for segment {index + 1}</span><select aria-label={`Speaker for segment ${index + 1}`} value={segment.speaker} onChange={event => reassignSegmentSpeaker(index, event.target.value)}>{[...new Set([...transcriptSegments.map(item => item.speaker), segment.speaker])].map(speaker => <option key={speaker} value={speaker}>{speakerNames[speaker] || speaker}</option>)}</select></label>{retainedAudioPath && <button type="button" className="meeting-play-segment" onClick={() => playRetainedAudio(segment.start)}><Play size={11}/> Replay</button>}</div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
         </section>}
       </div>}
       {notesError && <div className="meeting-notes-error">{notesError}</div>}
