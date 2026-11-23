@@ -26,3 +26,9 @@
 .meeting-terms-list { display: grid; gap: .5rem; max-height: 12rem; overflow-y: auto; }
 .meeting-terms-list > div { display: flex; justify-content: space-between; align-items: center; gap: .75rem; font-size: .85rem; }
 .meeting-terms-list > div span { overflow-wrap: anywhere; }
+
+/* Reviewed speaker attribution and evidence audio controls */
+.meeting-audio-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .7rem 0; }
+.meeting-audio-controls input[type="range"] { flex: 1; min-width: 120px; }
+.meeting-audio-controls span { font-variant-numeric: tabular-nums; font-size: .8rem; }
+.meeting-segment-speaker select { max-width: 12rem; font: inherit; }
