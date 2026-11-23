@@ -837,7 +837,7 @@ export default function MeetingMode() {
     setNotesStatus('ready')
     setNotesError('')
     setHighlightedSegment('')
-    document.getElementById('ana-meeting-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    requestAnimationFrame(() => document.getElementById('ana-meeting-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
   const jumpToEvidence = segmentId => {
     const segment = transcriptSegments.find(item => item.id === segmentId)
