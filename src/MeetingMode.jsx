@@ -170,6 +170,9 @@ export default function MeetingMode() {
   const [translatedText, setTranslatedText] = useState(() => clean(saved.translatedText))
   const [liveOriginal, setLiveOriginal] = useState('')
   const [liveTranslation, setLiveTranslation] = useState('')
+  const [meetingGlossary, setMeetingGlossary] = useState(() => { const items = readJson(GLOSSARY_KEY, []); return Array.isArray(items) ? items : [] })
+  const [termHeard, setTermHeard] = useState('')
+  const [termPreferred, setTermPreferred] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [notesStatus, setNotesStatus] = useState('idle')
@@ -370,6 +373,18 @@ export default function MeetingMode() {
   useEffect(() => { const node = hearingPaneRef.current; if (node) node.scrollTop = node.scrollHeight }, [originalText, liveOriginal])
   useEffect(() => () => discardActiveMeeting(), [])
 
+  const saveMeetingTerm = () => {
+    const source = clean(termHeard).slice(0, 80), preferred = clean(termPreferred).slice(0, 80)
+    if (!source || !preferred || source === preferred) return
+    const next = [...meetingGlossary.filter(item => clean(item?.source).toLocaleLowerCase() !== source.toLocaleLowerCase()), { source, preferred }].slice(-60)
+    try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(next)) } catch { setError('Could not save the terminology on this device.'); return }
+    setMeetingGlossary(next); setTermHeard(''); setTermPreferred('')
+  }
+  const removeMeetingTerm = source => {
+    const next = meetingGlossary.filter(item => item?.source !== source)
+    try { localStorage.setItem(GLOSSARY_KEY, JSON.stringify(next)) } catch { setError('Could not update the terminology on this device.'); return }
+    setMeetingGlossary(next)
+  }
   const setTrackEnabled = enabled => streamRef.current?.getAudioTracks?.().forEach(track => { track.enabled = enabled })
   const sendRealtime = event => { const channel = dataChannelRef.current; if (channel?.readyState === 'open') channel.send(JSON.stringify(event)) }
   const clearCommitTimer = () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current); commitTimerRef.current = null }
@@ -1010,16 +1025,27 @@ export default function MeetingMode() {
         </div>
       </details>
 
+      <details className="meeting-optional-context">
+        <summary>Technical vocabulary · {meetingGlossary.length} corrections</summary>
+        <div className="meeting-optional-context-body">
+          <p>Teach Ana words often misheard in meetings, such as “V A zero one” → “VA01”. Saved on this device and supplied as hints to future transcriptions; existing live sessions will not change.</p>
+          <label><span>What Ana might hear</span><input value={termHeard} onChange={event => setTermHeard(event.target.value)} maxLength={80} placeholder="V A zero one" disabled={active || processing}/></label>
+          <label><span>Preferred spelling</span><input value={termPreferred} onChange={event => setTermPreferred(event.target.value)} maxLength={80} placeholder="VA01" disabled={active || processing}/></label>
+          <button type="button" onClick={saveMeetingTerm} disabled={active || processing || !clean(termHeard) || !clean(termPreferred) || clean(termHeard) === clean(termPreferred)}>Save correction</button>
+          {meetingGlossary.length > 0 && <div className="meeting-terms-list">{meetingGlossary.slice(-12).map((item,index) => <div key={item.source + index}><span>{item.source} → <strong>{item.preferred}</strong></span><button type="button" onClick={() => removeMeetingTerm(item.source)} disabled={active || processing} aria-label={`Remove correction for ${item.source}`}>Remove</button></div>)}</div>}
+        </div>
+      </details>
+
       <label className="meeting-consent"><input type="checkbox" checked={consentVerified} onChange={event => setConsentVerified(event.target.checked)} disabled={active || processing}/><span><strong>Everyone has agreed</strong> I confirm that all participants have been informed and have agreed to this meeting being recorded, transcribed and processed by Ana.</span></label>
       <label className="meeting-consent meeting-keep-audio"><input type="checkbox" checked={keepAudio} onChange={event => setKeepAudio(event.target.checked)} disabled={active || processing}/><span><strong>Keep audio after transcription</strong> Off by default. Enable only if participants also agreed that Ana may retain the meeting audio; otherwise Ana deletes the temporary audio after transcription.</span></label>
       <div className={`meeting-single-card ${active ? 'active' : ''}`}>
         <div className="meeting-status-row meeting-live-status"><div><i className={active && !paused ? 'on' : ''}/><strong>{statusText}</strong></div><span>{startedAt ? formatTime(elapsed) : '00:00'} · {source === 'screen' ? <><MonitorUp size={13}/> shared audio</> : <><Mic size={13}/> microphone</>}</span></div>
 
         {meetingMode === 'translate' && <div className="meeting-single-screen">
-          <section className="meeting-complete-translation"><div className="meeting-screen-label"><span>Translation · {target}</span>{active && liveOriginal && !liveTranslation ? <em>catching up…</em> : null}</div><div ref={translationPaneRef} className="meeting-screen-scroll meeting-translation-scroll"><p>{fullTranslation || (active ? 'Translation will appear here as soon as Ana understands the speech.' : 'Your translated meeting will appear here.')}</p></div></section>
-          <section className="meeting-complete-hearing"><div className="meeting-screen-label"><span>What Ana hears</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div><div ref={hearingPaneRef} className="meeting-screen-scroll meeting-hearing-scroll"><p>{fullOriginal || (active ? 'Listening for speech…' : 'Start listening and the source transcript will appear here.')}</p></div></section>
+          <section className="meeting-complete-translation"><div className="meeting-screen-label"><span>Translation · {target}</span>{active && liveOriginal && !liveTranslation ? <em>catching up…</em> : null}</div><div ref={translationPaneRef} className="meeting-screen-scroll meeting-translation-scroll"><p>{translatedText || (!liveTranslation && !active ? 'Your translated meeting will appear here.' : '')}</p>{liveTranslation && <p className="meeting-interim-caption" aria-live="off">{liveTranslation}</p>}{active && !translatedText && !liveTranslation && <p>Translation will appear here as soon as Ana understands the speech.</p>}</div></section>
+          <section className="meeting-complete-hearing"><div className="meeting-screen-label"><span>What Ana hears</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div><div ref={hearingPaneRef} className="meeting-screen-scroll meeting-hearing-scroll"><p>{originalText || (!active && !liveOriginal ? 'Start listening and the source transcript will appear here.' : '')}</p>{liveOriginal && <p className="meeting-interim-caption" aria-live="off">{liveOriginal}</p>}{active && !originalText && !liveOriginal && <p>Listening for speech…</p>}</div></section>
         </div>}
-        {meetingMode === 'transcript' && <div className="meeting-transcript-only-screen"><div className="meeting-screen-label"><span>Live transcript</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div><div ref={hearingPaneRef} className="meeting-screen-scroll meeting-transcript-only-scroll"><p>{fullOriginal || (active ? 'Listening for speech…' : 'Start listening and the transcript will appear here.')}</p></div></div>}
+        {meetingMode === 'transcript' && <div className="meeting-transcript-only-screen"><div className="meeting-screen-label"><span>Live transcript</span>{active && !paused ? <em className="meeting-hearing-live">● live</em> : null}</div><div ref={hearingPaneRef} className="meeting-screen-scroll meeting-transcript-only-scroll"><p>{originalText || (!active && !liveOriginal ? 'Start listening and the transcript will appear here.' : '')}</p>{liveOriginal && <p className="meeting-interim-caption" aria-live="off">{liveOriginal}</p>}{active && !originalText && !liveOriginal && <p>Listening for speech…</p>}</div></div>}
         {meetingMode === 'mom' && <div className="meeting-mom-only-screen"><FileAudio size={28}/><strong>{active ? 'Recording the meeting' : sessionState === 'ended' ? 'Meeting processed' : 'No live transcript on screen'}</strong><p>{active ? 'Ana is recording the audio. When you end the meeting, Ana will create a high-quality transcript and prepare the MOM.' : 'Start the meeting and keep this screen quiet. The transcript is prepared only after you press End meeting.'}</p></div>}
         {bookmarks.length > 0 && <div className="meeting-bookmarks">{bookmarks.map((item,index)=><span key={item.id || index}><Bookmark size={11}/>{formatSegmentTime(item.at)}</span>)}</div>}
         {(missedLoading || missedSummary) && <div className="meeting-catchup-card"><strong>Catch-up</strong><p>{missedLoading ? 'Ana is summarizing the most recent discussion…' : missedSummary}</p></div>}
