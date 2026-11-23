@@ -32,3 +32,8 @@
 .meeting-audio-controls input[type="range"] { flex: 1; min-width: 120px; }
 .meeting-audio-controls span { font-variant-numeric: tabular-nums; font-size: .8rem; }
 .meeting-segment-speaker select { max-width: 12rem; font: inherit; }
+
+/* Traceable meeting evidence */
+.meeting-evidence-link { display: inline-flex; align-items: center; gap: .3rem; margin: .2rem .15rem; font-size: .78rem; white-space: nowrap; }
+.meeting-evidence-highlight { outline: 2px solid var(--accent, #6598db); outline-offset: 2px; border-radius: .4rem; }
+.meeting-review-transcript { scroll-margin-top: 5rem; }
