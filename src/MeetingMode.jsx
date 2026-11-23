@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { meetingSegmentsToSrt } from './meetingSrt.js'
 import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
 import { supabase } from './lib/supabase.js'
@@ -966,6 +967,20 @@ export default function MeetingMode() {
     const blob = new Blob([lines], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), anchor = document.createElement('a')
     anchor.href = url; anchor.download = `ana-mom-${new Date(record.startedAt || Date.now()).toISOString().slice(0, 10)}.md`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
+  const downloadSrt = () => {
+    if (!transcriptSegments.length) return
+    const subtitles = meetingSegmentsToSrt(transcriptSegments, speakerNames)
+    if (!subtitles) return
+    const blob = new Blob([subtitles], { type: 'application/x-subrip;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `ana-meeting-${new Date(meetingNotes?.startedAt || Date.now()).toISOString().slice(0, 10)}.srt`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
   const retainedAudioPath = clean(meetingNotes?.notes?._ana?.audioPath || meetingNotes?.audioPath)
   const statusText = sessionState === 'connecting' ? 'Connecting…' : sessionState === 'recovering' ? 'Reconnecting…' : sessionState === 'processing' ? 'Preparing final transcript…' : paused ? 'Paused' : active ? (meetingMode === 'mom' ? 'Ana is recording' : 'Ana is listening now') : sessionState === 'ended' ? 'Meeting ended' : 'Ready'
 
@@ -1030,7 +1045,7 @@ export default function MeetingMode() {
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.decisions?.length && <section className="meeting-notes-section"><h3>Decisions</h3><ul>{meetingNotes.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
         {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item === 'string' ? item : item?.task}</strong>{typeof item !== 'string' && (item?.owner || item?.deadline) && <small>{item?.owner ? `Owner: ${item.owner}` : 'Owner: not specified'}{item?.deadline ? ` · Deadline: ${item.deadline}` : ''}</small>}</div>)}</div></section>}
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></section>}
-        {(transcriptSegments.length > 0 || originalText) && <section className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button>{retainedAudioPath && <button onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button>}<button className={transcriptDirty || notesStatus === 'error' ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={processing || notesStatus === 'preparing' || (notesStatus !== 'error' && !transcriptDirty)}><RefreshCw size={14}/> {notesStatus === 'error' ? 'Retry MOM' : 'Regenerate MOM'}</button></div></div>
+        {(transcriptSegments.length > 0 || originalText) && <section className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button>{transcriptSegments.length > 0 && <button type="button" onClick={downloadSrt}><Download size={14}/> Subtitles .srt</button>}{retainedAudioPath && <button onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button>}<button className={transcriptDirty || notesStatus === 'error' ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={processing || notesStatus === 'preparing' || (notesStatus !== 'error' && !transcriptDirty)}><RefreshCw size={14}/> {notesStatus === 'error' ? 'Retry MOM' : 'Regenerate MOM'}</button></div></div>
           {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article className="meeting-segment-row" key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><strong>{speakerNames[segment.speaker] || segment.speaker}</strong>{retainedAudioPath && <button type="button" className="meeting-play-segment" onClick={() => playRetainedAudio(segment.start)}><Play size={11}/> Replay</button>}</div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
         </section>}
       </div>}
