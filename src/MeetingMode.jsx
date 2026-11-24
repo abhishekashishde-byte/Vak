@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { meetingAudioParts } from './meetingAudio.js'
 import { meetingSegmentsToSrt } from './meetingSrt.js'
 import { Bookmark, Check, Clipboard, Download, FileAudio, Headphones, History, Languages, Mic, MonitorUp, Pause, Play, RefreshCw, Sparkles, Square, Trash2, Upload } from 'lucide-react'
 import { getPersonalLanguageMemory, rememberPersonalLanguagePreference } from './personalLanguageMemory.js'
@@ -584,24 +585,88 @@ export default function MeetingMode() {
     const hints = glossaryHints()
     return ['Business/technical meeting. The speakers may naturally mix English, German, Hindi and Hinglish.', 'SAP terms, transaction codes, material master, inspection plans and project names may occur.', hints.context ? `User glossary: ${hints.context}` : ''].filter(Boolean).join(' ').slice(0, 1800)
   }
-  const transcribeRecording = async (blob, retainAudio = false) => {
-    if (!blob?.size) throw new Error('No meeting audio was captured.')
-    if (blob.size > MAX_FINAL_AUDIO_BYTES) throw new Error('This recording is too large for the final high-quality transcription pass. The live transcript will be kept where available.')
+  const meetingAudioPaths = path => {
+    const manifest = /^(.*)\.parts-(\d+)$/.exec(path)
+    return manifest ? Array.from({ length: Number(manifest[2]) }, (_, index) => `${manifest[1]}.part-${index}`) : [path]
+  }
+
+  const uploadMeetingAudio = async blob => {
     if (!supabase) throw new Error('Account storage is not available.')
-    const { data: userData, error: userError } = await supabase.auth.getUser(); if (userError || !userData?.user) throw new Error('Please sign in again before saving this meeting.')
-    const mimeType = String(blob.type || recordingMimeRef.current || 'audio/webm').split(';')[0], ext = extensionForMime(mimeType), id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`, path = `${userData.user.id}/${Date.now()}-${id}.${ext}`, uploadBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType })
-    const { error: uploadError } = await supabase.storage.from(AUDIO_BUCKET).upload(path, uploadBlob, { contentType: mimeType, upsert: false }); if (uploadError) throw new Error(uploadError.message || 'Could not upload the temporary meeting recording.')
-    let keepStoredAudio = false
+    const { data, error } = await supabase.auth.getUser()
+    if (error || !data?.user) throw new Error('Please sign in again before saving this meeting.')
+    const mime = String(blob.type || recordingMimeRef.current || 'audio/webm').split(';')[0]
+    const mimeType = mime === 'audio/m4a' ? 'audio/x-m4a' : mime
+    const id = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)
+    const basePath = `${data.user.id}/${Date.now()}-${id}.${extensionForMime(mimeType)}`
+    const count = Math.ceil(blob.size / MAX_FINAL_AUDIO_BYTES)
+    const path = count > 1 ? `${basePath}.parts-${count}` : basePath
+    const paths = meetingAudioPaths(path)
+    const uploaded = []
     try {
-      const { data: signed, error: signedError } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600); if (signedError || !signed?.signedUrl) throw new Error(signedError?.message || 'Could not prepare the temporary recording for transcription.')
-      const response = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioUrl: signed.signedUrl, mimeType, meeting: true, speakerLabels: true, contextHints: buildFinalContext() }) }), data = await response.json()
-      if (!response.ok) throw new Error(data?.error || 'Could not create the final transcript.')
-      const text = clean(data?.text); if (!text) throw new Error('No speech was found in the meeting recording.')
-      keepStoredAudio = Boolean(retainAudio)
-      return { text, segments: normalizeSegments(data?.segments), diarized: Boolean(data?.diarized), audioPath: keepStoredAudio ? path : '' }
-    } finally {
-      if (!keepStoredAudio) { try { await supabase.storage.from(AUDIO_BUCKET).remove([path]) } catch {} }
+      for (const [index, objectPath] of paths.entries()) {
+        const start = index * MAX_FINAL_AUDIO_BYTES
+        const part = blob.slice(start, start + MAX_FINAL_AUDIO_BYTES, mimeType)
+        const { error: uploadError } = await supabase.storage.from(AUDIO_BUCKET).upload(objectPath, part, { contentType: mimeType, upsert: false })
+        if (uploadError) throw new Error(uploadError.message || 'Could not upload meeting audio.')
+        uploaded.push(objectPath)
+      }
+    } catch (error) {
+      if (uploaded.length) await supabase.storage.from(AUDIO_BUCKET).remove(uploaded).catch(() => {})
+      throw error
     }
+    return path
+  }
+
+  const downloadMeetingAudio = async path => {
+    const parts = []
+    for (const objectPath of meetingAudioPaths(path)) {
+      const { data, error } = await supabase.storage.from(AUDIO_BUCKET).download(objectPath)
+      if (error || !data?.size) throw new Error(error?.message || 'Could not open saved audio.')
+      parts.push(data)
+    }
+    return parts.length === 1 ? parts[0] : new Blob(parts, { type: parts[0].type })
+  }
+
+  const transcribeRecording = async (blob, storedPath = '') => {
+    if (!blob?.size) throw new Error('No meeting audio was captured.')
+    const transcripts = [], segments = []
+    const split = blob.size > MAX_FINAL_AUDIO_BYTES
+    for await (const { audio, offset } of meetingAudioParts(blob, MAX_FINAL_AUDIO_BYTES)) {
+      const existingPath = !split && storedPath
+      const path = existingPath || await uploadMeetingAudio(audio)
+      try {
+        const { data, error } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600)
+        if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not prepare the recording for transcription.')
+        const response = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ audioUrl: data.signedUrl, mimeType: audio.type.split(';')[0], meeting: true, speakerLabels: true, allowSilence: split, contextHints: buildFinalContext() }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result?.error || 'Could not create the final transcript.')
+        const text = clean(result?.text)
+        if (!text) continue
+        transcripts.push(text)
+        const partSegments = normalizeSegments(result.segments)
+        if (!split) segments.push(...partSegments)
+        else {
+          const part = Math.floor(offset / 300) + 1
+          segments.push(...(partSegments.length ? partSegments : [{ id: 'transcript', start: 0, end: 0, speaker: 'Speaker', text }]).map(segment => ({
+            ...segment,
+            id: `part-${part}-${segment.id}`,
+            speaker: `${segment.speaker} (part ${part})`,
+            start: segment.start + offset,
+            end: segment.end + offset,
+          })))
+        }
+      } finally {
+        if (!existingPath) {
+          try { await supabase.storage.from(AUDIO_BUCKET).remove([path]) } catch {}
+        }
+      }
+    }
+    if (!transcripts.length) throw new Error('No speech was found in the meeting recording.')
+    return { text: transcripts.join('\n\n'), segments }
   }
 
   const persistMeetingRecord = async record => {
@@ -623,14 +688,15 @@ export default function MeetingMode() {
         original_text: record.originalText || '',
         translated_text: record.translatedText || '',
       }, { onConflict: 'user_id,client_id' })
-      if (error) console.warn('[Ana meeting save]', error.message)
+      if (error) throw error
+      return true
     } catch (error) { console.warn('[Ana meeting save]', error?.message || error) }
   }
   const saveMeetingRecord = record => {
     const next = [record, ...readMeetingHistory().filter(item => item?.id !== record.id)].slice(0, 50)
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch {}
     setMeetingHistory(next)
-    void persistMeetingRecord(record)
+    return persistMeetingRecord(record)
   }
   const generateMeetingNotes = async ({
     transcript,
@@ -646,6 +712,7 @@ export default function MeetingMode() {
     metadataOverride = null,
     templateOverride = null,
     outputLanguageOverride = '',
+    transcriptionError = '',
   }) => {
     const outputLanguage = clean(outputLanguageOverride) || targetRef.current
     setNotesStatus('preparing'); setNotesError('')
@@ -687,7 +754,7 @@ export default function MeetingMode() {
 
     const normalizedSegments = normalizeSegments(segments)
     const evidenceTranscript = clean(normalizedSegments.length ? normalizedSegments.map(item => `[SEGMENT_ID=${item.id}] [${formatSegmentTime(item.start)}] ${clean(names?.[item.speaker]) || item.speaker}: ${item.text}`).join('\n') : transcript)
-    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), manualNotes: scribbleNotes }
+    const baseAna = { metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), transcriptionStatus: transcriptionError ? 'failed' : 'complete', transcriptionError, manualNotes: scribbleNotes }
 
     const requestMeetingAi = async (text, aiInstructions) => {
       const response = await fetch('/api/translate', {
@@ -757,13 +824,14 @@ export default function MeetingMode() {
         const candidates = Array.isArray(parsed?.evidenceLinks?.[kind]) ? parsed.evidenceLinks[kind] : []
         return [kind, entries.map((_, index) => { const id = String(candidates[index] || ''); return validIds.has(id) ? id : '' })]
       }))
-      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), manualNotes: scribbleNotes, evidenceLinks } }
+      const notes = { ...parsed, _ana: { metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), transcriptionStatus: transcriptionError ? 'failed' : 'complete', transcriptionError, manualNotes: scribbleNotes, evidenceLinks } }
       const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: clean(parsed?.title) || metadata.topic || 'Meeting', startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), notes, originalText: transcript, translatedText: translation }
-      setMeetingNotes(record); saveMeetingRecord(record); setNotesStatus('ready')
+      setMeetingNotes(record); const synced = await saveMeetingRecord(record); setNotesStatus('ready')
+      if (!synced) setNotesError('Meeting minutes could not sync to your account.')
     } catch (err) {
       const notes = { _ana: baseAna }
       const record = { id: recordId || `${start || Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: manualMetadata.topic || `Meeting · ${formatMeetingDate(start || end)}`, startedAt: start || end, endedAt: end, durationMs: Math.max(0, end - (start || end)), target: outputLanguage, source: mode, metadata: manualMetadata, momTemplate: template, transcriptSegments: normalizedSegments, speakerNames: names, bookmarks: meetingBookmarks || [], audioPath: clean(audioPath), notes, originalText: transcript, translatedText: translation }
-      setMeetingNotes(record); saveMeetingRecord(record); setNotesError(err.message || 'The transcript was saved, but Ana could not create notes.'); setNotesStatus('error')
+      setMeetingNotes(record); await saveMeetingRecord(record); setNotesError(err.message || 'The transcript was saved, but Ana could not create notes.'); setNotesStatus('error')
     }
   }
 
@@ -773,19 +841,51 @@ export default function MeetingMode() {
     activeRef.current = false; pausedRef.current = false; setPaused(false); setSessionState('processing'); setNotesStatus('transcribing')
     let recording = null; try { recording = await stopRecorder() } catch {}; closeRealtime(false); stopTracks(); await closeQuotaSession()
     let finalTranscript = clean(liveOriginalFinal), finalSegments = [], finalTranscriptError = '', retainedAudioPath = ''
-    try {
-      if (recording?.size) {
-        const result = await transcribeRecording(recording, keepAudio)
-        finalTranscript = result.text
-        finalSegments = result.segments
-        retainedAudioPath = clean(result.audioPath)
+    const translation = mode === 'translate' ? liveTranslationFinal : ''
+    const recordId = `${start}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`
+    const draft = {
+      id: recordId, title: meetingMeta.topic || `Meeting · ${formatMeetingDate(start)}`,
+      startedAt: start, endedAt: end, durationMs: end - start, source: mode,
+      target: targetRef.current, originalText: finalTranscript, translatedText: translation,
+      notes: { _ana: { metadata: meetingMeta, manualNotes: clean(readMeetingScribble()?.text), bookmarks, transcriptionStatus: 'pending' } },
+    }
+    await saveMeetingRecord(draft)
+    let audioSaveError = ''
+    if (keepAudio && recording?.size) {
+      try {
+        retainedAudioPath = await uploadMeetingAudio(recording)
+        draft.notes._ana.audioPath = retainedAudioPath
+        await saveMeetingRecord(draft)
+      } catch (error) {
+        audioSaveError = `Audio retention failed: ${error.message}`
       }
-    } catch (err) { finalTranscriptError = err.message || 'Final high-quality transcription failed.' }
+    }
+    try {
+      const result = await transcribeRecording(recording, retainedAudioPath)
+      finalTranscript = result.text
+      finalSegments = result.segments
+    } catch (error) {
+      finalTranscriptError = error.message || 'Final transcription failed.'
+    }
     setTranscriptSegments(finalSegments); setSpeakerNames({}); setTranscriptDirty(false)
-    setOriginalText(finalTranscript); originalTextRef.current = finalTranscript; setTranslatedText(mode === 'translate' ? liveTranslationFinal : ''); translatedTextRef.current = mode === 'translate' ? liveTranslationFinal : ''
+    setOriginalText(finalTranscript); originalTextRef.current = finalTranscript; setTranslatedText(translation); translatedTextRef.current = translation
     setLiveOriginal(''); setLiveTranslation(''); originalBufferRef.current = ''; translatedBufferRef.current = ''; transcriptionItemsRef.current.clear(); transcriptionOrderRef.current = []; setSessionState('ended')
-    if (finalTranscript.length >= 20) { await generateMeetingNotes({ transcript: finalTranscript, translation: mode === 'translate' ? liveTranslationFinal : '', start, end, mode, segments: finalSegments, names: {}, audioPath: retainedAudioPath, meetingBookmarks: bookmarks }); if (finalTranscriptError) setNotesError(`Ana kept the live transcript because the final accuracy pass could not complete: ${finalTranscriptError}`) }
-    else { setNotesStatus('error'); setNotesError(finalTranscriptError || 'Not enough speech was captured to create meeting notes.') }
+    draft.originalText = finalTranscript
+    draft.notes._ana.transcriptSegments = finalSegments
+    draft.notes._ana.transcriptionStatus = finalTranscriptError ? 'failed' : 'complete'
+    draft.notes._ana.transcriptionError = finalTranscriptError
+    const savedToCloud = await saveMeetingRecord(draft)
+    setMeetingNotes(draft)
+    if (finalTranscript.length >= 20) {
+      await generateMeetingNotes({ recordId, transcript: finalTranscript, translation, start, end, mode, segments: finalSegments, names: {}, audioPath: retainedAudioPath, meetingBookmarks: bookmarks, transcriptionError: finalTranscriptError })
+    } else {
+      setNotesStatus('error')
+    }
+    const transcriptMessage = finalTranscriptError
+      ? `${finalTranscriptError} ${finalTranscript ? 'Live transcript text is available.' : 'No transcript was created.'}`
+      : finalTranscript.length < 20 ? 'There is too little transcript text to create meeting minutes.' : ''
+    const warning = [transcriptMessage, audioSaveError, savedToCloud ? '' : 'The meeting could not sync to your account. Check the history on this device.'].filter(Boolean).join(' ')
+    if (warning) setNotesError(previous => [previous, warning].filter(Boolean).join(' '))
     try { window.dispatchEvent(new CustomEvent('ana:meeting-ended', { detail: { endedAt: end } })) } catch {}
     setConsentVerified(false)
     setKeepAudio(false)
@@ -835,7 +935,7 @@ export default function MeetingMode() {
     translatedTextRef.current = clean(record?.translatedText)
     setTranscriptDirty(false)
     setNotesStatus('ready')
-    setNotesError('')
+    setNotesError(record?.notes?._ana?.transcriptionError || '')
     setHighlightedSegment('')
     requestAnimationFrame(() => document.getElementById('ana-meeting-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
@@ -900,15 +1000,43 @@ export default function MeetingMode() {
     })
   }
 
+  const retrySavedAudio = async record => {
+    const path = record?.notes?._ana?.audioPath
+    if (!path || !supabase || processing || activeRef.current) return
+    setNotesStatus('transcribing')
+    setNotesError('')
+    setMeetingNotes(record)
+    try {
+      const audio = await downloadMeetingAudio(path)
+      const result = await transcribeRecording(audio, path)
+      const updated = {
+        ...record,
+        originalText: result.text,
+        transcriptSegments: result.segments,
+        notes: { ...record.notes, _ana: { ...record.notes._ana, transcriptSegments: result.segments, transcriptionStatus: 'complete', transcriptionError: '' } },
+      }
+      await saveMeetingRecord(updated)
+      openHistoryForReview(updated)
+      await generateMeetingNotes({
+        transcript: result.text, translation: record.translatedText, start: record.startedAt,
+        end: record.endedAt, mode: record.source, recordId: record.id, segments: result.segments,
+        names: {}, audioPath: path, meetingBookmarks: record.notes._ana.bookmarks,
+        metadataOverride: record.notes._ana.metadata, outputLanguageOverride: record.target,
+      })
+    } catch (error) {
+      setNotesStatus('error')
+      setNotesError(error.message || 'Could not transcribe saved audio.')
+    }
+  }
+
   const importAudioFile = async event => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     if (!consentVerified) { setError('Confirm that all participants agreed before importing or processing meeting audio.'); return }
-    if (file.size > MAX_FINAL_AUDIO_BYTES) { setError('This audio file is larger than the supported final transcription size.'); return }
     setImportingAudio(true); setError(''); setNotesError(''); setNotesStatus('transcribing'); setSessionState('processing')
     const end = Date.now()
-    let quotaReservationId = ''
+    let quotaReservationId = '', audioPath = ''
     try {
       const durationSeconds = await audioFileDurationSeconds(file)
       if (!durationSeconds) throw new Error('Ana could not determine the audio duration before applying the tester allowance.')
@@ -916,7 +1044,8 @@ export default function MeetingMode() {
       quotaReservationId = reservation.sessionId
       void recordConsentEvent('meeting_recording', 'confirmed', CONSENT_VERSIONS.meeting, { mode: 'import', keepAudio: Boolean(keepAudio) })
       if (keepAudio) void recordConsentEvent('meeting_audio_retention', 'confirmed', CONSENT_VERSIONS.audioRetention, { mode: 'import' })
-      const result = await transcribeRecording(file, keepAudio)
+      audioPath = keepAudio ? await uploadMeetingAudio(file) : ''
+      const result = await transcribeRecording(file, audioPath)
       const segments = result.segments
       const durationMs = segments.length ? Math.max(...segments.map(item => Number(item.end) || 0)) * 1000 : durationSeconds * 1000
       const start = durationMs ? end - durationMs : end
@@ -925,10 +1054,11 @@ export default function MeetingMode() {
       setOriginalText(result.text); originalTextRef.current = result.text
       setTranslatedText(''); translatedTextRef.current = ''
       setSessionState('ended')
-      await generateMeetingNotes({ transcript: result.text, translation: '', start, end, mode: 'import', segments, names: {}, audioPath: result.audioPath || '', meetingBookmarks: bookmarks })
+      await generateMeetingNotes({ transcript: result.text, translation: '', start, end, mode: 'import', segments, names: {}, audioPath, meetingBookmarks: bookmarks })
       setConsentVerified(false)
       setKeepAudio(false)
     } catch (err) {
+      if (audioPath) await supabase.storage.from(AUDIO_BUCKET).remove(meetingAudioPaths(audioPath)).catch(() => {})
       if (quotaReservationId) await refundFixedTimedUsage(quotaReservationId)
       setSessionState('idle'); setNotesStatus('error'); setNotesError(err?.message || 'Could not import this meeting audio.')
     } finally { setImportingAudio(false) }
@@ -977,10 +1107,17 @@ export default function MeetingMode() {
         return
       }
       setAudioPlayback({ status: 'loading', at: 0, duration: 0 })
-      const { data, error: signedError } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600)
-      if (signedError || !data?.signedUrl) throw new Error(signedError?.message || 'Could not open retained audio.')
+      let playbackUrl
+      if (meetingAudioPaths(path).length > 1) {
+        playbackUrl = URL.createObjectURL(await downloadMeetingAudio(path))
+      } else {
+        const { data, error } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, 600)
+        if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not open retained audio.')
+        playbackUrl = data.signedUrl
+      }
       try { existing?.pause?.() } catch {}
-      const audio = new Audio(data.signedUrl)
+      if (existing?.src?.startsWith('blob:')) URL.revokeObjectURL(existing.src)
+      const audio = new Audio(playbackUrl)
       audio.dataset.audioPath = path
       audioPlayerRef.current = audio
       audio.addEventListener('timeupdate', () => { if (audioPlayerRef.current === audio) setAudioPlayback(value => ({ ...value, at: audio.currentTime })) })
@@ -1009,13 +1146,14 @@ export default function MeetingMode() {
     const path = clean(record?.notes?._ana?.audioPath || record?.audioPath)
     if (!path || !supabase) return
     try {
-      const { error: removeError } = await supabase.storage.from(AUDIO_BUCKET).remove([path])
+      const { error: removeError } = await supabase.storage.from(AUDIO_BUCKET).remove(meetingAudioPaths(path))
       if (removeError) throw removeError
       const notes = record?.notes ? { ...record.notes, _ana: { ...(record.notes._ana || {}), audioPath: '' } } : record?.notes
       const updated = { ...record, audioPath: '', notes }
       setMeetingNotes(updated)
       saveMeetingRecord(updated)
       try { audioPlayerRef.current?.pause?.() } catch {}
+      if (audioPlayerRef.current?.src?.startsWith('blob:')) URL.revokeObjectURL(audioPlayerRef.current.src)
       audioPlayerRef.current = null
       setAudioPlayback({ status: 'idle', at: 0, duration: 0 })
       setNotesError('')
@@ -1146,6 +1284,7 @@ export default function MeetingMode() {
         {!!meetingNotes.notes.sections?.length && (['decisions', 'openQuestions'].some(kind => meetingNotes.notes._ana?.evidenceLinks?.[kind]?.some(Boolean))) && <section className="meeting-notes-section"><h3>Traceable evidence</h3>{['decisions', 'openQuestions'].map(kind => <div key={kind}><strong>{kind === 'decisions' ? 'Decisions' : 'Open questions'}</strong><ul>{(Array.isArray(meetingNotes.notes[kind]) ? meetingNotes.notes[kind] : []).map((item,index) => meetingNotes.notes._ana?.evidenceLinks?.[kind]?.[index] ? <li key={index}>{String(item)} {evidenceButton(kind,index)}</li> : null)}</ul></div>)}</section>}
         {!!meetingNotes.notes.actions?.length && <section className="meeting-notes-section"><h3>To-do / actions</h3><div className="meeting-action-list">{meetingNotes.notes.actions.map((item,index)=><div className="meeting-action" key={index}><strong>{typeof item === 'string' ? item : item?.task}</strong>{evidenceButton('actions', index)}{typeof item !== 'string' && (item?.owner || item?.deadline) && <small>{item?.owner ? `Owner: ${item.owner}` : 'Owner: not specified'}{item?.deadline ? ` · Deadline: ${item.deadline}` : ''}</small>}</div>)}</div></section>}
         {!meetingNotes.notes.sections?.length && !!meetingNotes.notes.openQuestions?.length && <section className="meeting-notes-section"><h3>Open questions</h3><ul>{meetingNotes.notes.openQuestions.map((item,index)=><li key={index}>{String(item)} {evidenceButton('openQuestions', index)}</li>)}</ul></section>}
+        {retainedAudioPath && (!originalText || meetingNotes.notes._ana?.transcriptionStatus === 'failed') && <div className="meeting-audio-controls"><button type="button" onClick={() => playRetainedAudio(0)}><Play size={14}/> Play saved audio</button><button type="button" disabled={active || processing} onClick={() => retrySavedAudio(meetingNotes)}><RefreshCw size={14}/> Retry transcription</button><button type="button" onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button></div>}
         {(transcriptSegments.length > 0 || originalText) && <section id="ana-meeting-review" className="meeting-review-transcript"><div className="meeting-review-head"><div><strong>Review transcript evidence</strong><span>Edit speaker names or transcript text before regenerating the MOM. Evidence links appear only when Ana can reference a valid segment ID.</span></div><div><button onClick={downloadMomMarkdown}><Download size={14}/> MOM .md</button>{transcriptSegments.length > 0 && <button type="button" onClick={downloadSrt}><Download size={14}/> Subtitles .srt</button>}{retainedAudioPath && <button onClick={deleteRetainedAudio}><Trash2 size={14}/> Delete audio</button>}<button className={transcriptDirty || notesStatus === 'error' ? 'primary' : ''} onClick={regenerateFromReviewedTranscript} disabled={processing || notesStatus === 'preparing' || (notesStatus !== 'error' && !transcriptDirty)}><RefreshCw size={14}/> {notesStatus === 'error' ? 'Retry MOM' : 'Regenerate MOM'}</button></div></div>
           {retainedAudioPath && <div className="meeting-audio-controls"><button type="button" onClick={toggleAudioPlayback} disabled={!audioPlayerRef.current}>{audioPlayback.status === 'playing' ? <Pause size={14}/> : <Play size={14}/>} {audioPlayback.status === 'playing' ? 'Pause audio' : 'Play audio'}</button><span>{formatSegmentTime(audioPlayback.at)} / {formatSegmentTime(audioPlayback.duration)}</span><input type="range" aria-label="Seek meeting audio" min="0" max={Math.max(1, audioPlayback.duration)} step="0.5" value={Math.min(audioPlayback.at, Math.max(1, audioPlayback.duration))} onChange={event => seekAudioPlayback(event.target.value)} disabled={!audioPlayerRef.current || !audioPlayback.duration}/></div>}
           {transcriptSegments.length ? <div className="meeting-segment-editor">{[...new Set(transcriptSegments.map(item => item.speaker))].map(speaker => <label className="meeting-speaker-name" key={speaker}><span>{speaker}</span><input value={speakerNames[speaker] || ''} onChange={event => renameSpeaker(speaker, event.target.value)} placeholder={speaker}/></label>)}{transcriptSegments.map((segment,index)=><article id={'meeting-evidence-' + encodeURIComponent(segment.id)} className={`meeting-segment-row ${highlightedSegment === segment.id ? 'meeting-evidence-highlight' : ''}`} key={segment.id || index}><div><span>{formatSegmentTime(segment.start)}</span><label className="meeting-segment-speaker"><span className="sr-only">Speaker for segment {index + 1}</span><select aria-label={`Speaker for segment ${index + 1}`} value={segment.speaker} onChange={event => reassignSegmentSpeaker(index, event.target.value)}>{[...new Set([...transcriptSegments.map(item => item.speaker), segment.speaker])].map(speaker => <option key={speaker} value={speaker}>{speakerNames[speaker] || speaker}</option>)}</select></label>{retainedAudioPath && <button type="button" className="meeting-play-segment" onClick={() => playRetainedAudio(segment.start)}><Play size={11}/> Replay</button>}</div><textarea value={segment.text} onChange={event => updateTranscriptSegment(index, event.target.value)} rows={Math.max(2, Math.min(5, Math.ceil(segment.text.length / 90)))}/></article>)}</div> : <textarea className="meeting-raw-editor" value={originalText} onChange={event => { setOriginalText(event.target.value); originalTextRef.current = event.target.value; setTranscriptDirty(true) }} rows={10}/>}
@@ -1156,6 +1295,7 @@ export default function MeetingMode() {
 
     {!!meetingHistory.length && <section className="meeting-history"><div className="meeting-history-head"><div><History size={16}/><h2>Meeting history</h2></div><span>{filteredMeetingHistory.length} of {meetingHistory.length}</span></div><div className="meeting-history-filter"><SearchFallback/><input value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Filter by customer, topic, project, tag or template"/></div><div className="meeting-history-list">{filteredMeetingHistory.map(record => { const meta = record?.metadata || record?.notes?._ana?.metadata || {}; const template = record?.momTemplate || record?.notes?._ana?.momTemplate || {}; return <details className="meeting-history-item" key={record.id}><summary><div className="meeting-history-summary"><strong>{record.title || 'Meeting'}</strong><span>{formatMeetingDate(record.startedAt)} · {formatTime(record.durationMs || 0)}</span><div className="meeting-label-chips compact">{[meta.customer, meta.topic, meta.project, template.title, ...(meta.tags || [])].filter(Boolean).slice(0,5).map((item,index)=><span key={index}>{item}</span>)}</div></div><span>{record.target}</span></summary><div className="meeting-history-detail">
       <div className="meeting-transcript-actions meeting-single-actions"><button type="button" onClick={() => openHistoryForReview(record)}>Open review &amp; evidence</button></div>
+      {record.notes?._ana?.transcriptionStatus === 'failed' && <p>{record.notes._ana.transcriptionError} {record.originalText ? 'Live transcript text is available.' : 'No transcript was created.'}</p>}
       {!record.notes?.summary && !record.notes?.sections?.length && clean(record.originalText).length >= 20 && <div className="meeting-transcript-actions meeting-single-actions"><button type="button" className="primary" onClick={() => retryHistoryMeeting(record)} disabled={processing || notesStatus === 'preparing'}><RefreshCw size={14}/> Generate MOM from transcript</button></div>}
       {record.notes?.summary && <div><h4>Summary</h4><p>{record.notes.summary}</p></div>}{!!record.notes?.keyPoints?.length && <div><h4>Key points</h4><ul>{record.notes.keyPoints.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.decisions?.length && <div><h4>Decisions</h4><ul>{record.notes.decisions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}{!!record.notes?.actions?.length && <div><h4>To-do / actions</h4><ul>{record.notes.actions.map((item,index)=><li key={index}>{typeof item === 'string' ? item : [item?.task, item?.owner ? `Owner: ${item.owner}` : '', item?.deadline ? `Deadline: ${item.deadline}` : ''].filter(Boolean).join(' · ')}</li>)}</ul></div>}{!!record.notes?.openQuestions?.length && <div><h4>Open questions</h4><ul>{record.notes.openQuestions.map((item,index)=><li key={index}>{String(item)}</li>)}</ul></div>}
       <div className="meeting-history-transcripts">{!!record.translatedText && <details><summary>Translated transcript</summary><p>{record.translatedText}</p></details>}<details><summary>Original transcript</summary><p>{record.originalText || '—'}</p></details></div></div></details> })}</div></section>}

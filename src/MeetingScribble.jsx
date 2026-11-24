@@ -26,7 +26,7 @@ export default function MeetingScribble() {
   useEffect(()=>{ try{localStorage.setItem(STORAGE_KEY,JSON.stringify({text,layout,autoFix,meetingActive}))}catch{} },[text,layout,autoFix,meetingActive])
   useEffect(()=>{
     const start=()=>{clearTimeout(timer.current);request.current+=1;processed.current.clear();setText('');setMeetingActive(true);setOpen(true);setError('');setStatus('New meeting notes')}
-    const end=()=>{clearTimeout(timer.current);setMeetingActive(false);setStatus('Notes saved with meeting')}
+    const end=()=>{clearTimeout(timer.current);setMeetingActive(false);setStatus('')}
     window.addEventListener('ana:meeting-started',start); window.addEventListener('ana:meeting-ended',end)
     return()=>{clearTimeout(timer.current);window.removeEventListener('ana:meeting-started',start);window.removeEventListener('ana:meeting-ended',end)}
   },[])
