@@ -42,3 +42,64 @@ export async function* meetingAudioParts(recording, maxBytes) {
     yield { audio: encodeWav(buffer, start, Math.min(start + PART_FRAMES, buffer.length)), offset: start / SAMPLE_RATE }
   }
 }
+
+// Each MediaRecorder instance writes its own playable container.
+export function startMeetingAudioCapture(createRecorder, onPart, { maxBytes = 22_000_000, now = () => performance.now() } = {}) {
+  const startedAt = now()
+  const pending = []
+  let current
+  let cancelled = false
+  let failure
+
+  function startPart() {
+    const recorder = createRecorder()
+    const pieces = []
+    const offset = (now() - startedAt) / 1000
+    let bytes = 0
+    let report = true
+    const stopped = new Promise(resolve => {
+      recorder.addEventListener('stop', () => {
+        if (report && !cancelled && bytes) {
+          onPart({ audio: new Blob(pieces, { type: recorder.mimeType || pieces[0].type }), offset })
+        }
+        resolve()
+      }, { once: true })
+    })
+    const part = { recorder, stopped }
+    recorder.addEventListener('error', () => {
+      failure ||= new Error('Audio capture stopped unexpectedly.')
+    })
+    recorder.addEventListener('dataavailable', ({ data }) => {
+      if (!data?.size || !report || cancelled) return
+      pieces.push(data)
+      bytes += data.size
+      if (bytes < maxBytes || current !== part || recorder.state !== 'recording' || failure) return
+      try {
+        current = startPart()
+        recorder.stop()
+      } catch (error) {
+        failure = error
+      }
+    })
+    try {
+      recorder.start(1000)
+    } catch (error) {
+      report = false
+      throw error
+    }
+    pending.push(stopped)
+    return part
+  }
+
+  current = startPart()
+  return {
+    async stop({ discard = false } = {}) {
+      cancelled ||= discard
+      const part = current
+      current = null
+      if (part && part.recorder.state !== 'inactive') part.recorder.stop()
+      await Promise.all(pending)
+      if (failure && !discard) throw failure
+    },
+  }
+}
