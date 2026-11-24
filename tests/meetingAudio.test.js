@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { meetingAudioParts } from '../src/meetingAudio.js'
+import { meetingAudioParts, startMeetingAudioCapture } from '../src/meetingAudio.js'
 
 test('short recordings use their original container', async () => {
   const audio = new Blob(['recording'], { type: 'audio/mp4' })
@@ -29,4 +29,39 @@ test('long recordings produce complete WAV files below the request limit', async
     assert.equal(new TextDecoder().decode(header.slice(0, 4)), 'RIFF')
     assert.equal(new DataView(header).getUint32(40, true), audio.size - 44)
   }
+})
+
+test('live capture opens a new container at the size limit and flushes the final part', async () => {
+  class Recorder extends EventTarget {
+    mimeType = 'audio/webm'
+    state = 'inactive'
+
+    start() { this.state = 'recording' }
+    stop() {
+      assert.equal(this.state, 'recording')
+      this.state = 'inactive'
+      queueMicrotask(() => this.dispatchEvent(new Event('stop')))
+    }
+    data(text) {
+      this.dispatchEvent(Object.assign(new Event('dataavailable'), { data: new Blob([text]) }))
+    }
+  }
+
+  const recorders = [], parts = []
+  let time = 0
+  const capture = startMeetingAudioCapture(() => {
+    const recorder = new Recorder()
+    recorders.push(recorder)
+    return recorder
+  }, part => parts.push(part), { maxBytes: 6, now: () => time })
+
+  recorders[0].data('abc')
+  assert.equal(recorders.length, 1)
+  time = 2000
+  recorders[0].data('def')
+  assert.equal(recorders[1].state, 'recording')
+  recorders[1].data('ghi')
+  await capture.stop()
+  assert.deepEqual(await Promise.all(parts.map(part => part.audio.text())), ['abcdef', 'ghi'])
+  assert.deepEqual(parts.map(part => part.offset), [0, 2])
 })
