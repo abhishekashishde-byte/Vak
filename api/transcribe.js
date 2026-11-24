@@ -60,7 +60,7 @@ export default async function handler(req, res) {
   if (!protection) return
   if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' })
 
-  const { audio, audioUrl, mimeType = 'audio/webm', meeting = false, speakerLabels = false, contextHints = '' } = req.body || {}
+  const { audio, audioUrl, mimeType = 'audio/webm', meeting = false, speakerLabels = false, allowSilence = false, contextHints = '' } = req.body || {}
   const isMeeting = Boolean(meeting || audioUrl)
   const wantsSpeakers = Boolean(isMeeting && speakerLabels)
 
@@ -144,6 +144,7 @@ export default async function handler(req, res) {
     if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || 'Transcription failed' })
 
     const text = String(data?.text || '').trim()
+    if (!text && isMeeting && allowSilence) return res.status(200).json({ text: '', segments: [] })
     if (!text) return res.status(502).json({ error: 'No speech was detected' })
     const segments = Array.isArray(data?.segments)
       ? data.segments.map((segment, index) => ({
